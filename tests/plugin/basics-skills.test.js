@@ -258,9 +258,12 @@ const PINS = {
     'In the code, that is the previous break\'s direction (the first break too)',
     // The owner's reading (feat/chop-read, 2026-11-14): CHoCH then BOS confirms; CHoCH then CHoCH back a failed reversal.
     // Round 17: whether a CHoCH pair is chop now is the Market state line's (one authority).
-    'A potential reversal: CHoCH then BOS: confirmed; a 3m CHoCH then CHoCH back: a failed reversal (`chop` or not: the Market state line).',
+    // Round 20 (the owner: a CHoCH pair is neither sufficient nor necessary for chop): the pair's reading leaves; the three
+    // layers (internal, protected, behavior) are taught below it.
+    'A potential reversal: CHoCH then BOS: confirmed.',
+    'An internal CHoCH against the leg while its protected level holds is pullback or consolidation evidence, never a trend change.',
     // Round 17 (q131): the printed BOS keeps its label; the line's status decides what it means now.
-    'A BOS stays labelled BOS after its protected swing breaks; the Market state line\'s status (`holding` or `broken by a close`) decides what it means now: a broken protected swing ends that BOS\'s trend read.',
+    'A BOS stays labelled BOS after its protected swing breaks; the Market state line\'s status (`holds` or `broken by a close`) decides what it means now: a broken protected swing ends that BOS\'s trend read.',
     // The owner's invalidation rule (round 15): each break's protected swing, close only.
     'Each break has a protected swing: a BOS holds until the leg\'s higher low (lower high) breaks; a CHoCH holds until the low (high) that started the shift breaks. Only a close through it counts; a wick is not.',
     'No one timeframe is the signal; read them top-down.',
@@ -340,8 +343,9 @@ test('basics skills: frontmatter, the sections in order, and small', () => {
     // pullback-vs-reversal 1794 (Fable round 16: the Depth row names when the Market state counts the pullback). Round 17
     // (one authority for the class word): bos-vs-choch 702 (the BOS keeps its label after its protected swing breaks; the
     // CHoCH pair's chop is the line's), pullback-vs-reversal 1778 (the pause's class rule replaced by the pointer), both at
-    // the measured need.
-    assert.ok(words >= 250 && words <= (s === 'candle-reading' ? 1280 : s === 'pullback-vs-reversal' ? 1778 : s === 'bos-vs-choch' ? 702 : 650), `${s}: ${words} words`);
+    // the measured need. Round 20 (the owner's three layers, chop checklist, behavioral list and classes quoted, one home
+    // each): bos-vs-choch 871, trend-vs-range 834, at the measured need.
+    assert.ok(words >= 250 && words <= (s === 'candle-reading' ? 1280 : s === 'pullback-vs-reversal' ? 1778 : s === 'bos-vs-choch' ? 871 : s === 'trend-vs-range' ? 834 : 650), `${s}: ${words} words`);
     // The two setups also carry a timeframe table (what the setup means on 3m/5m, 15m and 1h/4h): a little more room
     // (scripts/lib/skill-caps.js, the one source the training loop's probe edits read too).
     const max = skillByteCap(s);

@@ -507,12 +507,13 @@ test('state line: the decision follows the model\'s own STATE read (taught, no c
     "Write the class the `Market state` line prints after `class`; your own 4h/1h/15m reads stay in STATE. No other row, picture or frame read changes it. When your frames differ, say why in the PLAN.",
     "| `chop` | sit out |",
     "| `unclear` | no trend trade, never counter |",
-    // A range day is no chop (owner: a range day is catchable).
-    "- `ranging`: setups at the range edge or on a breakout, the side's way, a range day too; ranging is not chop.",
+    // A range day is no chop (owner: a range day is catchable; round 20: the state word `range`, decision 3's response).
+    "- `range`: setups at the range edge or on a breakout, the side's way only, a range day too; a range is not chop.",
     // The negative-only pause line (round 18, the diagnosis review): no positive chop definition in the always-loaded text.
     "Small overlapping candles inside a printed pullback are a pause, not chop; the class stays the line's.",
-    "wait for the 15m turn (a live strong 15m CISD, a 15m BOS, a 15m CHoCH back or a 15m reaction at the level); enter on the first 3m BOS or CISD the side's way near value (`pullback-vs-reversal` steps 4-7).",
-    "Chop ends when the line's state word is no longer `chop` (code's rule: chop ends: a CHoCH then a BOS or CISD the same way, or a close beyond the range (the IB; before 10:30 only a BOS or CISD ends it)). The trend and chop definitions, for reference only: `trend-vs-range`.",
+    "wait for the 15m turn (a live strong 15m CISD, a 15m BOS, a 15m CHoCH back or a 15m reaction at the level); enter on the first 3m BOS or CISD the side's way near value (a 3m CISD is the entry as a 3m BOS is, even after a 3m CHoCH against; `pullback-vs-reversal` steps 4-7).",
+    // Round 20 (decision 6): chop ends only on displacement.
+    "Chop ends when the line's state word is no longer `chop` (code's rule: chop ends: a CHoCH then a BOS or CISD the same way, or a close beyond the range (the IB; before 10:30 only a BOS or CISD ends it), each with displacement). The trend and chop definitions, for reference only: `trend-vs-range`.",
     // A take agrees with the read: the class and the 4h and 1h on the setup's side (the never-counter-HTF rule, in its own words).
     'A take: `class` on its side (`trend-up` long, `trend-down` short), your 4h and 1h too (`up` long, `down` short).',
     // compose_check first (its record is what the pass is scored on), then a pass that names the read: the head trader's
@@ -526,7 +527,7 @@ test('state line: the decision follows the model\'s own STATE read (taught, no c
   assert.ok(ts.includes("pass only on a decisive against, or your own STATE read off the setup's side (above)."));
   // The 15m is no class condition of the 4h + 1h: it is named in the pullback row's action (the turn) and the chop row
   // (the 15m continuation: the 3m state, code's); round 18: once more in "your own 4h/1h/15m reads stay in STATE".
-  assert.strictEqual(para.split('15m').length, 9);
+  assert.strictEqual(para.split('15m').length, 10); // +1: the pullback row's "a live strong 15m CISD" (round 15)
   assert.doesNotMatch(para, /Class side|open `Pullback` line/, 'the dropped line and the rule the state settles');
   // No filled-in line here: the one example stays in trader-process (the class-word test below).
   assert.doesNotMatch(para, /`STATE:/);

@@ -45,25 +45,47 @@ Trending: consistent BOS, directional displacement, follow-through. Chop:
 alternating BOS/CHoCH, overlapping candles, failed continuation.
 
 **Chop** (owner's definition; quality, not geometry): price swings back
-and forth with no sustained control either way.
+and forth with no sustained control either way. The owner: "Use CHoCH as
+structural evidence and overlap, displacement, and failed continuation as
+behavioral evidence"; a CHoCH pair alone is not enough, and chop needs no
+pair. Before calling it chop, his checklist:
 
-- Structure: BOS and CHoCH alternating both ways, swings broken both ways,
-  breaks without displacement that reverse, no HH/HL or LH/LL sequence.
-- Price action: overlapping candles, direction flipping, low efficiency,
-  weak momentum, local highs and lows rejected, failed breakouts.
-- The class word is the Market state line's (`trade-session`), never
-  this definition's. One CHoCH warns.
-- Never classify from one BOS or CHoCH: weigh significance, displacement,
-  consistency, follow-through, overlap, efficiency. Structure broken both
-  ways with no continuation is chop, not a run of reversals.
+- "Are the opposing CHoCHs breaking meaningful swing points?"
+- "Is price overlapping and moving sideways?"
+- "Has the existing trend failed to continue?"
+- "Is price repeatedly reversing rather than making directional progress?"
+- "If price continues making higher highs and higher lows, it may simply
+  be a bullish trend with internal structure changes."
 
-Frames: transitional (old trend weakening, new one unconfirmed) is the
-frame `transition` in your STATE. The class word: the Market state line.
+Behavioral evidence (owner): "Candle overlap. Lack of displacement.
+Repeated rejection from the same boundaries. Lack of meaningful higher
+highs or lower lows. Failure to make directional progress." The `chop:`
+line names which were met. The class word is the Market state line's
+(`trade-session`), never this definition's. One CHoCH warns. Structure
+broken both ways with no continuation is chop, not a run of reversals.
+Chop ends on a break or CISD its way with displacement, or a close beyond
+the range (the IB) with displacement.
 
 **Chop is not range.** Chop needs no edges; a range can rotate cleanly.
-A range day inside the 4h + 1h side (the line prints `ranging`) is
-catchable: the turn at the edge the side's way, or the breakout with
-follow-through. The line prints `chop` → sit out, whatever the geometry.
+A range travels edge to edge with displacement and clean rejections at
+the edges; chop overlaps mid-range and fails before either edge. A range day inside the 4h + 1h side (the line prints
+`range`) is catchable: the turn at the edge the side's way, or the
+breakout with follow-through. The line prints `chop` → sit out, whatever
+the geometry.
+
+**The owner's classes** (the line's state words beside them):
+
+| Classification | Meaning | Response |
+|---|---|---|
+| Trend (`trend`, `in the up leg`) | directional structure and continuation healthy | trend setups allowed |
+| Weakening trend (`weakening`, `rotation`) | countertrend momentum increasing | reduce confidence; wait |
+| Transitioning (`transition`) | original direction failing, new not confirmed | avoid premature entries |
+| Chop (`chop`) | overlap and repeated failed continuation | avoid trend entries |
+| Reversal (`reversal confirmed`) | meaningful structural shift confirmed | evaluate the new direction |
+
+A reversal against the 4h + 1h side is never traded. Frames:
+transitional (old trend weakening, new one unconfirmed) is the frame
+`transition` in your STATE. The class word: the Market state line.
 
 The 3m read sits inside `h1.h4.trend`, `h1.h1.trend` (prop: both its
 way), `m15.frame.trend`;
@@ -82,8 +104,8 @@ hypotheses):
 ## Examples
 
 ```text
-Chop: the line prints `chop: 3m CHoCH down then CHoCH up (failed reversal)` -> sit out.
-  It prints `trend up: 3m CHoCH down then CHoCH up = the 15m BOS up (continuation)` -> trend-up.
+Chop: the line prints `chop: no leg holds (breaks both ways, a failed break)` -> sit out.
+  It prints `trend up: HL 21380.5 holds, BOS up 6 min ago (displaced)` -> trend-up.
 Take: 4h, 1h, 15m up; m3 trend-up (adx 24.10); overnight broke out its way. Read: trend.
   Reads: 1h up, 15m bos up. Priority order: aligned; the count for -> take.
 Skip: m3 transition (adx 19.20); CHoCH down, previous CHoCH up; 15m up. Read: transition.

@@ -24,6 +24,26 @@ const ROWS = [
   "| `chop` | sit out |",
   "| `unclear` | no trend trade, never counter |",
 ];
+// Synthetic m3.layers (market-layers.js's shape), one per state the precedence makes.
+const LEG = (o = {}) => ({ side: 'up', level: 21380.5, origin: 21361.25, status: 'intact', legOK: true, sinceProgress: 2, internal: 0, resumed: false, lastInternal: null,
+  lastWay: { kind: 'BOS', direction: 'up', level: 21412.25, barsAgo: 2, strong: true, failed: false }, flip: null, flipsIn: 0, ...o });
+const LAY = (o = {}) => ({ rthBars: 20, structure: LEG(), lastBreak: null, momentum: { dispAgainst: null, breakAgainst: null, trigger: false, loss: false, odf: false, od: null },
+  behavior: { word: 'trending', word15: 'trending up', overlap: 0.52, eff: 0.41, netAtr: 1.6, disp: 2 },
+  chop: { now: false, inChop: false, S: false, B: false, facts: { ov: false, ef: false, fl: false, nd: false }, count: 0, evidence: { bothWays: false, flip: false, failed: false }, ended: false },
+  edges: { top: 21431.25, bot: 21402, atTop: 1, atBot: 1, interior: 0 }, pbPhase: { bars: 24, crosses: 4 }, transition: false, stale: false, reversal: false, pbRotation: false, ...o });
+const CHOPPY = { now: true, inChop: true, S: true, B: true, facts: { ov: true, ef: true, fl: true, nd: false }, count: 3, evidence: { bothWays: true, flip: false, failed: true }, ended: false };
+const PB = side => ({ frame: '15m', side, leg: { origin: 21361.25, extreme: 21437.5, atr: 4 }, depth: 0.28, pastOrigin: false, counter: { bars: 6 }, swing: {}, against: {} });
+const FLIP = { barsAgo: 3, strong: true, disp: true, held: true, oldSide: 'up', oldLevel: 21380.5, byRule: 'close' };
+const LAYERED = [
+  [LAY({ structure: null })], [LAY()], [LAY({ structure: LEG({ side: 'down', level: 21440.25 }) })], [LAY({ behavior: { ...LAY().behavior, word: 'overlapping' } })],
+  [LAY({ structure: LEG({ side: 'down', level: 21440.25 }), behavior: { ...LAY().behavior, word: 'overlapping' } })],
+  [LAY({ chop: CHOPPY, structure: LEG({ legOK: false }) })], [LAY({ structure: LEG({ legOK: false }) })],
+  [LAY({ momentum: { ...LAY().momentum, trigger: true, dispAgainst: { barsAgo: 2 }, breakAgainst: { direction: 'down', level: 21412.25, barsAgo: 2, strong: false } } })],
+  [LAY({ stale: true, structure: LEG({ sinceProgress: 22 }) })], [LAY({ transition: true, structure: LEG({ side: 'down', status: 'broken', legOK: false, level: 21437.5, flip: FLIP }) })],
+  [LAY({ transition: true, structure: LEG({ side: 'up', status: 'broken', legOK: false, level: 21361.25, flip: { ...FLIP, oldSide: 'down', oldLevel: 21420.5 } }) })],
+  [LAY(), PB('long')], [LAY(), PB('short')], [LAY({ pbRotation: true, chop: CHOPPY }), PB('long')],
+];
+
 // Synthetic briefings across the precedence's combinations (the quiz's reader of printed lines, the live code's state).
 function lines() {
   const bias = ['- Bias: long only (4h up, 1h up; short refused).', '- Bias: short only (4h down, 1h down; long refused).', '- Bias: long only (4h range, 1h up; short refused).', '- Bias: no side (4h up, 1h down) → no entry.'];
@@ -39,6 +59,16 @@ function lines() {
   for (const b of bias) for (const p of pull) for (const l of breaks) for (const f of m15) for (const d of day) for (const x of extra) {
     const text = ['Briefing lines (synthetic, 10:42 ET), flat:', b, p, l, f, d, x].filter(Boolean).join('\n');
     const s = M.stateOf(Q.briefingOfText(text), TH);
+    const line = M.marketStateLine(s);
+    if (!out.has(line)) out.set(line, M.classWordOf(s));
+  }
+  // Round 20: the briefing's own m3.layers (market-layers.js) decide chop, weakening, rotation, transition and trend; the
+  // printed-breaks briefings above (no layers: an older record, a quiz item) never print them. Layered briefings across
+  // the precedence and both alignments keep every state word and class covered.
+  for (const [layers, pullback] of LAYERED) for (const al of [['up', 'up'], ['down', 'down'], ['range', 'up']]) for (const m15 of [null, 'up']) {
+    const br = { minutes: 3, closedAt: '2026-01-06T15:42:00.000Z', sections: { h1: { data: { h4: { trend: al[0] }, h1: { trend: al[1] } } }, ...(m15 ? { m15: { data: { frame: { trend: m15 } } } } : {}),
+      m3: { data: { layers, ...(pullback ? { pullback } : {}), lastBreak: { last: { kind: 'BOS', direction: 'down', level: 21400, at: '2026-01-06T15:30:00.000Z' }, previous: null } } } } };
+    const s = M.stateOf(br, TH);
     const line = M.marketStateLine(s);
     if (!out.has(line)) out.set(line, M.classWordOf(s));
   }
@@ -63,7 +93,7 @@ test('market state authority: the line prints the class code computes (classWord
   }
   // Every class word is reached, and each state word prints (forming and unclear lines carry a class too).
   for (const c of ['trend-up', 'trend-down', 'chop', 'unclear']) assert.ok(classes.has(c), c);
-  for (const w of ['chop: ', 'forming ', 'ranging: ', 'trend up: ', 'trend down: ']) assert.ok([...all.keys()].some(l => l.includes(`(3m): ${w}`)), w);
+  for (const w of ['chop: ', 'forming ', 'range: ', 'trend up: ', 'trend down: ', 'in the up leg: ', 'in the down leg: ', 'transition down: ', 'weakening up: ', 'rotation up: ', 'rotation: ', 'pullback (']) assert.ok([...all.keys()].some(l => l.includes(`(3m): ${w}`)), w);
 });
 
 test('market state authority: the head core\'s table maps the printed class to one action, never a state word to a class', () => {
@@ -81,13 +111,15 @@ test('market state authority: the head core\'s table maps the printed class to o
   // The setup bullets under a trend class carry the precedence (review round 18): a pullback printed first, else the state
   // word; under that order exactly one bullet fits every trend-class line the code prints.
   assert.ok(ts.includes('Under a trend class, the setup by what the line prints (a pullback printed first; else its state word):'));
-  for (const b of ['- A pullback their way (', '- `forming`: no setup yet', '- `ranging`: setups at the range edge', '- `trend`, their way: setups the side\'s way.']) assert.ok(ts.includes(b), b);
+  // Round 20: the state words the layers print (`range` for `ranging`, `in the up leg`, `transition`), one bullet each.
+  for (const b of ['- A pullback their way (', '- `forming`: no setup yet', '- `range`: setups at the range edge or on a breakout, the side\'s way', '- `trend`, their way: setups the side\'s way. `in the up leg` (down the', '- `transition`, their way: the new leg is unconfirmed']) assert.ok(ts.includes(b), b);
   for (const [line, cls] of lines()) {
     if (!/^trend-/.test(cls)) continue;
     const way = cls.slice('trend-'.length);
-    const pb = line.includes(`; pullback (${way === 'up' ? 'long' : 'short'} leg`) || line.includes(`; 15m ${way}: a pullback in the 15m trend`);
-    const word = /^Market state \(3m\): (forming|ranging|trend up|trend down)/.exec(line);
-    const fits = pb ? ['pullback'] : [word && word[1] === 'forming' ? 'forming' : null, word && word[1] === 'ranging' ? 'ranging' : null, word && word[1] === `trend ${way}` ? 'trend' : null].filter(Boolean);
+    const pb = line.startsWith(`Market state (3m): pullback (${way === 'up' ? 'long' : 'short'} leg`) || line.includes(`; 15m ${way}: a pullback in the 15m trend`);
+    const word = /^Market state \(3m\): (forming|range|trend up|trend down|in the up leg|in the down leg|transition up|transition down)\b/.exec(line);
+    const w = word ? word[1] : null;
+    const fits = pb ? ['pullback'] : [w === 'forming' ? 'forming' : null, w === 'range' ? 'range' : null, w === `trend ${way}` || w === `in the ${way} leg` ? 'trend' : null, w === `transition ${way}` ? 'transition' : null].filter(Boolean);
     assert.strictEqual(fits.length, 1, `${line}: ${fits.length} bullets`);
   }
 });
@@ -144,8 +176,8 @@ const ALLOWED = [
   ['skills/trade-session/SKILL.md', /\| class printed \| action \|[^]*?\| `unclear` \| no trend trade, never counter \|/],
   // The pause line: negative only (round 18, the diagnosis review).
   ['skills/trade-session/SKILL.md', /Small overlapping candles inside a printed pullback are a pause, not chop; the class stays the line's\./],
-  // The ranging bullet: ranging is no chop (round 18).
-  ['skills/trade-session/SKILL.md', /a range day too; ranging is not chop\./],
+  // The range bullet: a range is no chop (round 18; round 20 renamed the state word `ranging` to `range`).
+  ['skills/trade-session/SKILL.md', /a range day too; a range is not chop\./],
   // The STATE grammar names the four words and points to the line.
   ['skills/trade-session/SKILL.md', /`<c>`, the market now at this candle, is `trend-up`, `trend-down`, `chop` or `unclear`, the one the `Market state` line prints;/],
   // A pass on the head trader's own read: class -> action, never a condition -> class.
@@ -240,8 +272,9 @@ test('bos-vs-choch: a BOS stays labelled BOS after its protected swing breaks; t
   const holding = M.marketStateLine(M.stateOf(b(null, '2026-01-06T15:42:00.000Z'), TH));
   const broken = M.marketStateLine(M.stateOf(b('2026-01-06T15:39:00.000Z', '2026-01-06T15:42:00.000Z'), TH));
   const word = (line, re) => re.exec(line)[1];
-  const hw = word(holding, /protected HL 21480\.25 (holding)/);
-  const bw = word(broken, /protected HL 21480\.25 (broken by a close)/);
+  // Round 20: the line's status words for a protected swing: `holds` and `broken by a close`.
+  const hw = word(holding, /HL 21480\.25 (holds)/);
+  const bw = word(broken, /HL 21480\.25 (broken by a close)/);
   assert.ok(t.includes(`A BOS stays labelled BOS after its protected swing breaks; the Market state line's status (\`${hw}\` or \`${bw}\`) decides what it means now: a broken protected swing ends that BOS's trend read.`));
 });
 

@@ -169,14 +169,19 @@ printed first; else its state word):
   overlapping candles inside a printed pullback are a pause, not chop; the
   class stays the line's.
 - `forming`: no setup yet: wait for the first RTH 3m break.
-- `ranging`: setups at the range edge or on a breakout, the side's way, a
-  range day too; ranging is not chop.
-- `trend`, their way: setups the side's way.
+- `range`: setups at the range edge or on a breakout, the side's way
+  only, a range day too; a range is not chop.
+- `trend`, their way: setups the side's way. `in the up leg` (down the
+  mirror) the same; an internal break against while the HL holds is the
+  pullback's (`pullback-vs-reversal` steps 4-7).
+- `transition`, their way: the new leg is unconfirmed: enter only after
+  the first 3m break the side's way.
 
 Chop ends when the line's state word is no longer `chop` (code's rule:
 chop ends: a CHoCH then a BOS or CISD the same way, or a close beyond the
-range (the IB; before 10:30 only a BOS or CISD ends it)). The trend and
-chop definitions, for reference only: `trend-vs-range`.
+range (the IB; before 10:30 only a BOS or CISD ends it), each with
+displacement). The trend and chop definitions, for reference only:
+`trend-vs-range`.
 
 - A take: `class` on its side (`trend-up` long, `trend-down` short), your
   4h and 1h too (`up` long, `down` short).

@@ -300,20 +300,22 @@ test('context quiz: the chop-read questions (q114-q133, less q115, q116, q117, q
   assert.doesNotMatch(QUIZ.questions.find(x => x.id === 'q99').text, /No exact touch|no named reversal candle/);
   // q112 prints the Market state line under its Bias line, as the briefing does (market-state.js): not aligned.
   assert.match(QUIZ.questions.find(x => x.id === 'q112').text, /\n- Bias: [^\n]*\n- Market state \(3m\): [^\n]*\(not aligned\); class unclear\.\n/);
-  // The invalidation items print the protected swing the way the state reads it (holding, broken, failed).
+  // The invalidation items print the protected swing the way the state reads it (round 20, no layers in a quiz item: holds,
+  // broken by a close, failed).
   const tq = id => QUIZ.questions.find(x => x.id === id).text;
-  assert.match(tq('q130'), /Market state \(3m\): trend up: [^\n]*; protected HL 21480\.25 holding; 4h\+1h up/);
-  assert.match(tq('q131'), /Market state \(3m\): ranging: [^\n]*; protected HL 21480\.25 broken by a close \(the trend ended\); 4h\+1h up/);
-  assert.match(tq('q132'), /Market state \(3m\): ranging: 3m BOS down then CHoCH up \(failed: a close below its origin 21462\.5\); 4h\+1h up/);
-  assert.match(tq('q127'), /Market state \(3m\): ranging: 3m BOS down then CHoCH up \(potential reversal, holds above 21462\.5 \(origin\)\); 4h\+1h up/);
-  // The chop-end items show the facts the state ended the chop on, and the line says so.
+  assert.match(tq('q130'), /Market state \(3m\): in the up leg: [^\n]*, HL 21480\.25 holds; 4h\+1h up/);
+  assert.match(tq('q131'), /Market state \(3m\): range: [^\n]*, HL 21480\.25 broken by a close; 4h\+1h up/);
+  assert.match(tq('q132'), /Market state \(3m\): range: 3m BOS down then CHoCH up \(failed: a close below its origin 21462\.5\); 4h\+1h up/);
+  assert.match(tq('q127'), /Market state \(3m\): range: 3m BOS down then CHoCH up \(unconfirmed, holds above 21462\.5 \(origin\)\); 4h\+1h up/);
+  // The chop-end items show the facts that confirm the CHoCH (round 20: no layers in a quiz item, so no chop memory: the
+  // line prints the confirmed leg).
   const tx = id => QUIZ.questions.find(x => x.id === id).text;
   assert.match(tx('q124'), /\n- CISD \(completed candles\): 3m bullish at [\d.]+ \(closed 10:45, strong\)/);
-  assert.match(tx('q124'), /Market state \(3m\): trend up: [^\n]*, then a 3m CISD up \(confirmed\); the chop ended; 4h\+1h up/);
+  assert.match(tx('q124'), /Market state \(3m\): in the up leg: [^\n]*, then a 3m CISD up \(confirmed\); 4h\+1h up/);
   assert.match(tx('q125'), /initial balance 21480-21560/);
-  assert.match(tx('q125'), /Market state \(3m\): trend up: [^\n]*, then a close above the IB high 21560 \(confirmed\); the chop ended; 4h\+1h up/);
+  assert.match(tx('q125'), /Market state \(3m\): in the up leg: [^\n]*, then a close above the IB high 21560 \(confirmed\); 4h\+1h up/);
   // The early 15m pullback: the 15m up, the 3m trending down, no Pullback line yet.
-  assert.match(tx('q126'), /Market state \(3m\): trend down: [^\n]*; 15m up: a pullback in the 15m trend; 4h\+1h up/);
+  assert.match(tx('q126'), /Market state \(3m\): in the down leg: [^\n]*; 15m up: a pullback in the 15m trend; 4h\+1h up/);
   assert.ok(!/\n- Pullback \(/.test(tx('q126')), 'q126: no Pullback line yet');
   // trend-vs-range is a lookup, not embedded in the head prompt.
   assert.ok(!prompts.head.includes('<skill name="trend-vs-range">'));
