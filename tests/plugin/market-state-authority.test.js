@@ -116,6 +116,9 @@ const CLASS_MAP = [
   /:\s*`?(?:unclear|chop)`?\s*[;.)]/,
   /\|\s*(?:class\s+)?`?(?:chop|unclear|trend-up|trend-down)`?(?![\w-])/,
   /\b(?:reversal|range|transition|mixed),\s*`?(?:chop|unclear)`?(?![\w-])/,
+  // Prose mappings (coordinator, round 17: close the prose gap): "means / gives / becomes / is read as / counts as /
+  // call it <class word>", plain or backticked, with or without "class".
+  /\b(?:means?|gives?|becomes?|(?:is|are) read as|reads? as|counts? as|calls? it|call it|makes? it)\s+(?:a\s+|the\s+)?(?:class\s+)?`?(?:chop|unclear|trend-up|trend-down)`?(?![\w-])/i,
 ];
 const ALLOWED = [
   // The table and its bullets: the one authority (trade-session step 3).
@@ -174,6 +177,13 @@ test('market state authority: the scan catches a competing row or sentence (it f
   // Through the scan itself: table rows outside the allowed table, a sentence wrapped over lines.
   assert.strictEqual(scanText('Intro.\n| 15m range | `unclear` |\n| trend against them | aligned | `unclear` | no trade |\nMore.').length, 2);
   assert.strictEqual(scanText('Frames: transitional is a pause. Then -> `unclear`.').length, 1);
+  // Each prose phrasing, plain and backticked (mutation tests for the prose pattern).
+  for (const v of ['chop', '`chop`', 'unclear', '`unclear`', 'trend-up', '`trend-down`', 'class `unclear`']) {
+    for (const p of ['A 15m range means', 'A 15m range gives', 'The class becomes', 'A transition is read as', 'A 15m range reads as', 'A CHoCH pair counts as', 'Call it', 'Overlapping candles make it'])
+      assert.strictEqual(scanText(`${p} ${v} when the 15m ranges.`).length, 1, `${p} ${v}`);
+  }
+  for (const s of ['The line means what it prints.', 'It gives the class word: the Market state line.', 'The read becomes clear later.', 'It counts as a pullback.'])
+    assert.deepStrictEqual(scanText(s), [], s);
   for (const row of ['| 15m range | `unclear`: no trade |', '| 15m range | class `unclear` |', '| 3m CHoCH pair | chop, sit out |']) assert.strictEqual(scanText(row).length, 1, row);
   for (const s of ['A take: `class` on its side.', 'Chop ends when the line\'s state word is no longer `chop`.', 'The class word: the Market state line.', '| Depth | up to about 50-62% | past the origin |'])
     assert.deepStrictEqual(scanText(s), [], s);
