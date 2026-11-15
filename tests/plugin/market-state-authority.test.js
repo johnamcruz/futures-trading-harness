@@ -112,7 +112,7 @@ test('market state authority: the head core\'s table maps the printed class to o
   // word; under that order exactly one bullet fits every trend-class line the code prints.
   assert.ok(ts.includes('Under a trend class, the setup by what the line prints (a pullback printed first; else its state word):'));
   // Round 20: the state words the layers print (`range` for `ranging`, `in the up leg`, `transition`), one bullet each.
-  for (const b of ['- A pullback their way (', '- `forming`: no setup yet', '- `range`: setups at the range edge or on a breakout, the side\'s way', '- `trend`, their way: setups the side\'s way. `in the up leg` (down the', '- `transition`, their way: the new leg is unconfirmed']) assert.ok(ts.includes(b), b);
+  for (const b of ['- A pullback their way (', '- `forming`: no setup yet', '- `range`: setups at the range edge or on a breakout, the side\'s way', '- `trend`, their way: setups the side\'s way. `in the up leg` (down the', '- `transition`, their way: wait for the first 3m break the side\'s way.']) assert.ok(ts.includes(b), b);
   for (const [line, cls] of lines()) {
     if (!/^trend-/.test(cls)) continue;
     const way = cls.slice('trend-'.length);

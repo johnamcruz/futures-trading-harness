@@ -138,7 +138,10 @@ test('CORE: the composed bar\'s reads the gate requires (SITUATIONAL taught in t
   // Then 84971 (round 19, PREREG addendum 25, same rule): the 15m frame read feeds the setup, not the class (q118); a 3m
   // CISD is the pullback entry as a 3m BOS is, even after a 3m CHoCH against, and the read chain's worked entry shows it
   // (q102); setup-judgment's regime is a read, not the class (+213, the measured need).
-  assert.ok(Buffer.byteLength(prompt) <= 84971, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
+  // Then 85118 (round 20, the same rule): the setup rows for the layers' state words (`range`: the edge or a breakout the
+  // side's way only; `in the up leg`; `transition`: the first 3m break the side's way) and chop's end with displacement
+  // (+147, the measured need).
+  assert.ok(Buffer.byteLength(prompt) <= 85118, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
   // Only the head trader's prompt grows: no other role's prompt embeds trade-lifecycle (the risk manager's embeds
   // confluence-counting and invalidation as before; its prompt is unchanged, pinned in trade-session-split.test.js).
   for (const [name, a] of Object.entries(index.agent)) if (name !== H.HEAD_AGENT && a.prompt) assert.ok(!a.prompt.includes('<skill name="trade-lifecycle">'), name);
