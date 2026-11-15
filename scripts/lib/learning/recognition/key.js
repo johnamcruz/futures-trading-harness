@@ -24,10 +24,11 @@
  *
  *   evidenceWord(key)  the class the VISIBLE evidence supports (the reference for guess and lag): with exactly one side the
  *                      trend rule allows (bias-line.js biasSides), its class C -> trend-<way>, B -> chop, A or D -> unclear;
- *                      no such side: the side-free signals (C1 C2 C3 C4 C7 C8) class B -> chop, else unclear
+ *                      no such side: the side-free signals (C1 C2 C3 C4 C7 C8) class B -> chop, else unclear; it stays
+ *                      independent of the taught guardrail (inside an open Pullback line it can read chop on C1 + C7)
  *   choppy(facts, th)  the full choppy-movement evidence, never one fact alone: the 3m breaks both ways (its last and
  *                      previous breaks both CHoCH) AND (the day so far rotational OR its RTH VWAP crosses, the Day so far
- *                      line's count, >= crossesChop), and no open Pullback line (the briefing prints one: pullbackLine)
+ *                      line's count, >= crossesChop), and no open Pullback line (printed, pullbackLine, and pastOrigin not true)
  *   codedWord(key)     the briefing's labels restated (never the model's): choppy -> chop (an aligned day too); 4h and
  *                      1h agree up or down -> trend-<way>; else unclear (a range alone is never chop)
  *
@@ -76,8 +77,10 @@ function facts(b) {
     bias, biasSides: sides, declared: Object.fromEntries(SIDES.map(s => [s, (() => { try { return declaredOf(b, s); } catch (_err) { return null; } })()])),
     day: dayOf(m3),
     bothWays: { '15m': bothWaysOf(m15.lastBreak), '3m': bothWaysOf(m3.lastBreak) },
-    // An open Pullback line: the briefing prints one (the same writer); its 3m CHoCH pair is the watch, never chop.
-    pullback: (() => { try { return pullbackLine(m3.pullback) !== null; } catch (_err) { return false; } })(),
+    // An open Pullback line (trade-session's class rule): the briefing prints one (the same writer) and the leg is not
+    // given back past its origin (pullback-vs-reversal step 8: no with-side read on that leg); inside it a pause, its 3m
+    // CHoCH pair included, is never chop.
+    pullback: (() => { try { return pullbackLine(m3.pullback) !== null && m3.pullback.pastOrigin !== true; } catch (_err) { return false; } })(),
     // The Day so far line's RTH VWAP crosses (the count the skills teach), printed while too early too.
     rthCrosses: orNull(at(m3, 'today', 'soFar', 'vwapCrosses')),
   };
@@ -130,6 +133,7 @@ const WORD_OF = { long: 'trend-up', short: 'trend-down' };
 function evidenceWord(key) {
   const s = key.biasSide;
   const c = s ? key.cls[s] : key.cls.none;
+  // An independent read, never the lesson: inside an open Pullback line it can read chop (C1 and C7), as frozen.
   if (s) return c === 'C' ? WORD_OF[s] : c === 'B' ? 'chop' : 'unclear';
   return c === 'B' ? 'chop' : 'unclear';
 }

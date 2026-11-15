@@ -50,7 +50,7 @@ timeframe's candles). The 4h has swings only (`h1.h4.swingPattern`).
 
 No single BOS or CHoCH classifies the market. Structure broken both
 ways again and again with no continuation is chop, not a run of
-reversals (`trend-vs-range`).
+reversals (the class: `trade-session`).
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal

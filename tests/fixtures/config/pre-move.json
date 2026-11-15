@@ -317,15 +317,15 @@
    "from": "new in feat/sweep-candle-control (owner-approved 2026-10-31, improves context: candle-reading's own cap for its reaction-at-a-level read and the context it is read in, then 5916 for the owner rule: the reaction rules hold on every timeframe, a higher timeframe's reaction is stronger confirmation, then 6212 (owner: rejection relies on candle-reading; the side is the candle's (q30)), then 6230 (owner: no bare rejection (plain is no rejection read); sweeps need candle-reading too), then 6338 (owner: q30 side confusion; side rule first), then 7367 (fix/quiz-side-doji, owner: q29/q30/q33 answered correctly: the side never from the bias, the briefing's side, a stall decides nothing, the four side and trend-rule cases, a paired side example), then 7637 (feat/pullback-concept, owner-approved 2026-11-14: the unlabeled candle names and the pennant shape, and a CISD's strong as the CISD's own rule, not a name); every other non-setup skill but pullback-vs-reversal stays at skillCaps.skillBytes)"
   },
   "skillCaps.perSkill.pullback-vs-reversal": {
-   "value": 9607,
-   "from": "9607 since feat/chop-read (owner-approved 2026-11-14, improves context: the pause holds one way, chop breaks both ways; close to the level is a read); new in feat/pullback-concept (owner-approved 2026-11-14, improves context: the pullback to a broken level, BOS for continuation and CHoCH for reversal, its 3m entry, its examples; the owner rule: raise a cap when it improves context)"
+   "value": 9749,
+   "from": "9749 since feat/chop-read (owner-approved 2026-11-14, improves context: the pause holds one way, chop breaks both ways; close to the level is a read); new in feat/pullback-concept (owner-approved 2026-11-14, improves context: the pullback to a broken level, BOS for continuation and CHoCH for reversal, its 3m entry, its examples; the owner rule: raise a cap when it improves context)"
   },
   "skillCaps.perSkill.trend-vs-range": {
-   "value": 4245,
+   "value": 4071,
    "from": "new in feat/chop-read (owner-approved 2026-11-14, improves context: the owner's chop definition, its printed facts weighed together, the classes on the existing words, chop is not range, a range day catchable at the edge the side's way)"
   },
   "skillCaps.perSkill.bos-vs-choch": {
-   "value": 3621,
+   "value": 3631,
    "from": "new in feat/chop-read (owner-approved 2026-11-14, improves context: no single BOS or CHoCH classifies the market; structure broken both ways with no continuation is chop, the owner's core rule)"
   },
   "compose.maxExpects": {
@@ -1454,8 +1454,8 @@
    "from": "new in feat/stable-first-prompt (the hour lifetime, for a 15m or 1h analyst whose next run comes after 5 minutes; its cache writes cost more, its reads the same)"
   },
   "prompt.situationalSkillBytes": {
-   "value": 75886,
-   "from": "75886 since feat/chop-read (the same rule: the measured need of every trigger at once with pullback-vs-reversal's pause-vs-chop and close-to-the-level lines, bos-vs-choch's core rule); 75534 since feat/pullback-concept (owner rule: raise a cap when it improves context; the measured need of every trigger at once with pullback-vs-reversal's pullback read, so nothing is pushed to the Also relevant line); new in feat/ppc-setup-rates (owner: every skill as context when its situation applies, \"All of the skills should be loaded. It should not be skipped.\"; UTF-8 bytes of embedded skill text a cycle: over 231 recorded briefings the most any cycle needed was 65053, a listed setup in a prop attempt, p90 58543; with about 10% headroom, so none is named past it; the line stays the fail-safe for an outlier; the whole prompt is held under prompt.maxPromptBytes, the budget shrinking first)"
+   "value": 76048,
+   "from": "76048 since feat/chop-read (the same rule: the measured need of every trigger at once with pullback-vs-reversal's pause-vs-chop and close-to-the-level lines, bos-vs-choch's core rule); 75534 since feat/pullback-concept (owner rule: raise a cap when it improves context; the measured need of every trigger at once with pullback-vs-reversal's pullback read, so nothing is pushed to the Also relevant line); new in feat/ppc-setup-rates (owner: every skill as context when its situation applies, \"All of the skills should be loaded. It should not be skipped.\"; UTF-8 bytes of embedded skill text a cycle: over 231 recorded briefings the most any cycle needed was 65053, a listed setup in a prop attempt, p90 58543; with about 10% headroom, so none is named past it; the line stays the fail-safe for an outlier; the whole prompt is held under prompt.maxPromptBytes, the budget shrinking first)"
   },
   "limits.probeOutputBytes": {
    "value": 67108864,

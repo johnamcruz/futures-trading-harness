@@ -1158,8 +1158,10 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
    `range` or `transition` here is the pause, not chop.
-  A pause holds
-   one way; chop breaks both ways again and again.
+  Pause: one-way
+   structure (the 15m swing holds; a 3m CHoCH against then back is the
+   watch) inside an open `Pullback` line (`trade-session`) → the trend
+   class, not `chop` → wait for the 15m turn.
   The label is no
    evidence of resumption either.
   The impulse (a 15m `displacement` the
@@ -1358,7 +1360,7 @@ timeframe's candles).
 No single BOS or CHoCH classifies the market.
   Structure broken both
 ways again and again with no continuation is chop, not a run of
-reversals (`trend-vs-range`).
+reversals (the class: `trade-session`).
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
@@ -2571,8 +2573,10 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
    `range` or `transition` here is the pause, not chop.
-  A pause holds
-   one way; chop breaks both ways again and again.
+  Pause: one-way
+   structure (the 15m swing holds; a 3m CHoCH against then back is the
+   watch) inside an open `Pullback` line (`trade-session`) → the trend
+   class, not `chop` → wait for the 15m turn.
   The label is no
    evidence of resumption either.
   The impulse (a 15m `displacement` the
@@ -2771,7 +2775,7 @@ timeframe's candles).
 No single BOS or CHoCH classifies the market.
   Structure broken both
 ways again and again with no continuation is chop, not a run of
-reversals (`trend-vs-range`).
+reversals (the class: `trade-session`).
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
@@ -3993,8 +3997,10 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
    `range` or `transition` here is the pause, not chop.
-  A pause holds
-   one way; chop breaks both ways again and again.
+  Pause: one-way
+   structure (the 15m swing holds; a 3m CHoCH against then back is the
+   watch) inside an open `Pullback` line (`trade-session`) → the trend
+   class, not `chop` → wait for the 15m turn.
   The label is no
    evidence of resumption either.
   The impulse (a 15m `displacement` the
@@ -4193,7 +4199,7 @@ timeframe's candles).
 No single BOS or CHoCH classifies the market.
   Structure broken both
 ways again and again with no continuation is chop, not a run of
-reversals (`trend-vs-range`).
+reversals (the class: `trade-session`).
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
@@ -5406,8 +5412,10 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
    `range` or `transition` here is the pause, not chop.
-  A pause holds
-   one way; chop breaks both ways again and again.
+  Pause: one-way
+   structure (the 15m swing holds; a 3m CHoCH against then back is the
+   watch) inside an open `Pullback` line (`trade-session`) → the trend
+   class, not `chop` → wait for the 15m turn.
   The label is no
    evidence of resumption either.
   The impulse (a 15m `displacement` the
@@ -5606,7 +5614,7 @@ timeframe's candles).
 No single BOS or CHoCH classifies the market.
   Structure broken both
 ways again and again with no continuation is chop, not a run of
-reversals (`trend-vs-range`).
+reversals (the class: `trade-session`).
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
@@ -6828,8 +6836,10 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
    `range` or `transition` here is the pause, not chop.
-  A pause holds
-   one way; chop breaks both ways again and again.
+  Pause: one-way
+   structure (the 15m swing holds; a 3m CHoCH against then back is the
+   watch) inside an open `Pullback` line (`trade-session`) → the trend
+   class, not `chop` → wait for the 15m turn.
   The label is no
    evidence of resumption either.
   The impulse (a 15m `displacement` the
@@ -7028,7 +7038,7 @@ timeframe's candles).
 No single BOS or CHoCH classifies the market.
   Structure broken both
 ways again and again with no continuation is chop, not a run of
-reversals (`trend-vs-range`).
+reversals (the class: `trade-session`).
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
@@ -8241,8 +8251,10 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
    `range` or `transition` here is the pause, not chop.
-  A pause holds
-   one way; chop breaks both ways again and again.
+  Pause: one-way
+   structure (the 15m swing holds; a 3m CHoCH against then back is the
+   watch) inside an open `Pullback` line (`trade-session`) → the trend
+   class, not `chop` → wait for the 15m turn.
   The label is no
    evidence of resumption either.
   The impulse (a 15m `displacement` the
@@ -8441,7 +8453,7 @@ timeframe's candles).
 No single BOS or CHoCH classifies the market.
   Structure broken both
 ways again and again with no continuation is chop, not a run of
-reversals (`trend-vs-range`).
+reversals (the class: `trade-session`).
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
@@ -9654,8 +9666,10 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
    `range` or `transition` here is the pause, not chop.
-  A pause holds
-   one way; chop breaks both ways again and again.
+  Pause: one-way
+   structure (the 15m swing holds; a 3m CHoCH against then back is the
+   watch) inside an open `Pullback` line (`trade-session`) → the trend
+   class, not `chop` → wait for the 15m turn.
   The label is no
    evidence of resumption either.
   The impulse (a 15m `displacement` the
@@ -9854,7 +9868,7 @@ timeframe's candles).
 No single BOS or CHoCH classifies the market.
   Structure broken both
 ways again and again with no continuation is chop, not a run of
-reversals (`trend-vs-range`).
+reversals (the class: `trade-session`).
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
@@ -10146,8 +10160,9 @@ Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
 - **Against a trending 4h or 1h**: the trend rule refuses it (never counter), whatever
   break (`bos-vs-choch`).
 - **Avoid** (hypothesis): `m3.regime.primary` `transition` (the
-  measured filter: `unclear`, not chop); `m15.frame.swingPattern`
-  `mixed` or `unclear`, small overlapping bars; chop.
+  measured filter: `unclear`), or `m15.frame.swingPattern` `mixed` or
+  `unclear`, small overlapping bars.
+  Chop: `trade-session`.
 
 **CISD vs CHoCH.** A CHoCH rests on swing points (`m3.lastBreak`).
   The
@@ -11163,8 +11178,10 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
    `range` or `transition` here is the pause, not chop.
-  A pause holds
-   one way; chop breaks both ways again and again.
+  Pause: one-way
+   structure (the 15m swing holds; a 3m CHoCH against then back is the
+   watch) inside an open `Pullback` line (`trade-session`) → the trend
+   class, not `chop` → wait for the 15m turn.
   The label is no
    evidence of resumption either.
   The impulse (a 15m `displacement` the
@@ -11363,7 +11380,7 @@ timeframe's candles).
 No single BOS or CHoCH classifies the market.
   Structure broken both
 ways again and again with no continuation is chop, not a run of
-reversals (`trend-vs-range`).
+reversals (the class: `trade-session`).
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
@@ -11652,8 +11669,9 @@ Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
 - **Against a trending 4h or 1h**: the trend rule refuses it (never counter), whatever
   break (`bos-vs-choch`).
 - **Avoid** (hypothesis): `m3.regime.primary` `transition` (the
-  measured filter: `unclear`, not chop); `m15.frame.swingPattern`
-  `mixed` or `unclear`, small overlapping bars; chop.
+  measured filter: `unclear`), or `m15.frame.swingPattern` `mixed` or
+  `unclear`, small overlapping bars.
+  Chop: `trade-session`.
 
 **CISD vs CHoCH.** A CHoCH rests on swing points (`m3.lastBreak`).
   The
@@ -12669,8 +12687,10 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
    `range` or `transition` here is the pause, not chop.
-  A pause holds
-   one way; chop breaks both ways again and again.
+  Pause: one-way
+   structure (the 15m swing holds; a 3m CHoCH against then back is the
+   watch) inside an open `Pullback` line (`trade-session`) → the trend
+   class, not `chop` → wait for the 15m turn.
   The label is no
    evidence of resumption either.
   The impulse (a 15m `displacement` the
@@ -12869,7 +12889,7 @@ timeframe's candles).
 No single BOS or CHoCH classifies the market.
   Structure broken both
 ways again and again with no continuation is chop, not a run of
-reversals (`trend-vs-range`).
+reversals (the class: `trade-session`).
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
@@ -13152,8 +13172,9 @@ Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
 - **Against a trending 4h or 1h**: the trend rule refuses it (never counter), whatever
   break (`bos-vs-choch`).
 - **Avoid** (hypothesis): `m3.regime.primary` `transition` (the
-  measured filter: `unclear`, not chop); `m15.frame.swingPattern`
-  `mixed` or `unclear`, small overlapping bars; chop.
+  measured filter: `unclear`), or `m15.frame.swingPattern` `mixed` or
+  `unclear`, small overlapping bars.
+  Chop: `trade-session`.
 
 **CISD vs CHoCH.** A CHoCH rests on swing points (`m3.lastBreak`).
   The
@@ -14169,8 +14190,10 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
    `range` or `transition` here is the pause, not chop.
-  A pause holds
-   one way; chop breaks both ways again and again.
+  Pause: one-way
+   structure (the 15m swing holds; a 3m CHoCH against then back is the
+   watch) inside an open `Pullback` line (`trade-session`) → the trend
+   class, not `chop` → wait for the 15m turn.
   The label is no
    evidence of resumption either.
   The impulse (a 15m `displacement` the
@@ -14369,7 +14392,7 @@ timeframe's candles).
 No single BOS or CHoCH classifies the market.
   Structure broken both
 ways again and again with no continuation is chop, not a run of
-reversals (`trend-vs-range`).
+reversals (the class: `trade-session`).
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
@@ -14579,8 +14602,9 @@ Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
 - **Against a trending 4h or 1h**: the trend rule refuses it (never counter), whatever
   break (`bos-vs-choch`).
 - **Avoid** (hypothesis): `m3.regime.primary` `transition` (the
-  measured filter: `unclear`, not chop); `m15.frame.swingPattern`
-  `mixed` or `unclear`, small overlapping bars; chop.
+  measured filter: `unclear`), or `m15.frame.swingPattern` `mixed` or
+  `unclear`, small overlapping bars.
+  Chop: `trade-session`.
 
 **CISD vs CHoCH.** A CHoCH rests on swing points (`m3.lastBreak`).
   The
@@ -15596,8 +15620,10 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
    `range` or `transition` here is the pause, not chop.
-  A pause holds
-   one way; chop breaks both ways again and again.
+  Pause: one-way
+   structure (the 15m swing holds; a 3m CHoCH against then back is the
+   watch) inside an open `Pullback` line (`trade-session`) → the trend
+   class, not `chop` → wait for the 15m turn.
   The label is no
    evidence of resumption either.
   The impulse (a 15m `displacement` the
@@ -15796,7 +15822,7 @@ timeframe's candles).
 No single BOS or CHoCH classifies the market.
   Structure broken both
 ways again and again with no continuation is chop, not a run of
-reversals (`trend-vs-range`).
+reversals (the class: `trade-session`).
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
@@ -16088,8 +16114,9 @@ Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
 - **Against a trending 4h or 1h**: the trend rule refuses it (never counter), whatever
   break (`bos-vs-choch`).
 - **Avoid** (hypothesis): `m3.regime.primary` `transition` (the
-  measured filter: `unclear`, not chop); `m15.frame.swingPattern`
-  `mixed` or `unclear`, small overlapping bars; chop.
+  measured filter: `unclear`), or `m15.frame.swingPattern` `mixed` or
+  `unclear`, small overlapping bars.
+  Chop: `trade-session`.
 
 **CISD vs CHoCH.** A CHoCH rests on swing points (`m3.lastBreak`).
   The
@@ -17105,8 +17132,10 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
    `range` or `transition` here is the pause, not chop.
-  A pause holds
-   one way; chop breaks both ways again and again.
+  Pause: one-way
+   structure (the 15m swing holds; a 3m CHoCH against then back is the
+   watch) inside an open `Pullback` line (`trade-session`) → the trend
+   class, not `chop` → wait for the 15m turn.
   The label is no
    evidence of resumption either.
   The impulse (a 15m `displacement` the
@@ -17305,7 +17334,7 @@ timeframe's candles).
 No single BOS or CHoCH classifies the market.
   Structure broken both
 ways again and again with no continuation is chop, not a run of
-reversals (`trend-vs-range`).
+reversals (the class: `trade-session`).
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
@@ -17588,8 +17617,9 @@ Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
 - **Against a trending 4h or 1h**: the trend rule refuses it (never counter), whatever
   break (`bos-vs-choch`).
 - **Avoid** (hypothesis): `m3.regime.primary` `transition` (the
-  measured filter: `unclear`, not chop); `m15.frame.swingPattern`
-  `mixed` or `unclear`, small overlapping bars; chop.
+  measured filter: `unclear`), or `m15.frame.swingPattern` `mixed` or
+  `unclear`, small overlapping bars.
+  Chop: `trade-session`.
 
 **CISD vs CHoCH.** A CHoCH rests on swing points (`m3.lastBreak`).
   The
@@ -18605,8 +18635,10 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
    `range` or `transition` here is the pause, not chop.
-  A pause holds
-   one way; chop breaks both ways again and again.
+  Pause: one-way
+   structure (the 15m swing holds; a 3m CHoCH against then back is the
+   watch) inside an open `Pullback` line (`trade-session`) → the trend
+   class, not `chop` → wait for the 15m turn.
   The label is no
    evidence of resumption either.
   The impulse (a 15m `displacement` the
@@ -18805,7 +18837,7 @@ timeframe's candles).
 No single BOS or CHoCH classifies the market.
   Structure broken both
 ways again and again with no continuation is chop, not a run of
-reversals (`trend-vs-range`).
+reversals (the class: `trade-session`).
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
@@ -19088,8 +19120,9 @@ Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
 - **Against a trending 4h or 1h**: the trend rule refuses it (never counter), whatever
   break (`bos-vs-choch`).
 - **Avoid** (hypothesis): `m3.regime.primary` `transition` (the
-  measured filter: `unclear`, not chop); `m15.frame.swingPattern`
-  `mixed` or `unclear`, small overlapping bars; chop.
+  measured filter: `unclear`), or `m15.frame.swingPattern` `mixed` or
+  `unclear`, small overlapping bars.
+  Chop: `trade-session`.
 
 **CISD vs CHoCH.** A CHoCH rests on swing points (`m3.lastBreak`).
   The
@@ -20105,8 +20138,10 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
    `range` or `transition` here is the pause, not chop.
-  A pause holds
-   one way; chop breaks both ways again and again.
+  Pause: one-way
+   structure (the 15m swing holds; a 3m CHoCH against then back is the
+   watch) inside an open `Pullback` line (`trade-session`) → the trend
+   class, not `chop` → wait for the 15m turn.
   The label is no
    evidence of resumption either.
   The impulse (a 15m `displacement` the
@@ -20305,7 +20340,7 @@ timeframe's candles).
 No single BOS or CHoCH classifies the market.
   Structure broken both
 ways again and again with no continuation is chop, not a run of
-reversals (`trend-vs-range`).
+reversals (the class: `trade-session`).
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
@@ -20597,8 +20632,9 @@ Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
 - **Against a trending 4h or 1h**: the trend rule refuses it (never counter), whatever
   break (`bos-vs-choch`).
 - **Avoid** (hypothesis): `m3.regime.primary` `transition` (the
-  measured filter: `unclear`, not chop); `m15.frame.swingPattern`
-  `mixed` or `unclear`, small overlapping bars; chop.
+  measured filter: `unclear`), or `m15.frame.swingPattern` `mixed` or
+  `unclear`, small overlapping bars.
+  Chop: `trade-session`.
 
 **CISD vs CHoCH.** A CHoCH rests on swing points (`m3.lastBreak`).
   The
@@ -21539,8 +21575,10 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
    `range` or `transition` here is the pause, not chop.
-  A pause holds
-   one way; chop breaks both ways again and again.
+  Pause: one-way
+   structure (the 15m swing holds; a 3m CHoCH against then back is the
+   watch) inside an open `Pullback` line (`trade-session`) → the trend
+   class, not `chop` → wait for the 15m turn.
   The label is no
    evidence of resumption either.
   The impulse (a 15m `displacement` the
@@ -21739,7 +21777,7 @@ timeframe's candles).
 No single BOS or CHoCH classifies the market.
   Structure broken both
 ways again and again with no continuation is chop, not a run of
-reversals (`trend-vs-range`).
+reversals (the class: `trade-session`).
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
@@ -22022,8 +22060,9 @@ Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
 - **Against a trending 4h or 1h**: the trend rule refuses it (never counter), whatever
   break (`bos-vs-choch`).
 - **Avoid** (hypothesis): `m3.regime.primary` `transition` (the
-  measured filter: `unclear`, not chop); `m15.frame.swingPattern`
-  `mixed` or `unclear`, small overlapping bars; chop.
+  measured filter: `unclear`), or `m15.frame.swingPattern` `mixed` or
+  `unclear`, small overlapping bars.
+  Chop: `trade-session`.
 
 **CISD vs CHoCH.** A CHoCH rests on swing points (`m3.lastBreak`).
   The
@@ -22964,8 +23003,10 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
    `range` or `transition` here is the pause, not chop.
-  A pause holds
-   one way; chop breaks both ways again and again.
+  Pause: one-way
+   structure (the 15m swing holds; a 3m CHoCH against then back is the
+   watch) inside an open `Pullback` line (`trade-session`) → the trend
+   class, not `chop` → wait for the 15m turn.
   The label is no
    evidence of resumption either.
   The impulse (a 15m `displacement` the
@@ -23164,7 +23205,7 @@ timeframe's candles).
 No single BOS or CHoCH classifies the market.
   Structure broken both
 ways again and again with no continuation is chop, not a run of
-reversals (`trend-vs-range`).
+reversals (the class: `trade-session`).
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
@@ -24300,8 +24341,10 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
    `range` or `transition` here is the pause, not chop.
-  A pause holds
-   one way; chop breaks both ways again and again.
+  Pause: one-way
+   structure (the 15m swing holds; a 3m CHoCH against then back is the
+   watch) inside an open `Pullback` line (`trade-session`) → the trend
+   class, not `chop` → wait for the 15m turn.
   The label is no
    evidence of resumption either.
   The impulse (a 15m `displacement` the
@@ -24500,7 +24543,7 @@ timeframe's candles).
 No single BOS or CHoCH classifies the market.
   Structure broken both
 ways again and again with no continuation is chop, not a run of
-reversals (`trend-vs-range`).
+reversals (the class: `trade-session`).
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal

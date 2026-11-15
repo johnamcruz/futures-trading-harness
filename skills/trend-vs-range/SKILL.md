@@ -48,11 +48,8 @@ and forth with no sustained control either way.
   breaks without displacement that reverse, no HH/HL or LH/LL sequence.
 - Price action: overlapping candles, direction flipping, low efficiency,
   weak momentum, local highs and lows rejected, failed breakouts.
-- Printed, weighed together, never one alone: `m3.lastBreak` last and
-  previous both CHoCH (breaks both ways; one CHoCH warns, it is not
-  chop), the Day so far `rotational`, many RTH VWAP crosses. Inside an
-  open `Pullback` line a 3m CHoCH against, then one back, is the pullback
-  and its watch, not chop.
+- The class `chop`, its printed facts and the open `Pullback` line:
+  `trade-session` (its Chop line). One CHoCH warns; it is not chop.
 - Never classify from one BOS or CHoCH: weigh significance, displacement,
   consistency, follow-through, overlap, efficiency. Structure broken both
   ways with no continuation is chop, not a run of reversals.

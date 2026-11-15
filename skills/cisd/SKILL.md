@@ -43,8 +43,8 @@ Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
 - **Against a trending 4h or 1h**: the trend rule refuses it (never counter), whatever
   break (`bos-vs-choch`).
 - **Avoid** (hypothesis): `m3.regime.primary` `transition` (the
-  measured filter: `unclear`, not chop); `m15.frame.swingPattern`
-  `mixed` or `unclear`, small overlapping bars; chop.
+  measured filter: `unclear`), or `m15.frame.swingPattern` `mixed` or
+  `unclear`, small overlapping bars. Chop: `trade-session`.
 
 **CISD vs CHoCH.** A CHoCH rests on swing points (`m3.lastBreak`). The
 CISD usually comes first: an early sign, not yet a change of structure.

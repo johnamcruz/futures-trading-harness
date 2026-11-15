@@ -7,7 +7,7 @@ description: Use when deciding a cycle - the premarket plan, the news, and the d
 
 ## When to Use
 
-- Every decision (`trade-session` step 3).
+- Every decision (`trade-session` step 3, the head-trader synthesis).
 
 ## How It Works
 

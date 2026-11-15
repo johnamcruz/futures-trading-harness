@@ -7,7 +7,7 @@ description: Use when deciding a cycle, and before any entry - each setup's fact
 
 ## When to Use
 
-- Every decision (`trade-session` step 3); the gate refuses an entry without
+- Every decision (`trade-session` step 3, the head-trader synthesis); the gate refuses an entry without
   it and `trade-plan`.
 
 ## How It Works

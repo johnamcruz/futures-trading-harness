@@ -131,6 +131,29 @@ test('the taught guardrail: an open Pullback line\'s 3m CHoCH pair is neither C3
   assert.ok(n.signals.long.c.includes('C3'));
   // A pullback object the briefing does not print (no leg) is no open Pullback line.
   assert.strictEqual(K.presentKey(brief({ frame: '15m' }), TH).facts.pullback, false);
+  // Given back past its printed origin (step 8: no with-side read on that leg): not open; the pair counts again.
+  const back = K.presentKey(brief({ ...PB, depth: 1.1, pastOrigin: true }), TH);
+  assert.strictEqual(back.facts.pullback, false);
+  assert.strictEqual(back.choppy, true);
+  assert.ok(back.signals.long.c.includes('C3'));
+});
+
+// Fable round 2's shape, pinned as documented (coordinator, as a quant): the evidence word stays an independent bars-only
+// read, never the lesson, so inside an open Pullback C1 (rotational) and C7 (session crosses 6) still read chop there,
+// while the coded read (the rules restated) follows the taught guardrail: trend-up. The limit stays visible.
+test('evidenceWord stays independent of the taught guardrail: inside an open Pullback C1 + C7 read chop; the coded read reads the trend', () => {
+  const PB = { frame: '15m', side: 'long', leg: { origin: 21462.5, extreme: 21538.75 }, depth: 0.38, pastOrigin: false, counter: { bars: 10, volRatio: 0.6, volume: 'falling', rangeRatio: 0.5 }, swing: { '15m': { price: 21462.5, holds: true }, '1h': { price: 21390.25, holds: true } }, against: { '15m': null, '1h': null } };
+  const brief = pullback => ({ sections: {
+    h1: { data: { h4: { trend: 'up' }, h1: { trend: 'up' } } }, m15: { data: { frame: { trend: 'down' } } },
+    m3: { data: { pullback, lastBreak: { last: { kind: 'CHoCH', direction: 'down' }, previous: { kind: 'BOS', direction: 'up' } }, regime: { primary: 'trend-down' }, vwap: { sessionCrossesLast30: 6, side: 'below' }, today: { soFar: { status: 'read', read: 'rotational', direction: 'up', vwapCrosses: 6 } } } },
+  } });
+  const open = K.presentKey(brief(PB), TH);
+  assert.deepStrictEqual(open.signals.long.c.filter(x => ['C1', 'C7'].includes(x)), ['C1', 'C7'], 'the frozen signals still met');
+  assert.strictEqual(open.cls[open.biasSide || 'none'] === 'B' || open.cls.none === 'B', true, 'a chop class');
+  assert.strictEqual(open.facts.pullback, true);
+  assert.strictEqual(K.evidenceWord(open), 'chop', 'the evidence word is not the lesson');
+  assert.strictEqual(K.codedWord(open), 'trend-up', 'the coded read follows the rules: not choppy (no CHoCH pair), aligned');
+  assert.strictEqual(K.evidenceWord(K.presentKey(brief(null), TH)), 'chop', 'the same with no Pullback line');
 });
 
 test('metFields: the fields of the signals met for a side; the side-free ones with no side', () => {

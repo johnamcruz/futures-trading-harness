@@ -1780,13 +1780,15 @@ Frozen definitions:
   side the trend rule allows (the Bias line's sides), that side's signal
   class C reads `trend-<way>`, B reads `chop`, A or D reads `unclear`. With
   no such side, the side-free signals' class B reads `chop`, else
-  `unclear`. The signals per side, each a present fact of the candle's
+  `unclear`. It is an independent bars-only read, never the lesson:
+  inside an open `Pullback` line it can still read `chop` (on C1 and C7).
+  The signals per side, each a present fact of the candle's
   briefing: the day so far rotational (C1) or directional the side's way
   (T1); the 15m breaking both ways, its last and previous breaks both
   CHoCH (C2); the 15m trend the side's way (T2) or against (C9); the 3m
   breaking both ways, the same on `m3.lastBreak`, with no open `Pullback`
-  line printed (inside one the pair is the pullback and its watch, as
-  taught) (C3); the 3m regime the
+  line (inside one the pair is the pullback and its watch, as taught)
+  (C3); the 3m regime the
   side's way (T3) or against (C9, once); the Bias
   line naming no side (C4); session VWAP crosses at or above
   `signals.crossesChop` (C7) or at or below `signals.crossesTrendMax` with
@@ -1798,12 +1800,26 @@ Frozen definitions:
   the 3m breaking both ways (its last and previous breaks both CHoCH) and
   either the day so far rotational or its RTH VWAP crosses (the Day so far
   line's count, the one the skills teach) at or above
-  `signals.crossesChop`, never one fact alone, and never with an open
-  `Pullback` line printed; else the 4h and 1h agreeing up or down read
+  `signals.crossesChop`, never one fact alone, and never inside an open
+  `Pullback` line; else the 4h and 1h agreeing up or down read
   `trend-<way>`; else `unclear`. It is never the model's. (`day-context`'s
   `daySoFar` config has no crosses threshold, so the existing
-  `crossesChop` (5, the regime's `range` cross count too) is used; C7
-  still reads the session crosses, as frozen.)
+  `crossesChop` is used: 5 is a 30-bar-window count, applied here to the
+  whole RTH morning's RTH VWAP crosses; the skills' "many" is
+  unquantified. C7 still reads the session crosses, as frozen.)
+- **Three reads, kept apart** (the chop pull request):
+  - *The coded read* = our rules restated (it follows the taught
+    guardrail: never `chop` inside an open `Pullback` line).
+  - *The evidence word* = an independent bars-only read (it does not
+    follow the guardrail; scoring a model against it never assumes the
+    lesson is right).
+  - *Open-Pullback candles* = a separate stratum, judged by the pass
+    check (did the pullback resume, or range or reverse) and the R of
+    entries there; the evidence word is reported beside, not used to
+    score the guardrail.
+  An open `Pullback` line: the briefing prints one and its leg is not
+  given back past its origin (`pastOrigin` not true; pullback-vs-reversal
+  step 8; trade-session states it).
 - **Chop is not range** (the owner's rule, the chop pull request): chop is
   the quality of movement, range its geometry. A 15m `range` or a 3m
   `range` regime is neither a chop signal nor the coded read's `chop`; C2,

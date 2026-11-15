@@ -250,15 +250,15 @@ test('context quiz: the chop-read questions (q113-q123, less q120) are asked aga
   const TR = ['trend-vs-range'];
   const want = [
     ['q113', 'lookup', TR, 'chop: structure broken both ways, no continuation; sit out', /Structure broken both ways with no continuation is chop, not a run of reversals\./g],
-    ['q114', 'head', undefined, 'wait: a reversal attempt; class trend-up, not chop; no short', /never one fact alone, never one BOS or CHoCH/g],
+    ['q114', 'head', undefined, 'wait: a reversal attempt; class trend-up, not chop; no short', /One fact alone, or one BOS or CHoCH, is never chop\./g],
     ['q115', 'lookup', TR, 'F2', /transitional \(old trend weakening, new one unconfirmed\) → `unclear` \(frame `transition`\)/g],
     ['q116', 'lookup', TR, 'chop: choppy movement needs no edges', /Chop needs no edges; a range can rotate cleanly\./g],
     ['q117', 'lookup', TR, 'range, not chop: class trend-up; a long setup at the low edge is allowed', /A range day inside the 4h \+ 1h side is catchable: the turn at the edge the side's way/g],
-    ['q118', 'head', undefined, 'F4', /Inside an open `Pullback` line a pause is never `chop`/g],
-    ['q119', 'head', undefined, 'chop: choppy movement, aligned or not; sit out', /Choppy movement → `chop`, aligned frames too/g],
-    ['q123', 'head', undefined, 'trend-up, not chop: the watch; wait for the 15m turn and a 3m BOS up', /and not inside an open `Pullback` line: its 3m CHoCH against then back is the watch/g],
+    ['q118', 'head', undefined, 'F4', /inside an open `Pullback` line → never `chop`/g],
+    ['q119', 'head', undefined, 'chop: choppy movement, aligned or not; sit out', /→ class `chop`, whatever the 4h and 1h/g],
+    ['q123', 'head', undefined, 'trend-up, not chop: the watch; wait for the 15m turn and a 3m BOS up', /a 3m CHoCH against then back is the watch\./g],
     ['q121', 'head', undefined, 'enter long: the turn at the low edge the side\'s way, 3m BOS near value', /setups at the edge the side's way are OK/g],
-    ['q122', 'head', undefined, 'chop: mid-range churn; sit out', /`chop` → no entry, sit out\./g],
+    ['q122', 'head', undefined, 'chop: mid-range churn; sit out', /→ no entry, sit out\./g],
   ];
   assert.deepStrictEqual(Q.anchorsMissing(QUIZ, prompts).filter(x => want.some(w => w[0] === x)), []);
   for (const [id, prompt, lookup, answer, re] of want) {
