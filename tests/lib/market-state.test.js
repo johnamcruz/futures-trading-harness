@@ -126,15 +126,25 @@ test('the line: one exact string per state, structure then momentum then behavio
   const back = lay({ momentum: { ...lay().momentum, trigger: true, dispAgainst: { barsAgo: 3 }, breakAgainst: { direction: 'down', level: 21380.5, barsAgo: 3, strong: true } }, structure: leg({ resumed: true }) });
   assert.match(line({ layers: back }), /^Market state \(3m\): weakening up: HL 21380\.5 holds[^;]*; displacement down 3 bars ago through the HL, closed back;/, 'a break at the protected level itself is no internal break (review round 20, finding 1)');
   assert.doesNotMatch(line({ layers: back }), /broke internal low 21380\.5/);
+  const tie = lay({ momentum: { ...lay().momentum, trigger: true, dispAgainst: { barsAgo: 0 }, breakAgainst: { direction: 'down', level: 21380.5, barsAgo: 0, strong: true } } });
+  assert.match(line({ layers: tie }), /; displacement down this bar tested the HL \(a tie\);/, 'a close within the tie tolerance (decision 8): no break, not resumed');
+  const kept = lay({ structure: leg({ resumed: true, lastWay: { kind: 'BOS', direction: 'up', level: 21412.25, barsAgo: 20, strong: false, failed: false }, lastInternal: { direction: 'down', level: 21380.5, barsAgo: 12 } }), behavior: { ...lay().behavior, word: 'overlapping' } });
+  assert.match(line({ layers: kept }), /: HL 21380\.5 holds, through the HL, closed back;/, 'the structure clause too: never "internal low X broken" beside "X holds"');
+  assert.match(line({ layers: lay({ structure: leg({ lastWay: null, lastInternal: { direction: 'down', level: 21380.5, barsAgo: 1 } }), behavior: { ...lay().behavior, word: 'mixed' } }) }), /: HL 21380\.5 holds, tested the HL \(a tie\);/);
   const brokenRange = lay({ structure: leg({ status: 'broken', legOK: false, side: 'down', level: 21437.5, flip: { barsAgo: 2, strong: false, disp: false, held: true, oldSide: 'up', oldLevel: 21380.5, byRule: 'close' } }), behavior: { ...lay().behavior, word: 'mixed' } });
   assert.deepStrictEqual([st({ layers: brokenRange }), word({ layers: brokenRange })], ['range', 'trend-up'], 'an undisplaced protected break: range (no transition), the alignment default');
-  assert.match(line({ layers: brokenRange }), /^Market state \(3m\): range: no leg holds, HL 21380\.5 broken by a close 6 min ago, the new leg unconfirmed, edges/, 'the broken protected level printed (finding 2)');
+  assert.match(line({ layers: brokenRange }), /^Market state \(3m\): range: no leg holds, HL 21380\.5 broken 6 min ago, edges/, 'the broken protected level printed (finding 2)');
   const internal = lay({ structure: leg({ lastInternal: { direction: 'down', level: 21402.25, barsAgo: 1 } }), behavior: { ...lay().behavior, word: 'overlapping' } });
   assert.match(line({ layers: internal }), /^Market state \(3m\): in the up leg: HL 21380\.5 holds, internal low 21402\.25 broken; behavior overlapping/, 'an internal break against while the HL holds');
   const d1 = lay({ momentum: { ...lay().momentum, dispAgainst: { barsAgo: 1 } } });
   assert.match(line({ layers: d1 }), /; displacement down 1 bar ago;/);
   const odf = lay({ momentum: { ...lay().momentum, odf: true }, behavior: { ...lay().behavior, word: 'overlapping' } });
   assert.match(line({ layers: odf }), /^Market state \(3m\): in the up leg: HL 21380\.5 holds, BOS up 6 min ago \(displaced\); potential failed opening drive; .*class trend-up$/, 'the opening-drive failure: a printed fact, no class change (decision 6)');
+  const long = { layers: lay({ momentum: m, structure: leg({ sinceProgress: 9, lastWay: null }), behavior: { ...lay().behavior, word: 'failing', word15: 'trending down' } }), m15: 'up', h4: 'up', h1: 'up', pullback: undefined };
+  const sLong = M.stateOf(b(long), { ...TH, lineBytes: 150 });
+  assert.ok(Buffer.byteLength(M.marketStateLine(sLong)) < Buffer.byteLength(M.marketStateLine(M.stateOf(b(long), TH))), 'over the budget the behavior numbers drop');
+  assert.doesNotMatch(M.marketStateLine(sLong), /\(overlap/);
+  assert.match(M.marketStateLine(sLong), /behavior failing, 15m trending down; .*class unclear$/);
   for (const x of [L1, line({ layers: weak }), line({ layers: ch, h4: 'range', soFar: { status: 'read', read: 'rotational', vwapCrosses: 7 } })]) assert.ok(Buffer.byteLength(x) <= 250, `${Buffer.byteLength(x)}: ${x}`);
 });
 

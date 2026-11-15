@@ -99,6 +99,18 @@ function chopAt({ snap, breaks, beh, edges, rthBars, sinceEnd }, p, floor) {
   return { S, B, now: S && B, trans, facts: { ov, ef, fl, nd }, count, evidence: { bothWays, flip: flipRecent, failed: failedRecent } };
 }
 
+/**
+ * Decision 6, chop ends only on displacement: a displaced 3m break at this bar, a strong 3m CISD confirmed at this bar, a
+ * displaced close beyond the IB (once complete), or a transition (the protected level broken with displacement and
+ * follow-through).
+ */
+function endedAt({ breakNow, breakStrong, cisd, transition, ib, barStrong, close }) {
+  return Boolean((breakNow && breakStrong) || cisd || transition || (ib && barStrong && (close > ib.high || close < ib.low)));
+}
+
+/** The chop memory: chop now, or chop before with no end event since; an end event at this bar ends it, fresh evidence or not. */
+const chopNext = ({ structure, now, ended, prev }) => Boolean(structure) && !ended && Boolean(now || prev);
+
 function marketLayers({ bars, minutes, setupMinutes, closedAt, pullback = null, p, floor, ibBars, trace = false }) {
   for (const k of KEYS) if (!Number.isFinite((p || {})[k])) throw new Error(`market-layers: ${k} is required (config/analysis.json marketState)`);
   if (!Number.isFinite(floor) || !Number.isFinite(ibBars) || !Number.isFinite(setupMinutes)) throw new Error('market-layers: floor, ibBars and setupMinutes are required (config)');
@@ -129,9 +141,8 @@ function marketLayers({ bars, minutes, setupMinutes, closedAt, pullback = null, 
     const { S, B, now, trans } = c;
     const ib = ri >= ibBars - 1 ? { high: Math.max(...rth.slice(0, ibBars).map(x => x.h)), low: Math.min(...rth.slice(0, ibBars).map(x => x.l)) } : null;
     const strongBar = L.barStrong(bars, k, atr);
-    const ibEnd = Boolean(ib && strongBar && (bars[k].c > ib.high || bars[k].c < ib.low));
-    const ended = Boolean((lb && lb.i === k && lb.strong) || ends.has(k) || trans || ibEnd);
-    inChop = Boolean(snap) && !ended && (now || inChop); // an end event at this bar ends it (decision 6), fresh evidence or not
+    const ended = endedAt({ breakNow: Boolean(lb && lb.i === k), breakStrong: Boolean(lb && lb.strong), cisd: ends.has(k), transition: trans, ib, barStrong: strongBar, close: bars[k].c });
+    inChop = chopNext({ structure: Boolean(snap), now, ended, prev: inChop });
     if (ended) lastEnd = ri;
     if (trace) rows.push({ k, inChop, now, ended });
     if (k === n - 1) cur = { ri, snap, lb, beh, edges, facts: c.facts, bCount: c.count, S, B, now, ended, evidence: c.evidence, failed, trans };
@@ -181,4 +192,4 @@ function marketLayers({ bars, minutes, setupMinutes, closedAt, pullback = null, 
   };
 }
 
-module.exports = { marketLayers, chopAt, rthFrom, cisdEnds, crossings, KEYS };
+module.exports = { marketLayers, chopAt, endedAt, chopNext, rthFrom, cisdEnds, crossings, KEYS };

@@ -19,7 +19,7 @@ const { assertGolden } = require('../golden');
 const { analysis } = require('../../scripts/lib/tunables');
 
 const AN = analysis();
-const TH = { crossesChop: AN.regime.rangeCrosses, maxPullbackDepth: AN.pullbackRead.maxStateDepth };
+const TH = { crossesChop: AN.regime.rangeCrosses, maxPullbackDepth: AN.pullbackRead.maxStateDepth, lineBytes: AN.marketState.lineBytes }; // the briefing's
 const DOC = JSON.parse(zlib.gunzipSync(fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'goal', 'bars.json.gz'))));
 const LABELS = require('../fixtures/market-state/fixture-day-labels.json');
 const HOURS = DOC.historyHours * 3600000;

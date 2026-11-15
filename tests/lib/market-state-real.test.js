@@ -19,7 +19,7 @@ const ind = require('../../scripts/lib/trading/indicators');
 const { analysis } = require('../../scripts/lib/tunables');
 
 const AN = analysis();
-const TH = { crossesChop: AN.regime.rangeCrosses, maxPullbackDepth: AN.pullbackRead.maxStateDepth };
+const TH = { crossesChop: AN.regime.rangeCrosses, maxPullbackDepth: AN.pullbackRead.maxStateDepth, lineBytes: AN.marketState.lineBytes }; // the briefing's
 const DOC = JSON.parse(zlib.gunzipSync(fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'goal', 'bars.json.gz'))));
 const HOURS = DOC.historyHours * 3600000;
 const barsCache = new Map();
@@ -52,7 +52,9 @@ const briefAt = (date, hm) => {
 const stateAt = (date, hm) => {
   const b = briefAt(date, hm);
   const s = M.stateOf(b, TH);
-  return { b, s, line: M.marketStateLine(s), cls: M.classWordOf(s), m3: b.sections.m3.data };
+  const line = M.marketStateLine(s);
+  assert.ok(Buffer.byteLength(line) <= TH.lineBytes, `${date} ${hm}: ${Buffer.byteLength(line)} bytes`);
+  return { b, s, line, cls: M.classWordOf(s), m3: b.sections.m3.data };
 };
 
 // Round 20: the two pinned real tests the design review names, rewritten with the reason. Before, the 3m CHoCH pair was
@@ -209,7 +211,7 @@ test('real: a clean range reads range, not chop: edge to edge (2022-09-01 10:27)
   const { s, line, m3 } = stateAt('2022-09-01', '10:27');
   assert.strictEqual(s.state, 'range', line);
   assert.strictEqual(m3.layers.edges.interior, 0);
-  assert.match(line, /range: no leg holds, HL [\d.]+ broken by a close \d+ min ago, the new leg unconfirmed, edges [\d.]+-[\d.]+ \(travel edge to edge\)/, 'the undisplaced protected break printed (review finding 2)');
+  assert.match(line, /range: no leg holds, HL [\d.]+ broken \d+ min ago, edges [\d.]+-[\d.]+ \(travel edge to edge\)/, 'the undisplaced protected break printed (review finding 2)');
 });
 
 // The owner's five-case test on real fixture days (cases chosen by the review's section-4 rules, tools/chop-read r20-build).

@@ -55,6 +55,25 @@ test('chopAt: S needs no leg holding; B needs chopMinFacts facts, no clean displ
   assert.strictEqual(chop({ snap: { ...flip, flip: { barsAgo: 2, disp: false, held: true } } }).evidence.flip, true, 'an undisplaced protected break is structural evidence');
 });
 
+test('endedAt / chopNext (decision 6): chop ends only on displacement; an end event at the bar ends it even with fresh evidence', () => {
+  const base = { breakNow: false, breakStrong: false, cisd: false, transition: false, ib: { high: 110, low: 100 }, barStrong: false, close: 105 };
+  assert.strictEqual(ML.endedAt(base), false);
+  assert.strictEqual(ML.endedAt({ ...base, breakNow: true }), false, 'an undisplaced break');
+  assert.strictEqual(ML.endedAt({ ...base, breakNow: true, breakStrong: true }), true, 'a displaced break at this bar');
+  assert.strictEqual(ML.endedAt({ ...base, breakStrong: true }), false, 'a displaced break, not at this bar');
+  assert.strictEqual(ML.endedAt({ ...base, cisd: true }), true, 'a strong 3m CISD confirmed at this bar');
+  assert.strictEqual(ML.endedAt({ ...base, transition: true }), true, 'a transition');
+  assert.strictEqual(ML.endedAt({ ...base, close: 111 }), false, 'a close beyond the IB without displacement');
+  assert.strictEqual(ML.endedAt({ ...base, close: 111, barStrong: true }), true, 'a displaced close beyond the IB');
+  assert.strictEqual(ML.endedAt({ ...base, close: 99, barStrong: true }), true, 'below it too');
+  assert.strictEqual(ML.endedAt({ ...base, close: 111, barStrong: true, ib: null }), false, 'the IB not complete');
+  assert.strictEqual(ML.chopNext({ structure: true, now: true, ended: false, prev: false }), true);
+  assert.strictEqual(ML.chopNext({ structure: true, now: false, ended: false, prev: true }), true, 'the memory');
+  assert.strictEqual(ML.chopNext({ structure: true, now: true, ended: true, prev: true }), false, 'an end event with fresh evidence: ended');
+  assert.strictEqual(ML.chopNext({ structure: true, now: false, ended: true, prev: true }), false);
+  assert.strictEqual(ML.chopNext({ structure: false, now: true, ended: false, prev: true }), false, 'no structure: no chop');
+});
+
 test('marketLayers: every threshold required; no bars or clock: null; before 09:30 ET: no RTH structure', () => {
   const bars = Array.from({ length: 40 }, (_, i) => ({ t: new Date(Date.UTC(2026, 0, 6, 12, 0) + i * 180000).toISOString(), o: 100, h: 101, l: 99, c: 100, v: 1 }));
   const args = { bars, minutes: 3, setupMinutes: 15, closedAt: new Date(Date.UTC(2026, 0, 6, 14, 0)).toISOString(), p: P, floor: FLOOR, ibBars: IB };

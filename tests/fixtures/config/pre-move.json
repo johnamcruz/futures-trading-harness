@@ -2002,6 +2002,10 @@
    "value": 2,
    "from": "new in feat/chop-read round 20 (the Market state's three layers, structure-layers.js / market-behavior.js / market-layers.js): the 15m word's floor; the design review's default, measured on the tuning and hold-out days"
   },
+  "marketState.lineBytes": {
+   "value": 250,
+   "from": "new in feat/chop-read round 20 (the Market state line's byte budget, the design review's section 5: over it the behavior numbers drop)"
+  },
   "readAudit.forwardBars": {
    "value": 20,
    "from": "new in feat/read-audit (the read audit, an offline report): a pass's forward move is measured over this many base bars after the cycle bar (an hour on 3m bars); the outcome column only, never read by a decision; a definition, not a tuned value"

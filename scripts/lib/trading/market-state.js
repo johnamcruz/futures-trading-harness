@@ -35,7 +35,8 @@
  * weakening or rotation there.
  *
  *   readState(b, th)    { state, way, align, frames, m15, pullback, early, layers, last, previous, context, tf, ... } on
- *                       any briefing (no lane guard); th { crossesChop, maxPullbackDepth }, both required
+ *                       any briefing (no lane guard); th { crossesChop, maxPullbackDepth }, both required; th.lineBytes (optional)
+ *                       the line's byte budget: over it the behavior numbers drop
  *   stateOf(b, th)      readState, or null off the chain's entry frame or with no 1h part (as the Bias line)
  *   classWordOf(s)      chop -> chop; rotation, weakening -> unclear; not aligned -> unclear; a pullback of a leg the
  *                       4h + 1h way, or the early read -> that trend class; forming, range -> the 4h + 1h trend class
@@ -124,7 +125,7 @@ function readState(b, th = {}) {
   const m15 = trendOf(b, RULE.chain.setup);
   const L = isObj(m3.layers) && Number.isInteger(m3.layers.rthBars) ? m3.layers : null;
   // The early read: the 3m trending against the aligned 15m: from the layers, an established 3m leg against them; without
-  // layers, the last RTH break a BOS against, its protected swing holding. A CHoCH against is no early read.
+  // layers, the last RTH break a BOS against, its protected swing holding (a CHoCH against is no early read there).
   const P3 = L && isObj(L.structure) ? L.structure : null;
   const early = !open && Boolean(align) && m15 === align && (L ? Boolean(P3 && P3.legOK && P3.side !== align)
     : isObj(last) && last.kind === 'BOS' && !broken && DIRS[last.direction] === true && last.direction !== align);
@@ -142,7 +143,7 @@ function readState(b, th = {}) {
   const age = last && Number.isFinite(closedMs) ? Math.round((closedMs - (Date.parse(last.at) + minutes * 60000)) / 60000) : null;
   return {
     state: w.state, way: w.way, of: w.of || null, align, frames, m15, pullback: pb, early, layers: L, last, previous, broken, turn, context, age,
-    price: Number.isFinite(m3.price) ? m3.price : null, minutes, tf: label(minutes),
+    price: Number.isFinite(m3.price) ? m3.price : null, minutes, tf: label(minutes), lineBytes: Number.isFinite(th.lineBytes) ? th.lineBytes : null,
   };
 }
 
@@ -168,6 +169,9 @@ const pbText = p => `pullback (${p.side} leg ${p.leg.origin} -> ${p.leg.extreme}
 const mins = (bars, m) => bars * m;
 const ago = n => (n === 0 ? 'this bar' : n === 1 ? '1 bar ago' : `${n} bars ago`);
 const minsAgo = (n, m) => (n === 0 ? 'this bar' : `${n * m} min ago`);
+// A break against at the protected level itself: a close through it that came back (the leg resumed), or a close within
+// the tie tolerance (decision 8: no break). Never "internal".
+const atLevelText = P => (P.resumed ? `through the ${swingName(P.side)}, closed back` : `tested the ${swingName(P.side)} (a tie)`);
 
 /** The protected structure clause from the layers' snapshot. */
 function structureText(P, s, { brief = false } = {}) {
@@ -180,7 +184,7 @@ function structureText(P, s, { brief = false } = {}) {
   if (brief) return parts[0];
   const w = P.lastWay;
   if (w && (!P.lastInternal || w.barsAgo <= P.lastInternal.barsAgo)) parts.push(`${w.kind} ${w.direction} ${minsAgo(w.barsAgo, s.minutes)}${w.strong ? ' (displaced)' : ''}`);
-  else if (P.lastInternal && !(s.layers.momentum && s.layers.momentum.trigger)) parts.push(`internal ${P.lastInternal.direction === 'up' ? 'high' : 'low'} ${P.lastInternal.level} broken`);
+  else if (P.lastInternal && !(s.layers.momentum && s.layers.momentum.trigger)) parts.push(P.lastInternal.level === P.level ? atLevelText(P) : `internal ${P.lastInternal.direction === 'up' ? 'high' : 'low'} ${P.lastInternal.level} broken`);
   if (P.flip && P.flip.byRule === 'choch-bos' && P.flip.barsAgo === (w ? w.barsAgo : -1)) parts.push('CHoCH then BOS');
   if (s.layers.reversal) parts.push('reversal confirmed');
   return parts.join(', ');
@@ -193,10 +197,9 @@ function momentumText(L, P, s) {
   const out = [];
   const against = P.side === 'up' ? 'down' : 'up';
   const brk = m.breakAgainst;
-  // A break against at the protected level itself (a close through it, then back within followBars: the leg resumed) is
-  // no internal break: the CHoCH through the level, closed back (design review section 5).
+  // A break against at the protected level itself is no internal break (design review section 5): atLevelText.
   const atLevel = brk && brk.level === P.level;
-  if (m.trigger && brk && atLevel) out.push(`${m.dispAgainst || brk.strong ? 'displacement' : 'a move'} ${against} ${ago(brk.barsAgo)} through the ${swingName(P.side)}, closed back`);
+  if (m.trigger && brk && atLevel) out.push(`${m.dispAgainst || brk.strong ? 'displacement' : 'a move'} ${against} ${ago(brk.barsAgo)} ${atLevelText(P)}`);
   else if (m.trigger && brk) out.push(`${m.dispAgainst || brk.strong ? 'displacement' : 'a move'} ${against} ${ago(brk.barsAgo)} broke internal ${against === 'down' ? 'low' : 'high'} ${brk.level}`);
   else if (m.dispAgainst) out.push(`displacement ${against} ${ago(m.dispAgainst.barsAgo)}`);
   if (m.loss) out.push(P.lastWay && P.lastWay.failed ?`the last ${P.lastWay.kind} ${P.side} failed` : `no new ${P.side === 'up' ? 'high' : 'low'} for ${mins(P.sinceProgress, s.minutes)} min`);
@@ -234,7 +237,7 @@ function layeredLine(s) {
   } else if (s.state === 'chop') parts.push(`chop: ${chopText(L)}`);
   else if (s.state === 'range') {
     const e = L.edges;
-    const broken = P && P.status === 'broken' ? `, ${structureText(P, s)}` : '';
+    const broken = P && P.status === 'broken' ? `, ${swingName(P.flip.oldSide)} ${P.flip.oldLevel} broken ${minsAgo(P.flip.barsAgo, s.minutes)}` : '';
     parts.push(`range: no leg holds${broken}${e ? `, edges ${e.bot}-${e.top} (${e.interior === 0 ? 'travel edge to edge' : 'fails mid-range'})` : ''}`);
   } else {
     const word = { transition: `transition ${s.way}`, weakening: `weakening ${s.way}`, rotation: `rotation ${s.way}`, trend: `trend ${s.way}`, leg: `in the ${s.way} leg` }[s.state];
@@ -270,7 +273,9 @@ function marketStateLine(s) {
   const ctx = s.state === 'chop' ? [s.context.rotational ? 'Day so far rotational' : null, s.context.crosses !== null ? `RTH VWAP crosses ${s.context.crosses}` : null].filter(Boolean) : [];
   if (ctx.length) parts.push(ctx.join(', '));
   // The class code computes (round 18, owner): printed at the end, one source (classWordOf), on every line.
-  return `Market state (${s.tf}): ${[...parts, align].join('; ')}; class ${classWordOf(s)}`;
+  const full = `Market state (${s.tf}): ${[...parts, align].join('; ')}; class ${classWordOf(s)}`;
+  // The line's budget (th.lineBytes, config/analysis.json marketState): over it, the behavior clause drops its numbers.
+  return !Number.isFinite(s.lineBytes) || Buffer.byteLength(full) <= s.lineBytes ? full : full.replace(/ \(overlap [\d.]+, efficiency [\d.]+\)/, '');
 }
 
 module.exports = { turnOf, readState, stateOf, classWordOf, marketStateLine };

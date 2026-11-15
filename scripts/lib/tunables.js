@@ -251,7 +251,7 @@ const ANALYSIS = {
   marketState: {
     behaviorBars: int(2), edgeBars: int(3), structBars: int(1), followBars: int(1), dispBars: int(0), m15Bars: int(2), equalAtr: nonneg(), interior: frac(),
     overlapHigh: frac(), effLow: frac(), rejectMin: int(1), chopMinFacts: int(1, 4), pressBars: int(1), lossStale: int(1), rotStale: int(1), rotCross: int(1),
-    odStart: int(0), odBars: int(1), odStale: int(1), trendNetAtr: nonneg(), earlyBars: int(1), early15: int(1),
+    odStart: int(0), odBars: int(1), odStale: int(1), trendNetAtr: nonneg(), earlyBars: int(1), early15: int(1), lineBytes: int(1),
   },
   evaluator: { windowBars: int(1) },
   // The read audit (learning/read-audit.js, an offline report): a pass's forward window in base bars and its standard
@@ -393,7 +393,7 @@ const BUILT_IN = deepFreeze({
     briefing: { equalK: 2, cisdFrames: [3, 5, 15, 60] },
     tradeRead: { frames: [15], deepPullback: 0.618, minSigns: 2 },
     pullbackRead: { minLegAtr: 1, maxStateDepth: 0.62 },
-    marketState: { behaviorBars: 10, edgeBars: 20, structBars: 20, followBars: 3, dispBars: 3, m15Bars: 4, equalAtr: 0.05, interior: 0.25, overlapHigh: 0.7, effLow: 0.3, rejectMin: 2, chopMinFacts: 3, pressBars: 6, lossStale: 10, rotStale: 20, rotCross: 3, odStart: 3, odBars: 20, odStale: 3, trendNetAtr: 1, earlyBars: 3, early15: 2 },
+    marketState: { behaviorBars: 10, edgeBars: 20, structBars: 20, followBars: 3, dispBars: 3, m15Bars: 4, equalAtr: 0.05, interior: 0.25, overlapHigh: 0.7, effLow: 0.3, rejectMin: 2, chopMinFacts: 3, pressBars: 6, lossStale: 10, rotStale: 20, rotCross: 3, odStart: 3, odBars: 20, odStale: 3, trendNetAtr: 1, earlyBars: 3, early15: 2, lineBytes: 250 },
     evaluator: { windowBars: 500 },
     readAudit: { forwardBars: 20, stopAtr: 1 },
   },
