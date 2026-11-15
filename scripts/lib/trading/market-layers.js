@@ -131,7 +131,7 @@ function marketLayers({ bars, minutes, setupMinutes, closedAt, pullback = null, 
     const strongBar = L.barStrong(bars, k, atr);
     const ibEnd = Boolean(ib && strongBar && (bars[k].c > ib.high || bars[k].c < ib.low));
     const ended = Boolean((lb && lb.i === k && lb.strong) || ends.has(k) || trans || ibEnd);
-    inChop = Boolean(snap) && (now || (inChop && !ended));
+    inChop = Boolean(snap) && !ended && (now || inChop); // an end event at this bar ends it (decision 6), fresh evidence or not
     if (ended) lastEnd = ri;
     if (trace) rows.push({ k, inChop, now, ended });
     if (k === n - 1) cur = { ri, snap, lb, beh, edges, facts: c.facts, bCount: c.count, S, B, now, ended, evidence: c.evidence, failed, trans };

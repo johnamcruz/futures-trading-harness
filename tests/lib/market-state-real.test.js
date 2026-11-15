@@ -209,7 +209,7 @@ test('real: a clean range reads range, not chop: edge to edge (2022-09-01 10:27)
   const { s, line, m3 } = stateAt('2022-09-01', '10:27');
   assert.strictEqual(s.state, 'range', line);
   assert.strictEqual(m3.layers.edges.interior, 0);
-  assert.match(line, /range: no leg holds, edges [\d.]+-[\d.]+ \(travel edge to edge\)/);
+  assert.match(line, /range: no leg holds, HL [\d.]+ broken by a close \d+ min ago, the new leg unconfirmed, edges [\d.]+-[\d.]+ \(travel edge to edge\)/, 'the undisplaced protected break printed (review finding 2)');
 });
 
 // The owner's five-case test on real fixture days (cases chosen by the review's section-4 rules, tools/chop-read r20-build).

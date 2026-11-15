@@ -25,7 +25,8 @@
  *                  the leg's flip is recent and held: Reversal)
  *   leg            an intact, established leg otherwise ("in the up leg": a pullback or a range inside the trend)
  *   range          no established leg (no chop evidence)
- * The early read (the 15m trending the 4h + 1h way, the 3m's last RTH break a BOS against): printed, blocks chop and
+ * The early read (the 15m trending the 4h + 1h way, the 3m in an established leg against them; without layers its last
+ * RTH break a BOS against): printed, blocks chop and
  * keeps the trend class, as the pullback does.
  *
  * Without m3.layers (an older record, a quiz item built from printed lines): the printed breaks and protected swings
@@ -121,9 +122,12 @@ function readState(b, th = {}) {
   const broken = isObj(last) && isObj(last.protected) && Number.isFinite(Date.parse(last.protected.brokenAt))
     && (!Number.isFinite(closedMs) || Date.parse(last.protected.brokenAt) < closedMs);
   const m15 = trendOf(b, RULE.chain.setup);
-  // The early read: the 3m trending against the aligned 15m (its last RTH break a BOS against, its protected swing holding).
-  const early = !open && Boolean(align) && m15 === align && isObj(last) && last.kind === 'BOS' && !broken && DIRS[last.direction] === true && last.direction !== align;
   const L = isObj(m3.layers) && Number.isInteger(m3.layers.rthBars) ? m3.layers : null;
+  // The early read: the 3m trending against the aligned 15m: from the layers, an established 3m leg against them; without
+  // layers, the last RTH break a BOS against, its protected swing holding. A CHoCH against is no early read.
+  const P3 = L && isObj(L.structure) ? L.structure : null;
+  const early = !open && Boolean(align) && m15 === align && (L ? Boolean(P3 && P3.legOK && P3.side !== align)
+    : isObj(last) && last.kind === 'BOS' && !broken && DIRS[last.direction] === true && last.direction !== align);
   const today = isObj(m3.today) ? m3.today : {};
   let w;
   let turn = null;
@@ -189,7 +193,11 @@ function momentumText(L, P, s) {
   const out = [];
   const against = P.side === 'up' ? 'down' : 'up';
   const brk = m.breakAgainst;
-  if (m.trigger && brk) out.push(`${m.dispAgainst || brk.strong ? 'displacement' : 'a move'} ${against} ${ago(brk.barsAgo)} broke internal ${against === 'down' ? 'low' : 'high'} ${brk.level}`);
+  // A break against at the protected level itself (a close through it, then back within followBars: the leg resumed) is
+  // no internal break: the CHoCH through the level, closed back (design review section 5).
+  const atLevel = brk && brk.level === P.level;
+  if (m.trigger && brk && atLevel) out.push(`${m.dispAgainst || brk.strong ? 'displacement' : 'a move'} ${against} ${ago(brk.barsAgo)} through the ${swingName(P.side)}, closed back`);
+  else if (m.trigger && brk) out.push(`${m.dispAgainst || brk.strong ? 'displacement' : 'a move'} ${against} ${ago(brk.barsAgo)} broke internal ${against === 'down' ? 'low' : 'high'} ${brk.level}`);
   else if (m.dispAgainst) out.push(`displacement ${against} ${ago(m.dispAgainst.barsAgo)}`);
   if (m.loss) out.push(P.lastWay && P.lastWay.failed ?`the last ${P.lastWay.kind} ${P.side} failed` : `no new ${P.side === 'up' ? 'high' : 'low'} for ${mins(P.sinceProgress, s.minutes)} min`);
   if (m.odf) out.push('potential failed opening drive');
@@ -222,11 +230,12 @@ function layeredLine(s) {
   else if (s.state === 'pullback') parts.push(`${pbText(s.pullback)}${P ? `: 3m ${P.side} leg, ${structureText(P, s, { brief: true })}` : ''}`);
   else if (s.state === 'rotation' && s.of === 'pullback') {
     const ph = L.pbPhase || {};
-    parts.push(`rotation: ${pbText(s.pullback)}, ${ph.bars} bars without a new ${s.way === 'up' ? 'high' : 'low'}, ${ph.crosses} midpoint crosses${L.momentum && L.momentum.trigger && P && P.side === s.way ? `, the ${s.way} leg weakening` : ''}`);
+    parts.push(`rotation: ${pbText(s.pullback)}, ${ph.bars} bars, ${ph.crosses} midpoint crosses${L.momentum && L.momentum.trigger && P && P.side === s.way ? `, the ${s.way} leg weakening` : ''}`);
   } else if (s.state === 'chop') parts.push(`chop: ${chopText(L)}`);
   else if (s.state === 'range') {
     const e = L.edges;
-    parts.push(`range: no leg holds${e ? `, edges ${e.bot}-${e.top} (${e.interior === 0 ? 'travel edge to edge' : 'fails mid-range'})` : ''}`);
+    const broken = P && P.status === 'broken' ? `, ${structureText(P, s)}` : '';
+    parts.push(`range: no leg holds${broken}${e ? `, edges ${e.bot}-${e.top} (${e.interior === 0 ? 'travel edge to edge' : 'fails mid-range'})` : ''}`);
   } else {
     const word = { transition: `transition ${s.way}`, weakening: `weakening ${s.way}`, rotation: `rotation ${s.way}`, trend: `trend ${s.way}`, leg: `in the ${s.way} leg` }[s.state];
     parts.push(`${word}: ${structureText(P, s, { brief: s.state === 'rotation' })}${s.state === 'rotation' ? `, no new ${s.way === 'up' ? 'high' : 'low'} for ${mins(P.sinceProgress, s.minutes)} min` : ''}`);

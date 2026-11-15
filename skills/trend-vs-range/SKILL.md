@@ -63,8 +63,8 @@ highs or lower lows. Failure to make directional progress." The `chop:`
 line names which were met. The class word is the Market state line's
 (`trade-session`), never this definition's. One CHoCH warns. Structure
 broken both ways with no continuation is chop, not a run of reversals.
-Chop ends on a break or CISD its way with displacement, or a close beyond
-the range (the IB) with displacement.
+Chop ends on displacement: a displaced 3m break or CISD, or a displaced
+close beyond the range (the IB).
 
 **Chop is not range.** Chop needs no edges; a range can rotate cleanly.
 A range travels edge to edge with displacement and clean rejections at

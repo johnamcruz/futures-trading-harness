@@ -270,9 +270,9 @@ test('context quiz: the chop-read questions (q114-q133, less q115, q116, q117, q
     ['q119', 'head', undefined, 'F2', /\| `chop` \| sit out \|/g],
     ['q123', 'head', undefined, 'F3', /enter on the first 3m BOS or CISD the side's way near value/g],
     ['q121', 'head', undefined, 'enter long: the turn at the low edge the side\'s way, 3m BOS near value', /setups at the range edge or on a breakout, the side's way/g],
-    // How chop ends (owner, 2026-11-14): the table's chop row.
-    ['q124', 'head', undefined, 'F2', /chop ends: a CHoCH then a BOS or CISD the same way/g],
-    ['q125', 'head', undefined, 'F2', /or a close beyond the range \(the IB; before 10:30 only a BOS or CISD ends it\)/g],
+    // How chop ends (owner, 2026-11-14; round 20, decision 6: on displacement, the code's rule as trade-session states it).
+    ['q124', 'head', undefined, 'F2', /a displaced 3m break or a displaced 3m CISD/g],
+    ['q125', 'head', undefined, 'F2', /a displaced close beyond the IB \(complete at 10:30\)/g],
     // The owner: "BOS is same-trend continuation, while CHoCH is a potential reversal" (bos-vs-choch, a lookup).
     ['q127', 'lookup', ['bos-vs-choch'], 'a potential reversal up that still holds (above its origin 21462.50): unconfirmed until a BOS up', /a CHoCH holds until the low \(high\) that started the shift breaks/g],
     // The owner's invalidation rule (round 15, bos-vs-choch): each break's protected swing; a close through it, not a wick.

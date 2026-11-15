@@ -176,8 +176,8 @@ printed first; else its state word):
 - `transition`, their way: wait for the first 3m break the side's way.
 
 Chop ends when the line's state word is no longer `chop` (code's rule:
-chop ends: a CHoCH then a BOS or CISD the same way, or a close beyond the
-range (the IB; before 10:30 only a BOS or CISD ends it), each with
+a displaced 3m break or a displaced 3m CISD, a displaced close beyond
+the IB (complete at 10:30), or the protected level broken with
 displacement). The trend and chop definitions, for reference only:
 `trend-vs-range`.
 

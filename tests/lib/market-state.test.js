@@ -62,9 +62,9 @@ test('precedence: a deep (past maxPullbackDepth, sticky) or given-back pullback 
 test('decision 2: an open pullback with rotation evidence now prints rotation (class unclear: no trend entry), never chop', () => {
   const rot = lay({ chop: CHOP, pbRotation: true, pbPhase: { bars: 24, crosses: 4 } });
   assert.deepStrictEqual([st({ layers: rot, pullback: pb() }), word({ layers: rot, pullback: pb() })], ['rotation', 'unclear']);
-  assert.strictEqual(line({ layers: rot, pullback: pb() }), 'Market state (3m): rotation: pullback (long leg 21361.25 -> 21437.5, depth 28%), 24 bars without a new high, 4 midpoint crosses; behavior trending (overlap 0.52, efficiency 0.41), 15m trending up; 4h+1h up; class unclear');
+  assert.strictEqual(line({ layers: rot, pullback: pb() }), 'Market state (3m): rotation: pullback (long leg 21361.25 -> 21437.5, depth 28%), 24 bars, 4 midpoint crosses; behavior trending (overlap 0.52, efficiency 0.41), 15m trending up; 4h+1h up; class unclear');
   const weak = lay({ pbRotation: true, pbPhase: { bars: 5, crosses: 0 }, momentum: { ...lay().momentum, trigger: true, breakAgainst: { direction: 'down', level: 21412.25, barsAgo: 1, strong: true } } });
-  assert.match(line({ layers: weak, pullback: pb() }), /^Market state \(3m\): rotation: pullback \(long leg 21361\.25 -> 21437\.5, depth 28%\), 5 bars without a new high, 0 midpoint crosses, the up leg weakening;/);
+  assert.match(line({ layers: weak, pullback: pb() }), /^Market state \(3m\): rotation: pullback \(long leg 21361\.25 -> 21437\.5, depth 28%\), 5 bars, 0 midpoint crosses, the up leg weakening;/);
 });
 
 test('precedence: transition beats chop; chop needs no pullback or early read; the classes of each', () => {
@@ -73,8 +73,14 @@ test('precedence: transition beats chop; chop needs no pullback or early read; t
   assert.strictEqual(word({ layers: tr, h4: 'down', h1: 'down' }), 'trend-down', 'the new way the side\'s: the trend class');
   const ch = lay({ chop: CHOP, structure: leg({ legOK: false }) });
   assert.deepStrictEqual([st({ layers: ch }), word({ layers: ch }), word({ layers: ch, h4: 'range' })], ['chop', 'chop', 'chop']);
-  const early = { layers: ch, m15: 'up', lastBreak: { last: { kind: 'BOS', direction: 'down', level: 21400, at: T(24) }, previous: null } };
-  assert.deepStrictEqual([st(early), word(early)], ['range', 'trend-up'], 'the early read (15m up, the 3m BOS down) blocks chop and keeps the trend class');
+  const downLeg = leg({ side: 'down', level: 21437.5 });
+  const early = { layers: lay({ chop: CHOP, structure: downLeg, behavior: { ...lay().behavior, word: 'overlapping' } }), m15: 'up' };
+  assert.deepStrictEqual([S(early).early, st(early), word(early)], [true, 'leg', 'trend-up'], 'the early read (15m up, an established 3m leg down) keeps the trend class');
+  assert.match(line(early), /; 15m up: a pullback in the 15m trend; 4h\+1h up; class trend-up$/);
+  assert.strictEqual(S({ layers: lay({ structure: downLeg }), m15: 'up', lastBreak: { last: { kind: 'CHoCH', direction: 'down', level: 21400, at: T(24) }, previous: null } }).early, true, 'with layers, the leg decides, not the printed break');
+  assert.strictEqual(S({ layers: lay({ structure: leg({ side: 'down', legOK: false }) }), m15: 'up', lastBreak: { last: { kind: 'BOS', direction: 'down', level: 21400, at: T(24) }, previous: null } }).early, false, 'no established leg against: no early read, whatever the printed BOS');
+  assert.strictEqual(S({ layers: lay(), m15: 'up' }).early, false, 'the 3m leg with the 4h + 1h: no pullback');
+  assert.deepStrictEqual([st({ layers: lay({ chop: CHOP, structure: leg({ side: 'down', legOK: false }) }), m15: 'up' })], ['chop'], 'chop when no early read');
   assert.strictEqual(st({ layers: lay({ chop: { ...CHOP, inChop: false, now: false }, structure: leg({ legOK: false }) }) }), 'range', 'no chop memory: range');
 });
 
@@ -87,7 +93,7 @@ test('precedence: weakening (the trigger on an intact leg) and the stale-leg rot
   assert.strictEqual(st({ layers: lay({ momentum: m, chop: CHOP, structure: leg({ legOK: false }) }) }), 'chop');
   assert.deepStrictEqual([st({ layers: lay({ stale: true }) }), word({ layers: lay({ stale: true }) })], ['rotation', 'unclear']);
   assert.strictEqual(st({ layers: lay({ stale: true, momentum: m }) }), 'weakening', 'weakening before rotation');
-  assert.strictEqual(st({ layers: lay({ stale: true }), m15: 'up', lastBreak: { last: { kind: 'BOS', direction: 'down', level: 21400, at: T(24) }, previous: null } }), 'trend', 'the early read: no stale rotation');
+  assert.strictEqual(st({ layers: lay({ stale: true, structure: leg({ side: 'down', level: 21437.5 }) }), m15: 'up' }), 'trend', 'the early read: no stale rotation');
 });
 
 test('precedence: trend needs an established leg and the behavior word trending; else in the leg; no leg: range; the classes', () => {
@@ -117,6 +123,12 @@ test('the line: one exact string per state, structure then momentum then behavio
   assert.strictEqual(line({ layers: lay({ stale: true, structure: leg({ sinceProgress: 22 }) }) }), 'Market state (3m): rotation up: HL 21380.5 holds, no new high for 66 min; behavior trending (overlap 0.52, efficiency 0.41), 15m trending up; 4h+1h up; class unclear');
   const rev = lay({ reversal: true, structure: leg({ flip: { barsAgo: 6, strong: true, disp: true, held: true, oldSide: 'down', oldLevel: 21420, byRule: 'close' } }) });
   assert.match(line({ layers: rev }), /HL 21380\.5 holds, BOS up 6 min ago \(displaced\), reversal confirmed;/, 'Reversal: printed on the leg');
+  const back = lay({ momentum: { ...lay().momentum, trigger: true, dispAgainst: { barsAgo: 3 }, breakAgainst: { direction: 'down', level: 21380.5, barsAgo: 3, strong: true } }, structure: leg({ resumed: true }) });
+  assert.match(line({ layers: back }), /^Market state \(3m\): weakening up: HL 21380\.5 holds[^;]*; displacement down 3 bars ago through the HL, closed back;/, 'a break at the protected level itself is no internal break (review round 20, finding 1)');
+  assert.doesNotMatch(line({ layers: back }), /broke internal low 21380\.5/);
+  const brokenRange = lay({ structure: leg({ status: 'broken', legOK: false, side: 'down', level: 21437.5, flip: { barsAgo: 2, strong: false, disp: false, held: true, oldSide: 'up', oldLevel: 21380.5, byRule: 'close' } }), behavior: { ...lay().behavior, word: 'mixed' } });
+  assert.deepStrictEqual([st({ layers: brokenRange }), word({ layers: brokenRange })], ['range', 'trend-up'], 'an undisplaced protected break: range (no transition), the alignment default');
+  assert.match(line({ layers: brokenRange }), /^Market state \(3m\): range: no leg holds, HL 21380\.5 broken by a close 6 min ago, the new leg unconfirmed, edges/, 'the broken protected level printed (finding 2)');
   const internal = lay({ structure: leg({ lastInternal: { direction: 'down', level: 21402.25, barsAgo: 1 } }), behavior: { ...lay().behavior, word: 'overlapping' } });
   assert.match(line({ layers: internal }), /^Market state \(3m\): in the up leg: HL 21380\.5 holds, internal low 21402\.25 broken; behavior overlapping/, 'an internal break against while the HL holds');
   const d1 = lay({ momentum: { ...lay().momentum, dispAgainst: { barsAgo: 1 } } });

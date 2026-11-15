@@ -32,6 +32,11 @@ test('rejections: an episode is a run of bars touching an edge within tol and cl
   const closeAt = [bar(100, 105, 99, 104.75), bar(104, 106, 103, 105.9)];
   assert.strictEqual(MB.rejections([...closeAt, bar(105, 105.5, 104, 105)], 20, 0.25, P).atTop, 0, 'a close at top - tol or above is not back inside');
   assert.strictEqual(MB.rejections(xs.slice(0, 2), 20, 0.25, P), null, 'fewer than 3 bars');
+  // Interior pivots: a k=2 swing high in the middle of the window's range (chop fails mid-range); at an edge it is none.
+  const mid = [bar(100, 101, 99, 100), bar(100, 102, 99, 101), bar(101, 105, 100, 104), bar(104, 104.5, 96, 97), bar(97, 98, 95, 96), bar(96, 103, 95, 102.5), bar(102, 102.5, 101, 102), bar(102, 102.2, 101.5, 101.8)];
+  const r2 = MB.rejections([...mid, bar(101.8, 112, 101.8, 111), bar(111, 111.5, 88, 89)], 20, 0.25, P);
+  assert.ok(r2.interior >= 1, `a mid-range swing: interior ${r2.interior}`);
+  assert.strictEqual(MB.rejections(mid.slice(0, 5), 20, 0.25, P).interior, 0, 'the only swing high is the top edge');
 });
 
 test('word3: trending needs a fresh extreme (within lossStale) AND the net the leg\'s way >= trendNetAtr x ATR; then failing, overlapping, rotating, mixed', () => {

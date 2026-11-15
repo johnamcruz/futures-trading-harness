@@ -108,6 +108,13 @@ test('momentumAt: the weakening trigger needs a break against that is strong, or
   const plain = setup(CHOCH_BOS);
   const m2 = L.momentumAt(plain.bars, plain.breaks, plain.series[34], 34, FROM, plain.atr, P);
   assert.deepStrictEqual([m2.trigger, Boolean(m2.breakAgainst), m2.dispAgainst], [false, true, null], 'an internal break with no displacement: no trigger');
+  // The owner's second clause: a break against that is not itself strong, with a strong candle against in the window.
+  const disp33 = bars => { bars[33] = { ...bars[33], o: 117.75, h: 118, l: 114.25, c: 114.5 }; return bars; };
+  const d = setup(CHOCH_BOS, P, disp33);
+  assert.ok(L.barStrong(d.bars, 33, d.atr) && !d.breaks.find(b => b.i === 34).strong, 'the fixture: a displaced bar 33, an undisplaced CHoCH at 34');
+  const m3 = L.momentumAt(d.bars, d.breaks, d.series[34], 34, FROM, d.atr, P);
+  assert.deepStrictEqual([m3.trigger, m3.breakAgainst.strong, m3.dispAgainst.barsAgo], [true, false, 1], 'a break against with displacement against: the trigger');
+  assert.strictEqual(L.momentumAt(d.bars, d.breaks, d.series[34], 34, FROM, d.atr, { ...P, pressBars: 1 }).trigger, false, 'the displacement outside the window: no trigger');
   const late = L.momentumAt(s.bars, s.breaks, s.series[34], 34, FROM, s.atr, { ...P, pressBars: 1 });
   assert.strictEqual(late.trigger, true, 'the break at this bar is inside a one-bar window');
   const stale = L.momentumAt(plain.bars, plain.breaks, plain.series[38], 38, FROM, plain.atr, P);
