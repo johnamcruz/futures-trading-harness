@@ -1296,7 +1296,7 @@ overlapping, consolidating, or repeatedly failing to continue."
   low (lower high) breaks; a CHoCH holds until the low (high) that started
   the shift breaks.
   Only a close through it counts; a wick is not.
-- Behavior: the line's `behavior` word and its 15m word beside it.
+- Behavior: `behavior` (rotation/weakening/transition), 15m words.
 - A BOS stays labelled BOS after its protected swing breaks; the Market
   state line's status (`holds` or `broken by a close`) decides what it
   means now: a broken protected swing ends that BOS's trend read.
@@ -2680,7 +2680,7 @@ overlapping, consolidating, or repeatedly failing to continue."
   low (lower high) breaks; a CHoCH holds until the low (high) that started
   the shift breaks.
   Only a close through it counts; a wick is not.
-- Behavior: the line's `behavior` word and its 15m word beside it.
+- Behavior: `behavior` (rotation/weakening/transition), 15m words.
 - A BOS stays labelled BOS after its protected swing breaks; the Market
   state line's status (`holds` or `broken by a close`) decides what it
   means now: a broken protected swing ends that BOS's trend read.
@@ -4064,7 +4064,7 @@ overlapping, consolidating, or repeatedly failing to continue."
   low (lower high) breaks; a CHoCH holds until the low (high) that started
   the shift breaks.
   Only a close through it counts; a wick is not.
-- Behavior: the line's `behavior` word and its 15m word beside it.
+- Behavior: `behavior` (rotation/weakening/transition), 15m words.
 - A BOS stays labelled BOS after its protected swing breaks; the Market
   state line's status (`holds` or `broken by a close`) decides what it
   means now: a broken protected swing ends that BOS's trend read.
@@ -5439,7 +5439,7 @@ overlapping, consolidating, or repeatedly failing to continue."
   low (lower high) breaks; a CHoCH holds until the low (high) that started
   the shift breaks.
   Only a close through it counts; a wick is not.
-- Behavior: the line's `behavior` word and its 15m word beside it.
+- Behavior: `behavior` (rotation/weakening/transition), 15m words.
 - A BOS stays labelled BOS after its protected swing breaks; the Market
   state line's status (`holds` or `broken by a close`) decides what it
   means now: a broken protected swing ends that BOS's trend read.
@@ -6911,7 +6911,7 @@ overlapping, consolidating, or repeatedly failing to continue."
   low (lower high) breaks; a CHoCH holds until the low (high) that started
   the shift breaks.
   Only a close through it counts; a wick is not.
-- Behavior: the line's `behavior` word and its 15m word beside it.
+- Behavior: `behavior` (rotation/weakening/transition), 15m words.
 - A BOS stays labelled BOS after its protected swing breaks; the Market
   state line's status (`holds` or `broken by a close`) decides what it
   means now: a broken protected swing ends that BOS's trend read.
@@ -8380,7 +8380,7 @@ overlapping, consolidating, or repeatedly failing to continue."
   low (lower high) breaks; a CHoCH holds until the low (high) that started
   the shift breaks.
   Only a close through it counts; a wick is not.
-- Behavior: the line's `behavior` word and its 15m word beside it.
+- Behavior: `behavior` (rotation/weakening/transition), 15m words.
 - A BOS stays labelled BOS after its protected swing breaks; the Market
   state line's status (`holds` or `broken by a close`) decides what it
   means now: a broken protected swing ends that BOS's trend read.
@@ -9770,7 +9770,7 @@ overlapping, consolidating, or repeatedly failing to continue."
   low (lower high) breaks; a CHoCH holds until the low (high) that started
   the shift breaks.
   Only a close through it counts; a wick is not.
-- Behavior: the line's `behavior` word and its 15m word beside it.
+- Behavior: `behavior` (rotation/weakening/transition), 15m words.
 - A BOS stays labelled BOS after its protected swing breaks; the Market
   state line's status (`holds` or `broken by a close`) decides what it
   means now: a broken protected swing ends that BOS's trend read.
@@ -11160,7 +11160,7 @@ overlapping, consolidating, or repeatedly failing to continue."
   low (lower high) breaks; a CHoCH holds until the low (high) that started
   the shift breaks.
   Only a close through it counts; a wick is not.
-- Behavior: the line's `behavior` word and its 15m word beside it.
+- Behavior: `behavior` (rotation/weakening/transition), 15m words.
 - A BOS stays labelled BOS after its protected swing breaks; the Market
   state line's status (`holds` or `broken by a close`) decides what it
   means now: a broken protected swing ends that BOS's trend read.
@@ -12623,7 +12623,7 @@ overlapping, consolidating, or repeatedly failing to continue."
   low (lower high) breaks; a CHoCH holds until the low (high) that started
   the shift breaks.
   Only a close through it counts; a wick is not.
-- Behavior: the line's `behavior` word and its 15m word beside it.
+- Behavior: `behavior` (rotation/weakening/transition), 15m words.
 - A BOS stays labelled BOS after its protected swing breaks; the Market
   state line's status (`holds` or `broken by a close`) decides what it
   means now: a broken protected swing ends that BOS's trend read.
@@ -14020,7 +14020,7 @@ overlapping, consolidating, or repeatedly failing to continue."
   low (lower high) breaks; a CHoCH holds until the low (high) that started
   the shift breaks.
   Only a close through it counts; a wick is not.
-- Behavior: the line's `behavior` word and its 15m word beside it.
+- Behavior: `behavior` (rotation/weakening/transition), 15m words.
 - A BOS stays labelled BOS after its protected swing breaks; the Market
   state line's status (`holds` or `broken by a close`) decides what it
   means now: a broken protected swing ends that BOS's trend read.
@@ -15318,7 +15318,7 @@ overlapping, consolidating, or repeatedly failing to continue."
   low (lower high) breaks; a CHoCH holds until the low (high) that started
   the shift breaks.
   Only a close through it counts; a wick is not.
-- Behavior: the line's `behavior` word and its 15m word beside it.
+- Behavior: `behavior` (rotation/weakening/transition), 15m words.
 - A BOS stays labelled BOS after its protected swing breaks; the Market
   state line's status (`holds` or `broken by a close`) decides what it
   means now: a broken protected swing ends that BOS's trend read.
