@@ -1,10 +1,10 @@
 'use strict';
 
-// The Market state (scripts/lib/trading/market-state.js, feat/chop-read, MARKET-STATE-SPEC and the owner's words: "trend,
-// chop, ranging"; "keep it simple and call it chop if it fails reversal"; "a 15m BOS could look like a 3m CHoCH followed by
-// another CHoCH"; BOS is continuation, CHoCH a potential reversal, relative to the last break): what the 3m market is
-// doing, the precedence applied once, printed as one summary line with the pullback read and the 4h + 1h beside it. A
-// read, not a filter (tests/plugin/market-state-readers.test.js).
+// The Market state (scripts/lib/trading/market-state.js, round 20): the owner's three layers (internal structure,
+// protected structure, price behavior; market-layers.js computes them into m3.layers), the precedence applied once, the
+// class (round 18: printed last, classWordOf), and the line. The owner's classes: Trend, Weakening ("reduce confidence;
+// wait"), Transitioning ("avoid premature entries"), Chop ("avoid trend entries"), Reversal ("evaluate the new
+// direction"); a pullback is never chop. Without m3.layers (an older record, a quiz item) the printed breaks alone.
 
 const test = require('node:test');
 const assert = require('node:assert');
@@ -14,22 +14,22 @@ const TH = { crossesChop: 5, maxPullbackDepth: 0.62 };
 const LEG = { origin: 21361.25, extreme: 21437.5 };
 const pb = (o = {}) => ({ frame: '15m', side: 'long', leg: { ...LEG, atr: 4 }, depth: 0.28, pastOrigin: false, counter: { bars: 6 }, swing: {}, against: {}, ...o });
 const T = m => new Date(Date.UTC(2026, 0, 6, 15, m)).toISOString(); // 10:mm ET (EST)
-const brk = (kind, direction, level, m = 30) => ({ kind, direction, level, barsAgo: 2, at: T(m) });
-const PAIR = { last: brk('CHoCH', 'up', 21558.25, 30), previous: brk('CHoCH', 'down', 21497.75, 18) };
-const PAIR_DN = { last: brk('CHoCH', 'down', 21481.25, 30), previous: brk('CHoCH', 'up', 21500.75, 18) };
-const ONE = { last: brk('CHoCH', 'up', 21512.25, 30), previous: brk('BOS', 'down', 21497.75, 18) };
-const BOS_UP = { last: brk('BOS', 'up', 21566.25, 36), previous: brk('BOS', 'up', 21540.25, 18) };
-const BOS_DN = { last: brk('BOS', 'down', 21470.25, 36), previous: brk('CHoCH', 'down', 21490.25, 18) };
-const day = (read, vwapCrosses) => (read === 'too early' ? { status: 'too early', vwapCrosses } : { status: 'read', read, vwapCrosses });
-// The briefing's CISD (cisdBlock): its confirming candle's close, confirmedClose.
-const cisd = (dir, closed, status = 'waiting') => ({ '3m': { dir, level: 21550, confirmedClose: closed, status } });
-const b = ({ h4 = 'up', h1 = 'up', m15, pullback, lastBreak, soFar, minutes = 3, m3 = {}, sections = {}, closedAt } = {}) => ({
+const leg = (o = {}) => ({ side: 'up', level: 21380.5, origin: 21361.25, status: 'intact', legOK: true, sinceProgress: 2, internal: 0, resumed: false, lastInternal: null,
+  lastWay: { kind: 'BOS', direction: 'up', level: 21412.25, barsAgo: 2, strong: true, failed: false }, flip: null, flipsIn: 0, ...o });
+const NO_CHOP = { now: false, inChop: false, S: false, B: false, facts: { ov: false, ef: false, fl: false, nd: false }, count: 0, evidence: { bothWays: false, flip: false, failed: false }, ended: false };
+const lay = (o = {}) => ({
+  rthBars: 20, structure: leg(), lastBreak: null,
+  momentum: { dispAgainst: null, breakAgainst: null, trigger: false, loss: false, odf: false, od: null },
+  behavior: { word: 'trending', word15: 'trending up', overlap: 0.52, eff: 0.41, netAtr: 1.6, disp: 2 },
+  chop: NO_CHOP, edges: { top: 21431.25, bot: 21402, atTop: 1, atBot: 1, interior: 0 }, pbPhase: null, transition: false, stale: false, reversal: false, pbRotation: false, ...o,
+});
+const CHOP = { now: true, inChop: true, S: true, B: true, facts: { ov: true, ef: true, fl: true, nd: false }, count: 3, evidence: { bothWays: true, flip: false, failed: true }, ended: false };
+const b = ({ h4 = 'up', h1 = 'up', m15, pullback, lastBreak, soFar, layers, m3 = {}, closedAt = T(30), minutes = 3 } = {}) => ({
   minutes, ...(closedAt ? { closedAt } : {}),
   sections: {
     h1: { data: { ...(h4 === 'none' ? {} : { h4: { trend: h4 } }), ...(h1 === 'none' ? {} : { h1: { trend: h1 } }) } },
     ...(m15 ? { m15: { data: { frame: { trend: m15 } } } } : {}),
-    m3: { data: { ...(pullback === undefined ? {} : { pullback }), ...(lastBreak ? { lastBreak } : {}), ...(soFar ? { today: { soFar } } : {}), ...m3 } },
-    ...sections,
+    m3: { data: { ...(pullback === undefined ? {} : { pullback }), ...(lastBreak ? { lastBreak } : {}), ...(soFar ? { today: { soFar } } : {}), ...(layers ? { layers } : {}), ...m3 } },
   },
 });
 const S = o => M.stateOf(b(o), TH);
@@ -37,261 +37,123 @@ const st = o => S(o).state;
 const word = o => M.classWordOf(S(o));
 const line = o => M.marketStateLine(S(o));
 
-test('the owner\'s words for the last two breaks: BOS a continuation, CHoCH a potential reversal; CHoCH then BOS confirmed; CHoCH then CHoCH a failed reversal', () => {
-  assert.deepStrictEqual(M.readingOf(BOS_UP.last, BOS_UP.previous), { reading: '3m BOS up (continuation)', pair: false });
-  assert.deepStrictEqual(M.readingOf(BOS_DN.last, BOS_DN.previous), { reading: '3m CHoCH down then BOS down (confirmed transition down)', pair: false });
-  assert.deepStrictEqual(M.readingOf(ONE.last, ONE.previous), { reading: '3m BOS down then CHoCH up (potential reversal, unconfirmed)', pair: false });
-  assert.deepStrictEqual(M.readingOf(PAIR.last, PAIR.previous), { reading: '3m CHoCH down then CHoCH up (failed reversal)', pair: true });
-  assert.deepStrictEqual(M.readingOf(brk('CHoCH', 'up'), null), { reading: '3m CHoCH up (potential reversal, unconfirmed)', pair: false });
-  assert.deepStrictEqual(M.readingOf(brk('BOS', 'up'), null), { reading: '3m BOS up (continuation)', pair: false });
-  assert.deepStrictEqual(M.readingOf(null, null), { reading: '', pair: false });
+test('precedence: forming before the first RTH break; the pullback guard beats chop, aligned or not (the owner: a pullback is never chop)', () => {
+  assert.strictEqual(st({ layers: lay({ structure: null }) }), 'forming');
+  assert.strictEqual(word({ layers: lay({ structure: null }) }), 'trend-up', 'forming under 4h + 1h up: the alignment default');
+  assert.strictEqual(word({ layers: lay({ structure: null }), h4: 'range' }), 'unclear');
+  assert.deepStrictEqual([st({ layers: lay({ chop: CHOP }), pullback: pb() }), word({ layers: lay({ chop: CHOP }), pullback: pb() })], ['pullback', 'trend-up']);
+  assert.strictEqual(st({ layers: lay({ chop: CHOP }), pullback: pb(), h4: 'range' }), 'pullback', 'unaligned: still never chop');
+  assert.strictEqual(word({ layers: lay({ chop: CHOP }), pullback: pb(), h4: 'range' }), 'unclear');
+  assert.strictEqual(word({ layers: lay(), pullback: pb({ side: 'short' }) }), 'unclear', 'a short leg\'s pullback under 4h + 1h up');
+  assert.strictEqual(word({ layers: lay(), pullback: pb({ side: 'short' }), h4: 'down', h1: 'down' }), 'trend-down');
+  assert.strictEqual(st({ layers: lay({ chop: CHOP, structure: null }), pullback: pb() }), 'pullback', 'before any RTH break too');
 });
 
-test('chop = the CHoCH pair (a failed reversal), no pullback read, no 15m confirmation, no confirmed turn; rotational and the crosses are context only', () => {
-  assert.strictEqual(st({ lastBreak: PAIR }), 'chop', 'the pair alone is chop');
-  assert.strictEqual(line({ lastBreak: PAIR }), 'Market state (3m): chop: 3m CHoCH down then CHoCH up (failed reversal); 4h+1h up; class chop');
-  assert.strictEqual(line({ lastBreak: PAIR, soFar: day('rotational', 7) }), 'Market state (3m): chop: 3m CHoCH down then CHoCH up (failed reversal); Day so far rotational, RTH VWAP crosses 7; 4h+1h up; class chop');
-  assert.strictEqual(line({ lastBreak: PAIR, soFar: day('mixed', 4) }), 'Market state (3m): chop: 3m CHoCH down then CHoCH up (failed reversal); 4h+1h up; class chop', 'crosses under the threshold: not printed');
-  assert.strictEqual(line({ lastBreak: PAIR, soFar: day('too early', 6) }), 'Market state (3m): chop: 3m CHoCH down then CHoCH up (failed reversal); RTH VWAP crosses 6; 4h+1h up; class chop');
-  assert.strictEqual(st({ lastBreak: PAIR, h4: 'range' }), 'chop', 'aligned or not');
-  assert.strictEqual(st({ lastBreak: ONE, soFar: day('rotational', 9) }), 'ranging', 'one CHoCH is never chop, rotational or not');
-  assert.strictEqual(st({ soFar: day('rotational', 9) }), 'ranging', 'no break: ranging');
-  assert.throws(() => M.stateOf(b({ lastBreak: PAIR }), {}), /crossesChop/, 'never a literal');
+test('precedence: a deep (past maxPullbackDepth, sticky) or given-back pullback loses the guard and the layers decide', () => {
+  assert.strictEqual(st({ layers: lay({ chop: CHOP, structure: leg({ legOK: false }) }), pullback: pb({ depth: 0.63 }) }), 'chop');
+  assert.strictEqual(st({ layers: lay({ chop: CHOP, structure: leg({ legOK: false }) }), pullback: pb({ depth: 0.5, maxDepth: 0.7 }) }), 'chop', 'sticky');
+  assert.strictEqual(st({ layers: lay({ chop: CHOP, structure: leg({ legOK: false }) }), pullback: pb({ depth: 0.62 }) }), 'pullback', 'at the bound');
+  assert.strictEqual(st({ layers: lay({ chop: CHOP, structure: leg({ legOK: false }) }), pullback: pb({ givenBackSince: true }) }), 'chop', 'given back since the extreme');
+  assert.strictEqual(M.stateOf(b({ layers: lay({ chop: CHOP }), pullback: pb({ depth: 0.63 }) }), { crossesChop: 5, maxPullbackDepth: 0.7 }).state, 'pullback', 'the bound is passed in');
+  assert.throws(() => M.stateOf(b({}), { crossesChop: 5 }), /maxPullbackDepth/);
+  assert.throws(() => M.stateOf(b({}), {}), /crossesChop/);
 });
 
-test('the pullback guard: no chop while a pullback read is active (an open Pullback line, or the early 15m read); the pair there is ranging', () => {
-  assert.strictEqual(st({ lastBreak: PAIR, pullback: pb() }), 'ranging');
-  assert.strictEqual(line({ lastBreak: PAIR, pullback: pb() }), 'Market state (3m): ranging: 3m CHoCH down then CHoCH up (inside the pullback: the watch); pullback (long leg 21361.25 -> 21437.5, depth 28%); 4h+1h up; class trend-up');
-  assert.strictEqual(word({ lastBreak: PAIR, pullback: pb() }), 'trend-up');
-  assert.strictEqual(st({ lastBreak: PAIR, pullback: pb({ side: 'short' }) }), 'ranging', 'any open Pullback line');
-  assert.strictEqual(st({ lastBreak: PAIR, pullback: pb({ pastOrigin: true }) }), 'chop', 'a given-back line is not open');
-  assert.strictEqual(st({ lastBreak: PAIR, pullback: pb({ pastOrigin: undefined, depth: 1.1 }) }), 'chop', 'an older record: depth >= 1 is given back');
-  // Round 15 fix 3: the early read needs the 3m TRENDING against the aligned 15m (its last break a BOS against); a CHoCH
-  // pair ending against is the failed-reversal chop itself, not the 15m's pullback.
-  assert.strictEqual(st({ lastBreak: PAIR_DN, m15: 'up' }), 'chop', 'a CHoCH pair ending against: no early read');
-  assert.strictEqual(word({ lastBreak: PAIR_DN, m15: 'up' }), 'chop');
-  assert.strictEqual(S({ lastBreak: { last: brk('CHoCH', 'down', 21481.25, 30), previous: brk('BOS', 'up', 21500.75, 18) }, m15: 'up' }).early, false, 'a lone CHoCH against: no early read');
-  assert.strictEqual(st({ lastBreak: PAIR_DN, m15: 'range' }), 'chop', 'the 15m not trending their way: no read, no confirmation');
+test('decision 2: an open pullback with rotation evidence now prints rotation (class unclear: no trend entry), never chop', () => {
+  const rot = lay({ chop: CHOP, pbRotation: true, pbPhase: { bars: 24, crosses: 4 } });
+  assert.deepStrictEqual([st({ layers: rot, pullback: pb() }), word({ layers: rot, pullback: pb() })], ['rotation', 'unclear']);
+  assert.strictEqual(line({ layers: rot, pullback: pb() }), 'Market state (3m): rotation: pullback (long leg 21361.25 -> 21437.5, depth 28%), 24 bars without a new high, 4 midpoint crosses; behavior trending (overlap 0.52, efficiency 0.41), 15m trending up; 4h+1h up; class unclear');
+  const weak = lay({ pbRotation: true, pbPhase: { bars: 5, crosses: 0 }, momentum: { ...lay().momentum, trigger: true, breakAgainst: { direction: 'down', level: 21412.25, barsAgo: 1, strong: true } } });
+  assert.match(line({ layers: weak, pullback: pb() }), /^Market state \(3m\): rotation: pullback \(long leg 21361\.25 -> 21437\.5, depth 28%\), 5 bars without a new high, 0 midpoint crosses, the up leg weakening;/);
 });
 
-// Round 15 fix 1: a pullback given back past its origin since the extreme, or whose leg-defining 15m swing a close broke,
-// is dead for good on that leg (pullback-read.js isOpen); deeper than analysis.json pullbackRead.maxStateDepth it is no
-// pullback for the state (the guard against chop, the class-keeping rule). The Pullback line itself prints as before.
-test('the state\'s pullback: dead once given back since the extreme or its 15m swing broken; deeper than the bound: none', () => {
-  assert.strictEqual(st({ lastBreak: PAIR, pullback: pb({ givenBackSince: true }) }), 'chop', 'given back since the extreme: dead, even back above the origin');
-  assert.strictEqual(st({ lastBreak: PAIR, pullback: pb({ swing: { '15m': { price: 21361.25, holds: false } } }) }), 'chop', 'its 15m swing broken by a close: dead');
-  assert.strictEqual(st({ lastBreak: PAIR, pullback: pb({ swing: { '15m': { price: 21361.25, holds: true } } }) }), 'ranging', 'the swing holds: open');
-  assert.strictEqual(st({ lastBreak: PAIR, pullback: pb({ depth: 0.62 }) }), 'ranging', 'at the bound: a pullback');
-  // PREREG addendum 16: sticky: the deepest retrace since the extreme (maxDepth) decides, not the current close.
-  assert.strictEqual(st({ lastBreak: PAIR, pullback: pb({ depth: 0.5, maxDepth: 0.7 }) }), 'chop', 'once past the bound: failed, though it bounced');
-  assert.strictEqual(st({ lastBreak: PAIR, pullback: pb({ depth: 0.5, maxDepth: 0.6 }) }), 'ranging');
-  assert.strictEqual(st({ lastBreak: PAIR, pullback: pb({ depth: 0.63 }) }), 'chop', 'deeper than the bound: no pullback for the state');
-  assert.strictEqual(line({ lastBreak: PAIR, pullback: pb({ depth: 0.63 }) }), 'Market state (3m): chop: 3m CHoCH down then CHoCH up (failed reversal); 4h+1h up; class chop', 'the line names no pullback the state did not use');
-  assert.strictEqual(word({ lastBreak: BOS_DN, pullback: pb({ depth: 0.7 }) }), 'unclear', 'a deep pullback keeps no trend class: a 3m trend against');
-  assert.strictEqual(word({ lastBreak: BOS_DN, pullback: pb({ depth: 0.5 }) }), 'trend-up');
-  assert.strictEqual(M.stateOf(b({ lastBreak: PAIR, pullback: pb({ depth: 0.63 }) }), { crossesChop: 5, maxPullbackDepth: 0.7 }).state, 'ranging', 'the bound is passed in');
-  assert.throws(() => M.stateOf(b({ lastBreak: PAIR }), { crossesChop: 5 }), /maxPullbackDepth/, 'never a literal');
+test('precedence: transition beats chop; chop needs no pullback or early read; the classes of each', () => {
+  const tr = lay({ transition: true, chop: CHOP, structure: leg({ side: 'down', status: 'broken', legOK: false, level: 21437.5, flip: { barsAgo: 3, strong: true, disp: true, held: true, oldSide: 'up', oldLevel: 21380.5, byRule: 'close' } }) });
+  assert.deepStrictEqual([st({ layers: tr }), S({ layers: tr }).way, word({ layers: tr })], ['transition', 'down', 'unclear'], 'against the 4h + 1h: unclear (Transitioning)');
+  assert.strictEqual(word({ layers: tr, h4: 'down', h1: 'down' }), 'trend-down', 'the new way the side\'s: the trend class');
+  const ch = lay({ chop: CHOP, structure: leg({ legOK: false }) });
+  assert.deepStrictEqual([st({ layers: ch }), word({ layers: ch }), word({ layers: ch, h4: 'range' })], ['chop', 'chop', 'chop']);
+  const early = { layers: ch, m15: 'up', lastBreak: { last: { kind: 'BOS', direction: 'down', level: 21400, at: T(24) }, previous: null } };
+  assert.deepStrictEqual([st(early), word(early)], ['range', 'trend-up'], 'the early read (15m up, the 3m BOS down) blocks chop and keeps the trend class');
+  assert.strictEqual(st({ layers: lay({ chop: { ...CHOP, inChop: false, now: false }, structure: leg({ legOK: false }) }) }), 'range', 'no chop memory: range');
 });
 
-// Top-down (the owner: "A 15m BOS could look like a 3m CHoCH followed by another CHoCH"): the 3m pair is the 15m
-// continuation when the 15m confirms the way it ends. Round 15 fix 2: only CURRENT 15m structure confirms: its last break a
-// BOS that way known (knownAt) at or after 09:30 ET of the decision's day and by the decision close. A premarket 15m BOS,
-// a missing knownAt or no clock, and the 15m frame trend (an EMA/structure vote) never confirm.
-test('the 15m guard: a 3m CHoCH pair ending the way of a 15m BOS known in RTH by the close is the 15m continuation, not chop', () => {
-  const m15 = (last, trend = 'range') => ({ m15: { data: { frame: { trend }, lastBreak: { last, previous: null } } } });
-  const bos15 = (dir, knownAt, kind = 'BOS') => ({ kind, direction: dir, level: 21540, at: T(15), knownAt });
-  const at = (o, closedAt = T(40)) => M.stateOf(b({ ...o, closedAt }), TH);
-  const up = at({ lastBreak: PAIR, sections: m15(bos15('up', T(30))) });
-  assert.deepStrictEqual([up.state, up.way, M.classWordOf(up)], ['trend', 'up', 'trend-up']);
-  assert.strictEqual(M.marketStateLine(up), 'Market state (3m): trend up: 3m CHoCH down then CHoCH up = the 15m BOS up (continuation); 4h+1h up; class trend-up');
-  assert.strictEqual(at({ lastBreak: PAIR, sections: m15(null, 'up') }).state, 'chop', 'the 15m frame trend is no confirmation');
-  assert.strictEqual(at({ lastBreak: PAIR, sections: m15(bos15('up', T(30)), 'down') }).state, 'trend', 'the BOS decides, not the frame label');
-  const pre = new Date(Date.UTC(2026, 0, 6, 14, 15)).toISOString(); // 09:15 ET
-  assert.strictEqual(at({ lastBreak: PAIR, sections: m15(bos15('up', pre), 'up') }).state, 'chop', 'a premarket 15m BOS: stale, no confirmation');
-  const open = new Date(Date.UTC(2026, 0, 6, 14, 30)).toISOString(); // 09:30 ET
-  assert.strictEqual(at({ lastBreak: PAIR, sections: m15(bos15('up', open)) }).state, 'trend', 'known at 09:30: RTH');
-  assert.strictEqual(at({ lastBreak: PAIR, sections: m15(bos15('up', undefined)) }).state, 'chop', 'no knownAt: no confirmation');
-  assert.strictEqual(M.stateOf(b({ lastBreak: PAIR, sections: m15(bos15('up', T(30))) }), TH).state, 'chop', 'no clock: no confirmation');
-  assert.strictEqual(at({ lastBreak: PAIR, sections: m15(null, 'range') }).state, 'chop', 'the 15m ranging: chop');
-  assert.strictEqual(at({ lastBreak: PAIR, sections: m15(bos15('down', T(30)), 'down') }).state, 'chop', 'the 15m breaking the other way: chop');
-  assert.strictEqual(at({ lastBreak: PAIR, sections: m15(bos15('up', T(30), 'CHoCH')) }).state, 'chop', 'a 15m CHoCH up is no BOS');
-  assert.strictEqual(at({ lastBreak: PAIR, sections: m15(bos15('up', T(45))) }, T(40)).state, 'chop', 'a 15m BOS known after the close is never read (causal)');
-  assert.strictEqual(at({ lastBreak: PAIR, sections: m15(bos15('up', T(39))) }, T(40)).state, 'trend', 'known by the close');
-  assert.strictEqual(at({ lastBreak: PAIR_DN, h4: 'down', h1: 'down', sections: m15(bos15('down', T(30))) }).way, 'down', 'the mirror');
-  assert.strictEqual(M.classWordOf(at({ lastBreak: PAIR, h4: 'down', h1: 'down', sections: m15(bos15('up', T(30))) })), 'unclear', 'a 15m continuation up under 4h + 1h down: never counter');
+test('precedence: weakening (the trigger on an intact leg) and the stale-leg rotation print unclear whichever way the leg points', () => {
+  const m = { ...lay().momentum, trigger: true, dispAgainst: { barsAgo: 2 }, breakAgainst: { direction: 'down', level: 21412.25, barsAgo: 2, strong: false } };
+  assert.deepStrictEqual([st({ layers: lay({ momentum: m }) }), word({ layers: lay({ momentum: m }) })], ['weakening', 'unclear']);
+  const counter = lay({ structure: leg({ side: 'down', level: 21437.5 }), momentum: { ...m, breakAgainst: { direction: 'up', level: 21400, barsAgo: 2, strong: true } } });
+  assert.deepStrictEqual([st({ layers: counter }), word({ layers: counter })], ['weakening', 'unclear'], 'a counter leg weakening: unclear, not the side\'s trend class (decision 4)');
+  assert.strictEqual(st({ layers: lay({ momentum: m, structure: leg({ legOK: false }) }) }), 'range', 'the trigger needs an established leg');
+  assert.strictEqual(st({ layers: lay({ momentum: m, chop: CHOP, structure: leg({ legOK: false }) }) }), 'chop');
+  assert.deepStrictEqual([st({ layers: lay({ stale: true }) }), word({ layers: lay({ stale: true }) })], ['rotation', 'unclear']);
+  assert.strictEqual(st({ layers: lay({ stale: true, momentum: m }) }), 'weakening', 'weakening before rotation');
+  assert.strictEqual(st({ layers: lay({ stale: true }), m15: 'up', lastBreak: { last: { kind: 'BOS', direction: 'down', level: 21400, at: T(24) }, previous: null } }), 'trend', 'the early read: no stale rotation');
 });
 
-test('trend: the last break a BOS (a continuation, or a confirmed transition), or a CHoCH confirmed by a live 3m CISD on a later candle; it ends a chop (causal)', () => {
-  assert.deepStrictEqual([st({ lastBreak: BOS_UP }), S({ lastBreak: BOS_UP }).way], ['trend', 'up']);
-  assert.deepStrictEqual([st({ lastBreak: BOS_DN }), S({ lastBreak: BOS_DN }).way], ['trend', 'down'], 'a 3m trend against the 4h + 1h is still the 3m trend');
-  const c = closed => ({ lastBreak: PAIR, m3: { cisd: cisd('bullish', closed) } });
-  assert.deepStrictEqual([st(c(T(36))), S(c(T(36))).way], ['trend', 'up']);
-  assert.strictEqual(line(c(T(36))), 'Market state (3m): trend up: 3m CHoCH down then CHoCH up (failed reversal), then a 3m CISD up (confirmed); the chop ended; 4h+1h up; class trend-up');
-  assert.strictEqual(st(c(T(33))), 'chop', 'closed with the CHoCH\'s own candle (opened 10:30, closed 10:33): not after it');
-  assert.strictEqual(st(c(T(27))), 'chop', 'before the CHoCH');
-  assert.strictEqual(st({ lastBreak: PAIR, m3: { cisd: cisd('bearish', T(36)) } }), 'chop', 'the other way');
-  for (const x of ['void', 'expired', 'weak']) assert.strictEqual(st({ lastBreak: PAIR, m3: { cisd: cisd('bullish', T(36), x) } }), 'chop', `a ${x} CISD is dead`);
-  for (const x of ['touched', 'bounced']) assert.strictEqual(st({ lastBreak: PAIR, m3: { cisd: cisd('bullish', T(36), x) } }), 'trend', `a ${x} CISD is live`);
-  assert.strictEqual(st({ lastBreak: PAIR, m3: { cisd: { '3m': 'none in these bars' } } }), 'chop');
-  assert.strictEqual(line({ lastBreak: ONE, m3: { cisd: cisd('bullish', T(36)) } }), 'Market state (3m): trend up: 3m BOS down then CHoCH up (potential reversal, unconfirmed), then a 3m CISD up (confirmed); 4h+1h up; class trend-up', 'one CHoCH confirmed: no chop to end');
-  assert.strictEqual(word({ ...c(T(36)), h4: 'range' }), 'unclear', 'the turn never overrides the alignment');
-  assert.strictEqual(word({ ...c(T(36)), h4: 'down', h1: 'down' }), 'unclear', 'a trend up under 4h + 1h down: unclear, never counter');
+test('precedence: trend needs an established leg and the behavior word trending; else in the leg; no leg: range; the classes', () => {
+  assert.deepStrictEqual([st({ layers: lay() }), S({ layers: lay() }).way, word({ layers: lay() })], ['trend', 'up', 'trend-up']);
+  const l = lay({ behavior: { ...lay().behavior, word: 'overlapping' } });
+  assert.deepStrictEqual([st({ layers: l }), word({ layers: l })], ['leg', 'trend-up']);
+  assert.strictEqual(word({ layers: lay(), h4: 'down', h1: 'down' }), 'unclear', 'a 3m leg against the 4h + 1h: unclear, never counter');
+  assert.strictEqual(word({ layers: lay(), h4: 'range' }), 'unclear');
+  const r = lay({ structure: leg({ legOK: false }) });
+  assert.deepStrictEqual([st({ layers: r }), word({ layers: r }), word({ layers: r, h4: 'range' })], ['range', 'trend-up', 'unclear'], 'range: the alignment default (decision 3)');
 });
 
-test('a CHoCH and a close beyond the initial balance it rotated in: trend; the IB complete, the previous break inside it', () => {
-  const ib = { ibHigh: 21560, ibLow: 21480 };
-  const at = (price, today = ib, o = {}) => ({ lastBreak: PAIR, ...o, m3: { price, today: { ...today, soFar: day('rotational', 7) } } });
-  assert.strictEqual(line(at(21563.25)), 'Market state (3m): trend up: 3m CHoCH down then CHoCH up (failed reversal), then a close above the IB high 21560 (confirmed); the chop ended; 4h+1h up; class trend-up');
-  assert.strictEqual(line(at(21559.75)), 'Market state (3m): chop: 3m CHoCH down then CHoCH up (failed reversal); Day so far rotational, RTH VWAP crosses 7; 4h+1h up; class chop', 'inside the range');
-  assert.strictEqual(st(at(21563.25, { ibHigh: null, ibLow: null })), 'chop', 'the IB not complete: before 10:30 only a BOS or CISD ends it');
-  const above = { last: brk('CHoCH', 'up', 21570.25, 30), previous: brk('CHoCH', 'down', 21562.75, 18) };
-  assert.strictEqual(st(at(21573.25, ib, { lastBreak: above })), 'chop', 'both breaks beyond the IB: a new chop there');
-  const down = { last: brk('CHoCH', 'down', 21562.25, 30), previous: brk('CHoCH', 'up', 21540.75, 18) };
-  assert.strictEqual(st(at(21561.25, ib, { lastBreak: down })), 'chop', 'above the IB but the last break down');
-  assert.strictEqual(line(at(21477.75, ib, { lastBreak: PAIR_DN, h4: 'down', h1: 'down' })), 'Market state (3m): trend down: 3m CHoCH up then CHoCH down (failed reversal), then a close below the IB low 21480 (confirmed); the chop ended; 4h+1h down; class trend-down');
+test('the line: one exact string per state, structure then momentum then behavior, the class last, at most 250 bytes', () => {
+  const L1 = line({ layers: lay() });
+  assert.strictEqual(L1, 'Market state (3m): trend up: HL 21380.5 holds, BOS up 6 min ago (displaced); behavior trending (overlap 0.52, efficiency 0.41), 15m trending up; 4h+1h up; class trend-up');
+  const m = { ...lay().momentum, trigger: true, loss: true, dispAgainst: { barsAgo: 2 }, breakAgainst: { direction: 'down', level: 21412.25, barsAgo: 2, strong: false } };
+  const weak = lay({ momentum: m, structure: leg({ sinceProgress: 9, lastWay: { kind: 'BOS', direction: 'up', level: 21412.25, barsAgo: 12, strong: false, failed: false }, lastInternal: { direction: 'down', level: 21412.25, barsAgo: 2 } }), behavior: { ...lay().behavior, word: 'failing', overlap: 0.64, eff: 0.12 } });
+  assert.strictEqual(line({ layers: weak }), 'Market state (3m): weakening up: HL 21380.5 holds; displacement down 2 bars ago broke internal low 21412.25, no new high for 27 min; behavior failing (overlap 0.64, efficiency 0.12), 15m trending up; 4h+1h up; class unclear');
+  const tr = lay({ transition: true, structure: leg({ side: 'down', status: 'broken', legOK: false, level: 21437.5, flip: { barsAgo: 3, strong: true, disp: true, held: true, oldSide: 'up', oldLevel: 21380.5, byRule: 'close' } }), behavior: { ...lay().behavior, word: 'mixed', word15: 'overlapping' } });
+  assert.strictEqual(line({ layers: tr }), 'Market state (3m): transition down: HL 21380.5 broken by a displaced close 9 min ago, the new leg unconfirmed; behavior mixed (overlap 0.52, efficiency 0.41), 15m overlapping; 4h+1h up; class unclear');
+  const ch = lay({ chop: CHOP, structure: leg({ legOK: false }), behavior: { ...lay().behavior, word: 'failing', word15: 'overlapping', overlap: 0.74, eff: 0.09 } });
+  assert.strictEqual(line({ layers: ch, h4: 'range', soFar: { status: 'read', read: 'rotational', vwapCrosses: 7 } }), 'Market state (3m): chop: no leg holds (breaks both ways, a failed break); overlap 0.74, efficiency 0.09, failed continuation; 15m overlapping; Day so far rotational, RTH VWAP crosses 7; 4h range, 1h up (not aligned); class chop');
+  const rg = lay({ structure: leg({ legOK: false }), behavior: { ...lay().behavior, word: 'rotating' } });
+  assert.strictEqual(line({ layers: rg }), 'Market state (3m): range: no leg holds, edges 21402-21431.25 (travel edge to edge); behavior rotating (overlap 0.52, efficiency 0.41), 15m trending up; 4h+1h up; class trend-up');
+  assert.strictEqual(line({ layers: lay({ structure: null }) }), 'Market state (3m): forming (no RTH structure yet); 4h+1h up; class trend-up');
+  assert.strictEqual(line({ layers: lay(), pullback: pb() }), 'Market state (3m): pullback (long leg 21361.25 -> 21437.5, depth 28%): 3m up leg, HL 21380.5 holds; behavior trending (overlap 0.52, efficiency 0.41), 15m trending up; 4h+1h up; class trend-up');
+  assert.strictEqual(line({ layers: lay({ stale: true, structure: leg({ sinceProgress: 22 }) }) }), 'Market state (3m): rotation up: HL 21380.5 holds, no new high for 66 min; behavior trending (overlap 0.52, efficiency 0.41), 15m trending up; 4h+1h up; class unclear');
+  const rev = lay({ reversal: true, structure: leg({ flip: { barsAgo: 6, strong: true, disp: true, held: true, oldSide: 'down', oldLevel: 21420, byRule: 'close' } }) });
+  assert.match(line({ layers: rev }), /HL 21380\.5 holds, BOS up 6 min ago \(displaced\), reversal confirmed;/, 'Reversal: printed on the leg');
+  const internal = lay({ structure: leg({ lastInternal: { direction: 'down', level: 21402.25, barsAgo: 1 } }), behavior: { ...lay().behavior, word: 'overlapping' } });
+  assert.match(line({ layers: internal }), /^Market state \(3m\): in the up leg: HL 21380\.5 holds, internal low 21402\.25 broken; behavior overlapping/, 'an internal break against while the HL holds');
+  const d1 = lay({ momentum: { ...lay().momentum, dispAgainst: { barsAgo: 1 } } });
+  assert.match(line({ layers: d1 }), /; displacement down 1 bar ago;/);
+  const odf = lay({ momentum: { ...lay().momentum, odf: true }, behavior: { ...lay().behavior, word: 'overlapping' } });
+  assert.match(line({ layers: odf }), /^Market state \(3m\): in the up leg: HL 21380\.5 holds, BOS up 6 min ago \(displaced\); potential failed opening drive; .*class trend-up$/, 'the opening-drive failure: a printed fact, no class change (decision 6)');
+  for (const x of [L1, line({ layers: weak }), line({ layers: ch, h4: 'range', soFar: { status: 'read', read: 'rotational', vwapCrosses: 7 } })]) assert.ok(Buffer.byteLength(x) <= 250, `${Buffer.byteLength(x)}: ${x}`);
 });
 
-// The structure audit (2026-11-15): at 28% of decision bars the previous break was a premarket drift. The state reads only
-// breaks whose candle closed at or after 09:30 ET. Round 15 fix 4 (the first RTH minutes): no RTH break yet: forming (the
-// class follows the 4h + 1h); one RTH break: a BOS is a trend that way, a CHoCH ranging (a potential reversal, unconfirmed;
-// a later live 3m CISD its way confirms it); two or more: the full rules.
-test('the first RTH minutes: 0 RTH breaks forming, 1 RTH break a BOS trend or a CHoCH ranging, 2+ the full rules', () => {
-  const pre = { kind: 'CHoCH', direction: 'down', level: 21497.75, barsAgo: 30, at: new Date(Date.UTC(2026, 0, 6, 14, 15)).toISOString() }; // 09:15 ET
-  const S2 = (lastBreak, closedAt = T(40), o = {}) => M.stateOf(b({ lastBreak, closedAt, ...o }), TH);
-  const none = S2({ last: { ...pre, kind: 'BOS' }, previous: pre });
-  assert.deepStrictEqual([none.state, none.way, M.classWordOf(none)], ['forming', null, 'trend-up']);
-  assert.strictEqual(M.marketStateLine(none), 'Market state (3m): forming (no RTH structure yet); 4h+1h up; class trend-up');
-  assert.strictEqual(M.classWordOf(S2({ last: pre, previous: null }, T(40), { h4: 'range' })), 'unclear', 'forming, not aligned: unclear');
-  assert.strictEqual(S2(undefined).state, 'forming', 'no break at all, the clock known: forming');
-  assert.strictEqual(M.marketStateLine(S2({ last: pre, previous: null }, T(40), { pullback: pb() })), 'Market state (3m): forming (no RTH structure yet); pullback (long leg 21361.25 -> 21437.5, depth 28%); 4h+1h up; class trend-up');
-  const one = S2({ last: PAIR.last, previous: pre });
-  assert.deepStrictEqual([one.state, M.classWordOf(one), M.marketStateLine(one)], ['ranging', 'trend-up', 'Market state (3m): ranging: 3m CHoCH up (potential reversal, unconfirmed), the only RTH break; 4h+1h up; class trend-up']);
-  const bosFirst = S2({ last: BOS_UP.last, previous: pre });
-  assert.deepStrictEqual([bosFirst.state, bosFirst.way, M.classWordOf(bosFirst)], ['trend', 'up', 'trend-up'], 'one clean RTH BOS the aligned way: the trend');
-  assert.strictEqual(M.marketStateLine(bosFirst), 'Market state (3m): trend up: 3m BOS up (continuation), 1 min ago; 4h+1h up; class trend-up');
-  const against = S2({ last: BOS_DN.last, previous: pre });
-  assert.deepStrictEqual([against.state, against.way, M.classWordOf(against)], ['trend', 'down', 'unclear'], 'one RTH BOS against: the table (unclear)');
-  assert.strictEqual(M.classWordOf(S2({ last: BOS_DN.last, previous: pre }, T(40), { pullback: pb() })), 'trend-up', 'one RTH BOS against inside a pullback read: the pullback');
-  const confirmed = S2({ last: PAIR.last, previous: pre }, T(40), { m3: { cisd: cisd('bullish', T(36)) } });
-  assert.deepStrictEqual([confirmed.state, confirmed.way], ['trend', 'up'], 'one RTH CHoCH a later live 3m CISD confirms: trend (decision a)');
-  assert.strictEqual(S2({ last: PAIR.last, previous: pre }, T(40), { m3: { price: 21600, today: { ibHigh: 21560, ibLow: 21480 } } }).state, 'ranging', 'the IB clause needs a previous RTH break');
-  assert.strictEqual(S2(PAIR).state, 'chop', 'both in RTH: the pair counts');
-  const edge = { kind: 'CHoCH', direction: 'down', level: 21497.75, barsAgo: 20, at: new Date(Date.UTC(2026, 0, 6, 14, 27)).toISOString() }; // closed 09:30
-  assert.strictEqual(S2({ last: PAIR.last, previous: edge }).state, 'chop', 'closed at 09:30: an RTH break');
-  const prior = { last: { ...PAIR.last, at: new Date(Date.UTC(2026, 0, 5, 15, 30)).toISOString() }, previous: { ...PAIR.previous, at: new Date(Date.UTC(2026, 0, 5, 15, 18)).toISOString() } };
-  assert.strictEqual(S2(prior, new Date(Date.UTC(2026, 0, 6, 5, 45)).toISOString()).state, 'forming', 'overnight: yesterday\'s RTH breaks are not this trading day\'s');
-  assert.strictEqual(M.marketStateLine(M.stateOf(b({}), TH)), 'Market state (3m): ranging: no 3m break printed; 4h+1h up; class trend-up', 'no clock (a fixture), no break: as before');
+test('without m3.layers (an older record, a quiz item): the printed breaks alone, the same words; no behavior read, so never chop', () => {
+  const brk = (kind, direction, level, m, protectedSwing) => ({ kind, direction, level, at: T(m), ...(protectedSwing ? { protected: protectedSwing } : {}) });
+  const prot = (level, brokenAt = null) => ({ side: 'low', level, at: T(10), brokenAt });
+  assert.strictEqual(line({ lastBreak: { last: null, previous: null } }), 'Market state (3m): forming (no RTH structure yet); 4h+1h up; class trend-up');
+  assert.strictEqual(line({ lastBreak: { last: brk('BOS', 'up', 21495, 24, prot(21480.25)), previous: brk('BOS', 'up', 21470.5, 12) } }), 'Market state (3m): in the up leg: 3m BOS up then BOS up, 3 min ago, HL 21480.25 holds; 4h+1h up; class trend-up');
+  assert.strictEqual(line({ lastBreak: { last: brk('BOS', 'up', 21495, 24, prot(21480.25, T(27))), previous: brk('BOS', 'up', 21470.5, 12) } }), 'Market state (3m): range: 3m BOS up then BOS up, HL 21480.25 broken by a close; 4h+1h up; class trend-up');
+  const pair = { last: brk('CHoCH', 'up', 21558.25, 24), previous: brk('CHoCH', 'down', 21497.75, 12) };
+  assert.deepStrictEqual([st({ lastBreak: pair }), line({ lastBreak: pair })], ['range', 'Market state (3m): range: 3m CHoCH down then CHoCH up (unconfirmed); 4h+1h up; class trend-up'], 'a CHoCH pair alone is no chop (the owner)');
+  assert.strictEqual(line({ lastBreak: { last: brk('CHoCH', 'up', 21512.25, 24, prot(21462.5)), previous: null } }), 'Market state (3m): range: 3m CHoCH up (unconfirmed, holds above 21462.5 (origin)); 4h+1h up; class trend-up');
+  assert.strictEqual(line({ lastBreak: { last: brk('CHoCH', 'up', 21512.25, 24, prot(21462.5, T(27))), previous: null } }), 'Market state (3m): range: 3m CHoCH up (failed: a close below its origin 21462.5); 4h+1h up; class trend-up');
+  const cisd = { '3m': { dir: 'bullish', level: 21550, confirmedClose: T(30), status: 'waiting' } };
+  assert.strictEqual(line({ lastBreak: pair, m3: { cisd } }), 'Market state (3m): in the up leg: 3m CHoCH down then CHoCH up, then a 3m CISD up (confirmed); 4h+1h up; class trend-up');
+  assert.strictEqual(line({ lastBreak: { last: brk('BOS', 'down', 21470, 24), previous: null } }), 'Market state (3m): in the down leg: 3m BOS down, 3 min ago; 4h+1h up; class unclear');
+  assert.strictEqual(line({ lastBreak: { last: brk('BOS', 'down', 21470, 24), previous: null }, pullback: pb() }), 'Market state (3m): pullback (long leg 21361.25 -> 21437.5, depth 28%): 3m BOS down; 4h+1h up; class trend-up', 'the 3m break inside the pullback printed');
+  assert.strictEqual(line({ lastBreak: { last: brk('BOS', 'down', 21470, 24), previous: null }, m15: 'up' }), 'Market state (3m): in the down leg: 3m BOS down, 3 min ago; 15m up: a pullback in the 15m trend; 4h+1h up; class trend-up');
+  assert.strictEqual(line({ closedAt: null }), 'Market state (3m): range: no 3m break printed; 4h+1h up; class trend-up', 'no clock (a fixture), no break');
+  assert.strictEqual(line({ closedAt: null, h4: 'none' }), 'Market state (3m): range: no 3m break printed; 4h unknown, 1h up (not aligned); class unclear');
 });
 
-test('the trend facts print the age of the last BOS (the model reads it; never demoted in code)', () => {
-  const s = M.stateOf(b({ lastBreak: BOS_UP, closedAt: T(75) }), TH);
-  assert.deepStrictEqual([s.state, s.age], ['trend', 36]);
-  assert.strictEqual(M.marketStateLine(s), 'Market state (3m): trend up: 3m BOS up (continuation), 36 min ago; 4h+1h up; class trend-up');
-  assert.strictEqual(M.marketStateLine(M.stateOf(b({ lastBreak: BOS_DN, closedAt: T(39) }), TH)), 'Market state (3m): trend down: 3m CHoCH down then BOS down (confirmed transition down), 0 min ago; 4h+1h up; class unclear');
-});
-
-test('ranging prints its 3m breaks and whether price is inside the complete IB; the alignment printed, not aligned named', () => {
-  assert.strictEqual(line({ lastBreak: ONE, m3: { price: 21512, today: { ibHigh: 21540, ibLow: 21480 } } }), 'Market state (3m): ranging: 3m BOS down then CHoCH up (potential reversal, unconfirmed); inside the IB 21480-21540; 4h+1h up; class trend-up');
-  assert.strictEqual(line({ lastBreak: ONE, m3: { price: 21475, today: { ibHigh: 21540, ibLow: 21480 } } }), 'Market state (3m): ranging: 3m BOS down then CHoCH up (potential reversal, unconfirmed); 4h+1h up; class trend-up');
-  assert.strictEqual(line({ lastBreak: ONE, m3: { price: 21545, today: { ibHigh: 21540, ibLow: 21480 } } }), 'Market state (3m): trend up: 3m BOS down then CHoCH up (potential reversal, unconfirmed), then a close above the IB high 21540 (confirmed); 4h+1h up; class trend-up', 'a close above the IB: a confirmed turn');
-  assert.strictEqual(line({}), 'Market state (3m): ranging: no 3m break printed; 4h+1h up; class trend-up');
-  assert.strictEqual(line({ h4: 'range' }), 'Market state (3m): ranging: no 3m break printed; 4h range, 1h up (not aligned); class unclear');
-  assert.strictEqual(line({ h4: 'none' }), 'Market state (3m): ranging: no 3m break printed; 4h unknown, 1h up (not aligned); class unclear');
-});
-
-test('the pullback read is no state: printed under trend or ranging; the open line supersedes the early read', () => {
-  assert.strictEqual(line({ lastBreak: BOS_UP, pullback: pb() }), 'Market state (3m): trend up: 3m BOS up (continuation); pullback (long leg 21361.25 -> 21437.5, depth 28%); 4h+1h up; class trend-up');
-  assert.strictEqual(line({ lastBreak: ONE, pullback: pb({ leg: { ...LEG, atr: 0.5 } }) }), 'Market state (3m): ranging: 3m BOS down then CHoCH up (potential reversal, unconfirmed); pullback (long leg 21361.25 -> 21437.5, small leg); 4h+1h up; class trend-up');
-  assert.strictEqual(line({ lastBreak: BOS_UP, pullback: pb({ pastOrigin: true }) }), 'Market state (3m): trend up: 3m BOS up (continuation); 4h+1h up; class trend-up', 'given back: no read');
-  const e = { lastBreak: BOS_DN, m15: 'up' };
-  assert.deepStrictEqual([st(e), word(e)], ['trend', 'trend-up'], 'the owner: 15m up, 3m down could mean pullback');
-  assert.strictEqual(line(e), 'Market state (3m): trend down: 3m CHoCH down then BOS down (confirmed transition down); 15m up: a pullback in the 15m trend; 4h+1h up; class trend-up');
-  assert.strictEqual(line({ ...e, pullback: pb() }), 'Market state (3m): trend down: 3m CHoCH down then BOS down (confirmed transition down); pullback (long leg 21361.25 -> 21437.5, depth 28%); 4h+1h up; class trend-up');
-  assert.strictEqual(S({ ...e, h4: 'range' }).early, false, 'no alignment: no read');
-  assert.strictEqual(S({ lastBreak: BOS_UP, m15: 'up' }).early, false, 'the 3m with the trend: no pullback');
-});
-
-test('classWordOf: chop -> chop; not aligned -> unclear; a pullback read their way -> that trend class; trend their way or ranging under them -> that trend class; a 3m trend against with no pullback read -> unclear (never counter)', () => {
-  assert.strictEqual(word({ lastBreak: PAIR }), 'chop');
-  assert.strictEqual(word({ lastBreak: PAIR, h4: 'range' }), 'chop');
-  assert.strictEqual(word({ lastBreak: BOS_UP }), 'trend-up');
-  assert.strictEqual(word({ lastBreak: BOS_DN, h4: 'down', h1: 'down' }), 'trend-down');
-  assert.strictEqual(word({ lastBreak: ONE }), 'trend-up', 'ranging under an aligned 4h + 1h');
-  assert.strictEqual(word({}), 'trend-up');
-  // The audit's 66 moments (3.3%): aligned, the 3m trend against, no Pullback line, no 15m-trend read: unclear.
-  assert.strictEqual(word({ lastBreak: BOS_DN }), 'unclear');
-  assert.strictEqual(word({ lastBreak: BOS_DN, m15: 'range' }), 'unclear');
-  assert.strictEqual(word({ lastBreak: BOS_UP, h4: 'range' }), 'unclear', 'not aligned');
-  // The q101 shape (decision (b)): an open long Pullback, the last 3m break a BOS down: the pullback, not a trend down.
-  assert.deepStrictEqual([st({ lastBreak: BOS_DN, pullback: pb() }), word({ lastBreak: BOS_DN, pullback: pb() })], ['trend', 'trend-up']);
-  assert.strictEqual(word({ lastBreak: BOS_DN, pullback: pb(), h4: 'down', h1: 'down' }), 'trend-down');
-  assert.strictEqual(word({ lastBreak: BOS_UP, pullback: pb({ side: 'short' }) }), 'trend-up', 'a short leg under 4h + 1h up: the 3m trend up decides');
-  assert.strictEqual(word({ lastBreak: BOS_DN, pullback: pb(), h4: 'range' }), 'unclear');
+test('stateOf: off the entry lane or without a 1h part: null; readState has no lane guard; classWordOf(null) null', () => {
+  assert.strictEqual(M.stateOf(b({ minutes: 15 }), TH), null);
+  assert.strictEqual(M.stateOf({ minutes: 3, sections: {} }, TH), null);
+  assert.strictEqual(M.readState({ sections: { h1: { data: {} } } }, TH).state, 'range');
+  assert.strictEqual(M.marketStateLine(null), null);
   assert.strictEqual(M.classWordOf(null), null);
 });
 
-// The audit's finding A: the unit tests passed a CISD field the briefing never has. Here the CISD is the real briefing's.
-test('turnOf reads the real briefing\'s CISD (cisdBlock: confirmedClose), not a field it lacks', () => {
-  const path = require('path');
-  const B = require('../../scripts/lib/trading/briefing');
-  const { readBarsArg } = require('../../scripts/lib/backtest/data');
-  const bars = readBarsArg(path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv'));
-  let found = null;
-  for (let n = 400; n < bars.length && !found; n += 25) {
-    const br = B.buildBriefing({ symbol: 'NQ', bars: bars.slice(0, n), minutes: 3 });
-    const c = br.sections.m3.data.cisd && br.sections.m3.data.cisd['3m'];
-    if (c && typeof c === 'object' && !['void', 'expired', 'weak'].includes(c.status)) found = c;
-  }
-  assert.ok(found, 'a live 3m CISD in the fixture');
-  assert.ok('confirmedClose' in found && !('confirmedAt' in found), 'the briefing carries confirmedClose');
-  const dir = { bullish: 'up', bearish: 'down' }[found.dir];
-  const before = { kind: 'CHoCH', direction: dir, level: 1, at: new Date(Date.parse(found.confirmedClose) - 4 * 180000).toISOString() };
-  assert.deepStrictEqual(M.turnOf({ last: before, previous: null, cisd3m: found, minutes: 3 }), { by: 'cisd', dir });
-  const same = { ...before, at: new Date(Date.parse(found.confirmedClose) - 180000).toISOString() };
-  assert.strictEqual(M.turnOf({ last: same, previous: null, cisd3m: found, minutes: 3 }), null, 'the CHoCH\'s own candle');
-});
-
-test('stateOf: off the entry lane or without a 1h part: null; readState has no lane guard; never the Bias line\'s word', () => {
-  assert.strictEqual(M.stateOf(b({ minutes: 15 }), TH), null);
-  assert.strictEqual(M.stateOf({ minutes: 3, sections: {} }, TH), null);
-  assert.strictEqual(M.stateOf(null, TH), null);
-  assert.strictEqual(M.readState({ sections: { h1: { data: {} } } }, TH).state, 'ranging');
-  assert.strictEqual(M.marketStateLine(null), null);
-  for (const o of [{}, { pullback: pb() }, { h4: 'range' }, { lastBreak: PAIR }]) assert.doesNotMatch(line(o), /\bside\b/);
-});
-
-// One threshold value, two homes (PREREG addendum 14, D1): the line prints the crosses at the briefing's
-// config/analysis.json regime.rangeCrosses; the recognition key passes its frozen signals.crossesChop; they stay equal.
 test('the briefing\'s crosses threshold equals the recognition key\'s', () => {
   const { analysis } = require('../../scripts/lib/tunables');
-  const rec = require('../../config/recognition.json');
-  assert.strictEqual(analysis().regime.rangeCrosses, rec.signals.crossesChop);
-});
-
-// The owner's invalidation rule (round 15): each printed 3m break carries its protected swing (structure-events.js
-// protectedOf: the origin of the leg that made it). A BOS's trend holds until a close beyond its protected HL (LH): then
-// the trend has ended (ranging). A CHoCH holds until a close beyond the origin of the shift: then the facts say failed
-// (no new chop condition; its CISD turn no longer confirms it). The status is printed beside the state.
-test('protected swings: a BOS trend holds while its protected HL holds and ends on a close through it; a CHoCH prints its origin and fails through it', () => {
-  const prot = (level, brokenAt = null, side = 'low') => ({ side, level, at: T(20), brokenAt });
-  const at = (lastBreak, o = {}) => M.stateOf(b({ lastBreak, closedAt: T(45), ...o }), TH);
-  const hold = at({ ...BOS_UP, last: { ...BOS_UP.last, protected: prot(21480.25) } });
-  assert.deepStrictEqual([hold.state, hold.way], ['trend', 'up']);
-  assert.strictEqual(M.marketStateLine(hold), 'Market state (3m): trend up: 3m BOS up (continuation), 6 min ago; protected HL 21480.25 holding; 4h+1h up; class trend-up');
-  const ended = at({ ...BOS_UP, last: { ...BOS_UP.last, protected: prot(21480.25, T(42)) } });
-  assert.deepStrictEqual([ended.state, M.classWordOf(ended)], ['ranging', 'trend-up'], 'the protected HL broken: the trend ended');
-  assert.strictEqual(M.marketStateLine(ended), 'Market state (3m): ranging: 3m BOS up (continuation); protected HL 21480.25 broken by a close (the trend ended); 4h+1h up; class trend-up');
-  const dn = at({ ...BOS_DN, last: { ...BOS_DN.last, protected: prot(21520, null, 'high') } }, { h4: 'down', h1: 'down' });
-  assert.strictEqual(M.marketStateLine(dn), 'Market state (3m): trend down: 3m CHoCH down then BOS down (confirmed transition down), 6 min ago; protected LH 21520 holding; 4h+1h down; class trend-down');
-  const deadAgainst = at({ ...BOS_DN, last: { ...BOS_DN.last, protected: prot(21520, T(42), 'high') } }, { m15: 'up' });
-  assert.strictEqual(deadAgainst.early, false, 'a BOS against whose protected LH broke: the 3m no longer trends against');
-  const ch = at({ ...ONE, last: { ...ONE.last, protected: prot(21462.5) } });
-  assert.strictEqual(M.marketStateLine(ch), 'Market state (3m): ranging: 3m BOS down then CHoCH up (potential reversal, holds above 21462.5 (origin)); 4h+1h up; class trend-up');
-  const failed = at({ ...ONE, last: { ...ONE.last, protected: prot(21462.5, T(42)) } }, { m3: { cisd: cisd('bullish', T(36)) } });
-  assert.strictEqual(failed.state, 'ranging', 'a failed CHoCH: its CISD no longer confirms a turn');
-  assert.strictEqual(M.marketStateLine(failed), 'Market state (3m): ranging: 3m BOS down then CHoCH up (failed: a close below its origin 21462.5); 4h+1h up; class trend-up', 'one status: never potential and failed at once');
-  const pair = at({ ...PAIR, last: { ...PAIR.last, protected: prot(21497.75, T(42)) } });
-  assert.strictEqual(pair.state, 'chop', 'the owner\'s chop rule unchanged: the status is printed beside it');
-  assert.strictEqual(M.marketStateLine(pair), 'Market state (3m): chop: 3m CHoCH down then CHoCH up (failed reversal); failed: a close below its origin 21497.75; 4h+1h up; class chop');
-  assert.strictEqual(M.marketStateLine(at(BOS_UP)), 'Market state (3m): trend up: 3m BOS up (continuation), 6 min ago; 4h+1h up; class trend-up', 'no protected field (an older record, a quiz item): no clause');
+  assert.strictEqual(analysis().regime.rangeCrosses, require('../../config/recognition.json').signals.crossesChop);
 });

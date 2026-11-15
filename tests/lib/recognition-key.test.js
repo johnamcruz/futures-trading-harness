@@ -78,36 +78,44 @@ test('evidenceWord: the bias side\'s class C trend, B chop, A or D unclear; no b
 
 // The coded read and choppy come from the briefing's Market state (market-state.js readState, one definition; its own
 // unit tests cover every precedence case): here, on briefings, the key carries it.
-const kb = ({ h4 = 'up', h1 = 'up', lastBreak, soFar, pullback } = {}) => K.presentKey({ sections: {
+const kb = ({ h4 = 'up', h1 = 'up', lastBreak, soFar, pullback, layers } = {}) => K.presentKey({ sections: {
   h1: { data: { h4: { trend: h4 }, h1: { trend: h1 } } },
-  m3: { data: { ...(lastBreak ? { lastBreak } : {}), ...(pullback ? { pullback } : {}), vwap: { sessionCrossesLast30: 9, side: 'above' }, ...(soFar ? { today: { soFar } } : {}) } },
+  m3: { data: { ...(lastBreak ? { lastBreak } : {}), ...(pullback ? { pullback } : {}), ...(layers ? { layers } : {}), vwap: { sessionCrossesLast30: 9, side: 'above' }, ...(soFar ? { today: { soFar } } : {}) } },
 } }, TH);
+// Round 20: chop is the briefing's layers' (m3.layers, market-layers.js: structural AND behavioral evidence); a record
+// without them (every record before round 20) reads the printed breaks alone and is never choppy.
+const CHOP_LAYERS = { rthBars: 20, structure: { side: 'up', level: 21480, status: 'intact', legOK: false, sinceProgress: 12, lastWay: null, lastInternal: null, flip: null },
+  momentum: { trigger: false }, behavior: { word: 'failing', word15: 'overlapping', overlap: 0.74, eff: 0.09 },
+  chop: { now: true, inChop: true, S: true, B: true, facts: { ov: true, ef: true, fl: true, nd: false }, count: 3, evidence: { bothWays: true, flip: false, failed: true } }, transition: false, stale: false, pbRotation: false };
 const PAIR = { last: { kind: 'CHoCH', direction: 'up' }, previous: { kind: 'CHoCH', direction: 'down' } };
 const rot = n => ({ status: 'read', read: 'rotational', vwapCrosses: n });
 const mix = n => ({ status: 'read', read: 'mixed', vwapCrosses: n });
-// The owner: "keep it simple and call it chop if it fails reversal": the 3m CHoCH pair is chop, rotational or not, except
-// inside a pullback read or under the 15m's confirmation (market-state.js; its own tests cover each guard).
-test('choppy: the 3m CHoCH pair (a failed reversal); rotational and the crosses never conditions; never inside an open Pullback', () => {
-  assert.strictEqual(kb({ lastBreak: PAIR, soFar: rot(1) }).choppy, true);
-  assert.strictEqual(kb({ lastBreak: PAIR, soFar: mix(4) }).choppy, true, 'the pair alone');
-  assert.strictEqual(kb({ lastBreak: PAIR }).choppy, true);
+// Round 20 (the owner: "Don't classify a market as chop simply because you see two opposing CHoCHs"): choppy is the
+// layers' chop; the CHoCH pair alone, rotational or not, is never chop; inside an open Pullback never chop.
+test('choppy: the layers\' chop, never the CHoCH pair alone; rotational and the crosses never conditions; never inside an open Pullback', () => {
+  assert.strictEqual(kb({ lastBreak: PAIR, soFar: rot(1) }).choppy, false, 'the pair alone, no layers');
+  assert.strictEqual(kb({ lastBreak: PAIR, soFar: mix(4) }).choppy, false);
+  assert.strictEqual(kb({ layers: CHOP_LAYERS }).choppy, true, 'the layers\' chop');
   assert.strictEqual(kb({ soFar: rot(9) }).choppy, false, 'rotational and crosses without the breaks');
   const PB = { frame: '15m', side: 'long', leg: { origin: 21462.5, extreme: 21538.75 }, depth: 0.38, pastOrigin: false, counter: { bars: 10 }, swing: {}, against: {} };
-  assert.strictEqual(kb({ lastBreak: PAIR, soFar: rot(9), pullback: PB }).choppy, false, 'inside an open Pullback the CHoCH pair is the watch');
+  assert.strictEqual(kb({ layers: CHOP_LAYERS, soFar: rot(9), pullback: PB }).choppy, false, 'inside an open Pullback: never chop');
 });
 
 test('codedWord: the Market state\'s class word: choppy -> chop (aligned too); else 4h and 1h agreeing -> trend; else unclear; a range alone never chop', () => {
   assert.strictEqual(K.codedWord(kb({})), 'trend-up');
-  assert.strictEqual(K.codedWord(kb({ lastBreak: PAIR, soFar: rot(1) })), 'chop', 'aligned but choppy: chop');
+  assert.strictEqual(K.codedWord(kb({ layers: CHOP_LAYERS, soFar: rot(1) })), 'chop', 'aligned but choppy: chop');
+  assert.strictEqual(K.codedWord(kb({ lastBreak: PAIR, soFar: rot(1) })), 'trend-up', 'the pair alone (no layers): no chop');
   assert.strictEqual(K.codedWord(kb({ soFar: rot(1) })), 'trend-up', 'rotational alone is one fact');
   assert.strictEqual(K.codedWord(kb({ h4: 'down', h1: 'down' })), 'trend-down');
   assert.strictEqual(K.codedWord(kb({ h4: 'range' })), 'unclear', 'range is geometry, not chop');
-  assert.strictEqual(K.codedWord(kb({ h4: 'range', lastBreak: PAIR, soFar: rot(1) })), 'chop');
+  assert.strictEqual(K.codedWord(kb({ h4: 'range', layers: CHOP_LAYERS, soFar: rot(1) })), 'chop');
   assert.strictEqual(K.codedWord(kb({ h4: 'range', h1: 'range' })), 'unclear', 'agreeing range is no trend');
 });
 
 test('presentKey carries choppy from the Market state (the crosses threshold only a printed context)', () => {
   const b = { sections: { h1: { data: { h4: { trend: 'up' }, h1: { trend: 'up' } } }, m3: { data: { lastBreak: { last: { kind: 'CHoCH', direction: 'up' }, previous: { kind: 'CHoCH', direction: 'down' } }, vwap: { sessionCrossesLast30: 1, side: 'above' }, today: { soFar: { status: 'read', read: 'mixed', direction: 'up', vwapCrosses: 6 } } } } } };
+  assert.strictEqual(K.presentKey(b, TH).choppy, false, 'a record without layers: the pair alone is no chop (round 20)');
+  b.sections.m3.data.layers = CHOP_LAYERS;
   assert.strictEqual(K.presentKey(b, TH).choppy, true);
   assert.strictEqual(K.codedWord(K.presentKey(b, TH)), 'chop');
   assert.strictEqual(K.presentKey(b, { ...TH, crossesChop: 7 }).choppy, true, 'the threshold decides nothing');
@@ -127,12 +135,15 @@ test('the taught guardrail: an open Pullback line\'s 3m CHoCH pair is neither C3
   assert.strictEqual(K.codedWord(k), 'trend-up');
   for (const s of ['long', 'short', 'none']) assert.ok(!k.signals[s].c.includes('C3'), s);
   assert.notStrictEqual(K.evidenceWord(k), 'chop');
-  // The same candle with no Pullback line printed: the full choppy evidence, chop.
+  // The same candle with no Pullback line printed: C3 (the frozen evidence signal) met; choppy only with the layers'
+  // chop (round 20: the pair alone is no chop), and then chop.
   const n = K.presentKey(brief(null), TH);
   assert.strictEqual(n.facts.pullback, false);
-  assert.strictEqual(n.choppy, true);
-  assert.strictEqual(K.codedWord(n), 'chop');
+  assert.strictEqual(n.choppy, false);
   assert.ok(n.signals.long.c.includes('C3'));
+  const withLayers = pullback => { const x = brief(pullback); x.sections.m3.data.layers = CHOP_LAYERS; return K.presentKey(x, TH); };
+  assert.deepStrictEqual([withLayers(null).choppy, K.codedWord(withLayers(null))], [true, 'chop']);
+  assert.deepStrictEqual([withLayers(PB).choppy, K.codedWord(withLayers(PB))], [false, 'trend-up'], 'the guardrail holds with the layers too');
   // A pullback object the briefing does not print (no leg) is no open Pullback line.
   assert.strictEqual(K.presentKey(brief({ frame: '15m' }), TH).facts.pullback, false);
   // Given back past its printed origin (step 8: no with-side read on that leg): not open; the pair counts again.
@@ -141,7 +152,7 @@ test('the taught guardrail: an open Pullback line\'s 3m CHoCH pair is neither C3
   // An older record without pastOrigin: its depth decides (pullback-read.js givenBack).
   assert.strictEqual(K.presentKey(brief({ ...PB, depth: 1.1, pastOrigin: undefined }), TH).facts.pullback, false);
   assert.strictEqual(K.presentKey(brief({ ...PB, depth: 0.5, pastOrigin: undefined }), TH).facts.pullback, true);
-  assert.strictEqual(back.choppy, true);
+  assert.strictEqual(back.choppy, false, 'no layers: no chop');
   assert.ok(back.signals.long.c.includes('C3'));
 });
 
@@ -220,12 +231,13 @@ test('the coded read is the Market state: codedWord = classWordOf(stateOf) and c
   }
 });
 
-// What the redesign changes in the coded read (stated in the PR): the old read (chop = the CHoCH pair with the day so far
-// rotational or the RTH crosses at crossesChop and no open Pullback line; else the 4h and 1h agreeing -> the trend; else
-// unclear) and the new (the 3m state, trend / ranging / chop, with the alignment) differ exactly in two places on the grid
-// (no 15m trend, no close time): (a) the CHoCH pair with no open Pullback line and without those day facts: new chop; (b)
-// the 4h and 1h agreeing, the 3m's last break a BOS against them, no pullback read their way: old trend, new unclear.
-test('the old and the new coded read differ only on (a) the bare CHoCH pair (now chop) and (b) a 3m BOS against an aligned 4h + 1h with no pullback read', () => {
+// What the redesigns change in the coded read on records without layers (the grid: no 15m trend, no close time): the old
+// read (chop = the CHoCH pair with the day so far rotational or the RTH crosses at crossesChop and no open Pullback line;
+// else the 4h and 1h agreeing -> the trend; else unclear) and round 20's differ exactly in: (a) the old read's chop (the
+// pair alone is no chop now, the owner); (b) the 4h and 1h agreeing, the 3m's last break a BOS against them (a 3m leg
+// against), no pullback their way: old trend, new unclear; (c) an open pullback against the 4h + 1h with the 3m's last
+// break a BOS their way: old trend (the 3m BOS decided), new unclear (the pullback's leg is against them).
+test('the old and the new coded read differ only on (a) the old chop (no chop without layers), (b) a 3m BOS against an aligned 4h + 1h, (c) a pullback against them', () => {
   const old = b => {
     const f = K.facts(b);
     const ch = f.bothWays['3m'] === true && !f.pullback && (f.day.word === 'rotational' || (Number.isFinite(f.rthCrosses) && f.rthCrosses >= TH.crossesChop));
@@ -233,20 +245,20 @@ test('the old and the new coded read differ only on (a) the bare CHoCH pair (now
     return ch ? 'chop' : fr['4h'] === fr['1h'] && (fr['4h'] === 'up' || fr['4h'] === 'down') ? `trend-${fr['4h']}` : 'unclear';
   };
   const diff = GRID.filter(b => old(b) !== K.codedWord(K.presentKey(b, TH)));
-  let a = 0;
-  let bb = 0;
+  const n = { a: 0, b: 0, c: 0 };
   for (const b of diff) {
-    const f = K.facts(b);
     const d = b.sections.h1.data;
     const way = d.h4 && d.h4.trend;
     const lb = b.sections.m3.data.lastBreak;
     const p = b.sections.m3.data.pullback;
     const pbWay = p && p.pastOrigin === false ? { long: 'up', short: 'down' }[p.side] : null;
     const now = K.codedWord(K.presentKey(b, TH));
-    if (f.bothWays['3m'] === true && !f.pullback) { assert.strictEqual(now, 'chop', JSON.stringify(b)); a += 1; continue; }
+    assert.notStrictEqual(now, 'chop', 'never chop without layers');
+    if (old(b) === 'chop') { n.a += 1; continue; }
+    assert.strictEqual(now, 'unclear', JSON.stringify(b));
+    if (pbWay && pbWay !== way) { n.c += 1; continue; }
     assert.ok(way === d.h1.trend && lb && lb.last.kind === 'BOS' && lb.last.direction !== way && pbWay !== way, JSON.stringify(b));
-    assert.deepStrictEqual([old(b), now], [`trend-${way}`, 'unclear']);
-    bb += 1;
+    n.b += 1;
   }
-  assert.ok(a > 0 && bb > 0, `${a} pair, ${bb} against`);
+  assert.ok(n.a > 0 && n.b > 0 && n.c > 0, JSON.stringify(n));
 });

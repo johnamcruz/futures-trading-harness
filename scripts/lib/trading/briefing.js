@@ -112,7 +112,9 @@ const { structure5m, structureLine } = require('./m5-structure');
 const { compressionFrames, compressionLine } = require('./compression');
 const { declaredFacts, declaredLine } = require('./trend-declared');
 const { daySoFar, daySoFarLine, rthVolatility, volatilityText } = require('./day-so-far');
-const { biasLine } = require('./bias-line');
+const { biasLine, RULE: BIAS_RULE } = require('./bias-line');
+const { marketLayers } = require('./market-layers');
+const AN_STATE = require('../tunables').analysis(); // config/analysis.json: marketState, daySoFar.minBars (the chop floor), dayContext.ibMinutes
 const { stateOf, marketStateLine } = require('./market-state');
 // The Market state line's crosses context threshold: the regime's rotation count (config/analysis.json; a test pins it to the
 // recognition key's frozen crossesChop).
@@ -725,6 +727,12 @@ function buildBriefing({ symbol, contractId = null, bars: raw, minutes, fineBars
   // bars; the runner's briefing only; null without a counter-move or before the trend rule has its read (its line names
   // the prevailing side then). A presented fact: nothing in the gate, compose_check, order_plan or the trend rule reads it.
   if (!own) fresh.m3.data.pullback = read.rule.ready ? pullbackRead({ bars, base: minutes, prevailing: read.rule.prevailing }) : null;
+  // The Market state's three layers (market-layers.js, round 20): structure, momentum and behavior from these closed bars,
+  // on the chain's entry frame only (the state prints there); market-state.js reads them. Facts left out of the detail
+  // (SUMMARY_FIELDS: the Market state line says them).
+  if (!own && tfLabel(minutes) === BIAS_RULE.chain.entry) {
+    fresh.m3.data.layers = marketLayers({ bars, minutes, setupMinutes: parseInt(BIAS_RULE.chain.setup, 10), closedAt: closedAt.toISOString(), pullback: fresh.m3.data.pullback, p: AN_STATE.marketState, floor: AN_STATE.daySoFar.minBars, ibBars: AN_STATE.dayContext.ibMinutes / minutes });
+  }
   // Same symbol, bar size and contract (a roll to the next month is new prices, never the old month's levels).
   const usable = prev && prev.symbol === symbol && prev.minutes === minutes && (prev.contractId || null) === contractId && Date.parse(prev.closedAt) < closedAt.getTime();
   const sections = {};
@@ -946,7 +954,7 @@ const targets = list => list.reduce((out, x) => {
 
 // The m3 fields the summary says in full (one line each), left out of the detail whole.
 const CHAIN_FRAMES = (C => C.chainOf(C.SHIPPED))(require('./chain'));
-const SUMMARY_FIELDS = ['swingTargets', 'rangeTargets', 'fvgs', 'structure5m', 'compression', 'declared', 'timing', 'pullback'];
+const SUMMARY_FIELDS = ['swingTargets', 'rangeTargets', 'fvgs', 'structure5m', 'compression', 'declared', 'timing', 'pullback', 'layers'];
 // What the summary's "This bar's close" line says in full, left out of the detail (only present when it happened).
 const SUMMARY_ONLY = { vwap: ['crossed'], today: ['openingRangeCrossed', 'soFar', 'rthVolatility'], location: ['closesBeyondValue', 'backInsideValue'] };
 

@@ -42,3 +42,13 @@ test('the decision paths are not among the readers (the gate, hooks, gateway, co
   // The test sees the files it guards: the gate and the gateway exist where it scans.
   assert.ok(ALL.some(f => /order-gate/.test(f)) && ALL.includes('scripts/mcp-gateway.js'), 'the decision files are scanned');
 });
+
+// Round 20: the layers' modules feed the read only: market-layers.js is required by the briefing alone (it computes
+// m3.layers), structure-layers.js and market-behavior.js by market-layers.js alone; no gate, hook, compose, entry-rule or
+// decision code reads them.
+test('the Market state\'s layer modules are required only by the briefing (market-layers) and market-layers (the two parts)', () => {
+  const by = mod => ALL.filter(f => new RegExp(`require\\([^)]*/${mod}['"]\\)`).test(fs.readFileSync(path.join(ROOT, f), 'utf8'))).sort();
+  assert.deepStrictEqual(by('market-layers'), ['scripts/lib/trading/briefing.js']);
+  assert.deepStrictEqual(by('structure-layers'), ['scripts/lib/trading/market-layers.js']);
+  assert.deepStrictEqual(by('market-behavior'), ['scripts/lib/trading/market-layers.js']);
+});
