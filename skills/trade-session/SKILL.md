@@ -157,9 +157,8 @@ line of its PLAN; taught: the gate and `compose_check` do not read it):
   - The printed `Class side (4h + 1h)` line `up` or `down` (your 4h and
     1h both one way) → that trend class (a 15m pullback, `range` or
     `transition` under them doesn't cancel it, nor does your `frames
-    disagree`). The `Class side` line shows the labels' 4h and 1h; your
-    own read of them governs: your own both one way → that trend class;
-    if yours differ from the line, say why. A lower-timeframe range inside
+    disagree`). The `Class side` line is the 4h and 1h as printed; a
+    trend class needs it `up` or `down`. A lower-timeframe range inside
     the 4h + 1h trend (a range day too): setups at the edge the side's way
     are OK, or the breakout with follow-through.
   - `none`, your 4h and 1h not both one way → `unclear` (never a trend

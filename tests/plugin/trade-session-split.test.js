@@ -417,12 +417,12 @@ const OLD_AGENTS_MD = 24466;
 // rule's compose bullet in AGENTS.md scopes the entry timing (unless a `Pullback` line is printed), and the class rule's
 // range is not chop (the owner: chop is the movement's quality, range its geometry); htf-to-ltf and trader-process are
 // common to both sides.
-// Plus 1903 for feat/chop-read (same rule, owner-approved 2026-11-14): trade-session's class rule names the owner's chop
+// Plus 1823 for feat/chop-read (same rule, owner-approved 2026-11-14): trade-session's class rule names the owner's chop
 // (repeated CHoCH both ways with rotational or many VWAP crosses, never one fact, aligned days too), the action (chop: sit
 // out; a lower-timeframe range inside the 4h + 1h trend: setups at the edge the side's way), the pause inside a Pullback
-// never chop (its 3m CHoCH against then back the watch; open defined: printed, not given back past its origin; round 5: the printed Class side line names the trend class, the rule reordered with no else chain, the pause gives the class, a rejection inside the zone is the reaction; round 6: the Class side line's provenance, the pause gives the class bullets' class; round 7: chop first, rotational is the printed word, the watch ends at the first 3m BOS or CISD, the live strong 15m CISD is the turn; day-context's printed word), and two worked examples (4h range, 1h up, smooth: unclear; close
+// never chop (its 3m CHoCH against then back the watch; open defined: printed, not given back past its origin; round 5: the printed Class side line names the trend class, the rule reordered with no else chain, the pause gives the class, a rejection inside the zone is the reaction; round 6: the Class side line's provenance, the pause gives the class bullets' class; round 7: chop first, rotational is the printed word, the watch ends at the first 3m BOS or CISD, the live strong 15m CISD is the turn; day-context's printed word; round 8: the Class side line as the one source), and two worked examples (4h range, 1h up, smooth: unclear; close
 // to the level: enter); htf-to-ltf is common to both sides.
-const RAISED = 154 + 130 + 1625 + 336 + 382 + 939 + 843 + 1903;
+const RAISED = 154 + 130 + 1625 + 336 + 382 + 939 + 843 + 1823;
 const EVERY_CYCLE = ['multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'trader-process', 'htf-to-ltf', 'autonomous-trading'];
 const PATHS = {
   'full cycle, no candidate': ['role-round', 'setup-judgment', 'day-context'],

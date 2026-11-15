@@ -505,7 +505,7 @@ test('state line: the decision follows the model\'s own STATE read (taught, no c
     "The class follows your frames and the movement, in this order:",
     "Open `Pullback` line: the `Pullback` line is printed and its leg is not given back past its origin.",
     "Chop first: `m3.lastBreak` last and previous both CHoCH, with the Day so far `rotational` (the printed Day so far word only, never your reading of the efficiency number) or many RTH VWAP crosses, and no open `Pullback` line → class `chop`, whatever the 4h and 1h → no entry, sit out. One fact alone, or one BOS or CHoCH, is never chop. A frame's `range` or `transition` alone is never `chop` (range is geometry, chop quality).",
-    "The printed `Class side (4h + 1h)` line `up` or `down` (your 4h and 1h both one way) → that trend class (a 15m pullback, `range` or `transition` under them doesn't cancel it, nor does your `frames disagree`). The `Class side` line shows the labels' 4h and 1h; your own read of them governs: your own both one way → that trend class; if yours differ from the line, say why.",
+    "The printed `Class side (4h + 1h)` line `up` or `down` (your 4h and 1h both one way) → that trend class (a 15m pullback, `range` or `transition` under them doesn't cancel it, nor does your `frames disagree`). The `Class side` line is the 4h and 1h as printed; a trend class needs it `up` or `down`.",
     // A range day is no chop (owner: a range day is catchable).
     "A lower-timeframe range inside the 4h + 1h trend (a range day too): setups at the edge the side's way are OK, or the breakout with follow-through.",
     "`none`, your 4h and 1h not both one way → `unclear` (never a trend class, smooth or not): 4h range, 1h up, smooth → `unclear`",
