@@ -75,7 +75,7 @@ test('market state authority: the head core\'s table keys only on what the line 
   // The table's rows are exactly ROWS, in order: a row added, dropped or changed fails (the KEYS below mirror ROWS).
   const body = read('skills/trade-session/SKILL.md');
   const raw = body.slice(body.indexOf('| state word | pullback their way |'), body.indexOf('Chop ends when the line'));
-  assert.deepStrictEqual(raw.split('\n').filter(l => l.startsWith('| ') && !l.startsWith('| state word')).map(l => l.trim()), ROWS);
+  assert.deepStrictEqual(raw.split('\n').map(l => l.trim()).filter(l => l.startsWith('|') && !l.startsWith('|-') && !l.startsWith('| state word')), ROWS);
   // No exception inside the table: precedence is code's, applied before the line prints.
   assert.doesNotMatch(table, /\bunless\b|\bexcept\b|but if/i);
   const all = lines();
@@ -114,7 +114,7 @@ const CLASS_MAP = [
   /\bnot `?chop`?\b|\bnever `?chop`?\b|\bno chop sign\b/,
   /\b(?:the side's|that|their) trend class\b/,
   /:\s*`?(?:unclear|chop)`?\s*[;.)]/,
-  /\|\s*`?(?:chop|unclear|trend-up|trend-down)`?\s*\|/,
+  /\|\s*(?:class\s+)?`?(?:chop|unclear|trend-up|trend-down)`?(?![\w-])/,
   /\b(?:reversal|range|transition|mixed),\s*`?(?:chop|unclear)`?(?![\w-])/,
 ];
 const ALLOWED = [
@@ -129,6 +129,8 @@ const ALLOWED = [
   ['skills/trend-vs-range/SKILL.md', /Chop: the line prints `chop: [^`]*` -> sit out\. It prints `trend up: [^`]*` -> trend-up\./],
   // The owner's chop definition, the one reference home, after "the class word is the line's, never this definition's".
   ['skills/trend-vs-range/SKILL.md', /Structure broken both ways with no continuation is chop, not a run of reversals\./],
+  // trader-process's filled-in STATE example (a recorded line, no rule; audit row 12).
+  ['skills/trader-process/SKILL.md', /STATE: 4h up \| 1h up \| 15m transition \| frames disagree \| class trend-up \| cites 15m-break, 3m-break, pullback/],
   // The README's step table: the line's words -> class, the authority restated for people.
   ['README.md', /\| The class word follows the line, and only it: [^|]*\|/],
 ];
@@ -172,6 +174,7 @@ test('market state authority: the scan catches a competing row or sentence (it f
   // Through the scan itself: table rows outside the allowed table, a sentence wrapped over lines.
   assert.strictEqual(scanText('Intro.\n| 15m range | `unclear` |\n| trend against them | aligned | `unclear` | no trade |\nMore.').length, 2);
   assert.strictEqual(scanText('Frames: transitional is a pause. Then -> `unclear`.').length, 1);
+  for (const row of ['| 15m range | `unclear`: no trade |', '| 15m range | class `unclear` |', '| 3m CHoCH pair | chop, sit out |']) assert.strictEqual(scanText(row).length, 1, row);
   for (const s of ['A take: `class` on its side.', 'Chop ends when the line\'s state word is no longer `chop`.', 'The class word: the Market state line.', '| Depth | up to about 50-62% | past the origin |'])
     assert.deepStrictEqual(scanText(s), [], s);
 });

@@ -1251,7 +1251,7 @@
         "pullback-vs-reversal"
       ],
       "text": "Briefing lines (synthetic, 11:00 ET):\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): ranging: no 3m break printed; 4h+1h up.\n- m15.lastBreak: last BOS up at 21500.00 (10:00).\n- 15m (setup candle, closed 11:00): inside, 3 in a row inside the 10:00 candle 21494.25-21541.5, close middle third, range 0.4 ATR, vol 0.5x.\n- The trend-momentum analyst's report: Regime (computed): 15m transition/normal, 3m transition/normal.\nWhich do these lines show: chop evidence, a pause in the trend (a pullback), a reversal, or no read yet?",
-      "rule": "after a 15m break the side's way, small counter candles inside the impulse with the 15m transition: the pause, not chop",
+      "rule": "after a 15m break the side's way, small counter candles inside the impulse with the 15m transition: the pause (a pullback); the class word is the Market state line's",
       "anchor": "A 15m `range` or `transition` here is the pause (a pullback); the class word is the Market state line's",
       "choices": [
         "chop evidence",
