@@ -19,6 +19,75 @@ CLIs can drive. The harness names no broker, firm or model.
 > account, micro contracts and size 1. You are responsible for every order
 > placed.
 
+## Goal: the edge is reading the market
+
+The edge isn't a prediction and isn't a mechanical signal. It is the model
+learning to read the market as it is at each candle, and reacting correctly
+to what it reads:
+
+- It recognizes a real trend and gets in on a confirmed pullback.
+- It sits out chop.
+- It holds the trends that run.
+
+The exit is built so that losers stop at 1R, and a trend that keeps running
+(2-5R) is left to run. The model doesn't forecast where price goes next. It
+reads what is true now and acts on it.
+
+The aim is a model that trades profitably and passes a 30-session prop-firm
+combine consistently, with zero blown accounts.
+
+## How the model reads the market
+
+Each read states what is true at this candle, and each read leads to an
+action. The skills teach the reads, and the briefing prints the facts they
+rest on.
+
+| Step | Read | Action |
+|---|---|---|
+| Side | The 4h and the 1h both trend one way. | Trade only that way; never counter it. |
+| Market | A 15m pullback, `range` or `transition` under a 4h and 1h that agree is a pause, not chop. Chop is choppy movement (breaks both ways without follow-through), not range geometry. | Pause: look for the setup. Chop: sit out. |
+| Setup | The 15m pullback turns the side's way: a live 15m CISD, a 15m BOS, or a 15m reaction at the level. | The setup is on. |
+| Entry | The first 3m BOS or CISD the side's way, near VWAP or the EMA20. | Compose on that confirming 3m bar: a limit at its close. Never a limit back at the broken level, and never a chase. |
+| Manage | A later 15m BOS the side's way. | Hold. |
+| Manage | A 15m CHoCH or CISD against. | This pullback failed. Flat: wait for a new 15m turn. In a trade: `manage-position` acts. Never counter. |
+
+A CISD the side's way reads like a BOS; a CISD against reads like a CHoCH. A
+CISD confirmed by an engulfing or displacement candle is the strong form.
+
+The model states its read as one chain, for example: "4h and 1h up; 15m
+pulling back to the broken level; 15m CISD up confirmed by a bullish
+engulfing candle; 3m BOS up near VWAP: a strong setup, enter."
+
+The full sequence is in
+[skills/pullback-vs-reversal](skills/pullback-vs-reversal/SKILL.md), and the
+evidence behind it is in
+[docs/research/pullback-read-evidence.md](docs/research/pullback-read-evidence.md).
+
+That evidence is why the work goes into the reading. Entry rules tested on
+their own came out about break-even or worse. Beyond how deep a pullback
+already is, no single fact visible at it separated the pullbacks that
+resumed from the ones that ranged or reversed. The 3m timing has not been
+measured on its own. The edge has to come from the model reading correctly:
+
+- getting into the trends that run;
+- staying out of chop;
+- letting the trail carry the winners.
+
+Whether the reading earns is what the replays measure.
+
+**How improvement is measured:** by how well the model reads.
+
+- **A context quiz:** closed-choice questions on every read, many with a trap
+  answer, asked several times.
+- **The recognition test:** real trend legs and chop days, candle by candle.
+  Does the model name the trend early, enter through the pullback read, and
+  sit out chop?
+- **Replays:** the full harness over history, with a 30-session combine
+  Monte Carlo.
+
+Every skill change goes through tests written first and an independent
+adversarial review before it merges.
+
 ## How it works
 
 ```text
