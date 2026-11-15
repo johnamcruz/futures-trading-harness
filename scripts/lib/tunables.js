@@ -80,7 +80,9 @@ const TRAINING = {
   fieldStudy: { quantiles: list(frac(), { min: 1 }), confluenceLevels: list(frac(), { min: 1 }), minEvents: int(1), minDays: int(1), costTicks: nonneg(), reps: int(1), seed: int() },
   // perSkill: one skill's own cap (owner-approved, improves context): candle-reading's reaction-at-a-level read
   // (feat/sweep-candle-control, 2026-10-31; 5916 with the owner rule: a higher timeframe's reaction is stronger confirmation; 6212, owner: rejection relies on candle-reading; the side is the candle's (q30); 6230, owner: no bare rejection (plain is no rejection read); sweeps need candle-reading too; 6338, owner: q30 side confusion; side rule first; 7367 (+1029), fix/quiz-side-doji, owner: q29/q30/q33 answered correctly: the side never from the bias, the briefing's side, a stall decides nothing, the four side and trend-rule cases, a paired side example; 7637 (+270), feat/pullback-concept, owner: the unlabeled candle names and the pennant shape, a CISD's strength is displacement, not a name). pullback-vs-reversal's own cap 9518 (feat/pullback-concept, owner-approved 2026-11-14: the pullback to a broken level, BOS for continuation, CHoCH for reversal, its 3m entry, the examples; the owner rule: raise a cap when it improves context); 10262, feat/chop-read, owner-approved 2026-11-14/15: the pause holds one way under the Market state's pullback read, close to the level is a read, the 15m CHoCH back as a 15m turn (at the measured need). trend-vs-range 4121 and bos-vs-choch 3762 (feat/chop-read: the owner's chop, trending and chop definitions, chop is not range; 4042 in round 15: each break's protected swing, the owner's line; pullback-vs-reversal 10453 in round 15: the Depth row names when the Market state counts the pullback; no single BOS or CHoCH classifies the market, the owner's labelling rule; at the measured need; round 17, one authority for the class word: bos-vs-choch 4138 (a BOS keeps its label after its protected swing breaks, the line's status decides), pullback-vs-reversal 10354 and trend-vs-range 4112 (their class sentences now point to the Market state line), at the measured need). Fixed
-  // keys, so no other skill can be given more room here.
+  // keys, so no other skill can be given more room here. Round 20 (feat/chop-read, the owner's three layers, his chop checklist,
+  // behavioral list and five classes quoted, one home each; skill cap raises owner-approved when they improve context):
+  // trend-vs-range 5426, bos-vs-choch 5233, at the measured need.
   skillCaps: { skillBytes: int(1), setupSkillBytes: int(1), perSkill: { 'candle-reading': int(1), 'pullback-vs-reversal': int(1), 'trend-vs-range': int(1), 'bos-vs-choch': int(1) } },
   compose: { maxExpects: int(1), maxWhy: int(1) },
   lessons: { maxLines: int(1), maxChars: int(1), refusedChars: int(1) },
@@ -243,6 +245,14 @@ const ANALYSIS = {
   briefing: { equalK: int(1), cisdFrames: list(int(1), { min: 1 }) },
   tradeRead: { frames: list(int(1), { min: 1 }), deepPullback: frac(), minSigns: int(1) },
   pullbackRead: { minLegAtr: pos(), maxStateDepth: frac() },
+  // The 3m Market state's three layers (structure-layers.js, market-behavior.js, market-layers.js): windows in 3m bars, the
+  // tie tolerance and the displacement-free facts in ATR(14) units or shares, the chop rule's fact count, the early-warning
+  // windows (pressure, loss of control, rotation, the opening drive) and the behavior word's net move in ATR(14).
+  marketState: {
+    behaviorBars: int(2), edgeBars: int(3), structBars: int(1), followBars: int(1), dispBars: int(0), m15Bars: int(2), equalAtr: nonneg(), interior: frac(),
+    overlapHigh: frac(), effLow: frac(), rejectMin: int(1), chopMinFacts: int(1, 4), pressBars: int(1), lossStale: int(1), rotStale: int(1), rotCross: int(1),
+    odStart: int(0), odBars: int(1), odStale: int(1), trendNetAtr: nonneg(), earlyBars: int(1), early15: int(1),
+  },
   evaluator: { windowBars: int(1) },
   // The read audit (learning/read-audit.js, an offline report): a pass's forward window in base bars and its standard
   // stop in ATR(20) multiples, the outcome column only (hindsight; never read by a decision, a read or a prompt).
@@ -263,7 +273,7 @@ const PINS = deepFreeze({
     'screen.gainAlpha': 0.1, 'screen.harmAlpha': 0.2, 'screen.minDiscordant': 4, 'screen.minPairs': 10, 'screen.minEffect': 0.1, 'exitScreen.epsR': 0.05, 'exitScreen.runnerMfeR': 3,
     'loop.limits.maxIterations.max': 100, 'loop.limits.maxModelCalls.max': 100000, 'loop.limits.maxWallMinutes.max': 10080,
     'proposal.maxEdits': 3, 'proposal.maxText': 2000, 'proposal.maxChanged': 3000, 'looks.maxArms': 3,
-    'skillCaps.skillBytes': 3459, 'skillCaps.setupSkillBytes': 4000, 'skillCaps.perSkill.candle-reading': 7637, 'skillCaps.perSkill.pullback-vs-reversal': 10354, 'skillCaps.perSkill.trend-vs-range': 4112, 'skillCaps.perSkill.bos-vs-choch': 4138,
+    'skillCaps.skillBytes': 3459, 'skillCaps.setupSkillBytes': 4000, 'skillCaps.perSkill.candle-reading': 7637, 'skillCaps.perSkill.pullback-vs-reversal': 10354, 'skillCaps.perSkill.trend-vs-range': 5426, 'skillCaps.perSkill.bos-vs-choch': 5233,
     'goalRegression.tolerance.passRate': 0.005, 'goalRegression.tolerance.meanR': 0.005, 'goalRegression.tolerance.rCaught': 0,
     'goalRegression.tier2.tolerance.trades': 0, 'goalRegression.tier2.tolerance.totalR': 0.05, 'goalRegression.tier2.tolerance.fills': 0, 'goalRegression.tier2.tolerance.moveShare': 0, 'goalRegression.tier2.maxLossR': 1.25,
     'goalRegression.seed': 1, 'goalRegression.split': '2022-11-23', 'goalRegression.blocksPerHalf': 3, 'goalRegression.blockSessions': 5, 'goalRegression.trendPerHalf': 8,
@@ -383,6 +393,7 @@ const BUILT_IN = deepFreeze({
     briefing: { equalK: 2, cisdFrames: [3, 5, 15, 60] },
     tradeRead: { frames: [15], deepPullback: 0.618, minSigns: 2 },
     pullbackRead: { minLegAtr: 1, maxStateDepth: 0.62 },
+    marketState: { behaviorBars: 10, edgeBars: 20, structBars: 20, followBars: 3, dispBars: 3, m15Bars: 4, equalAtr: 0.05, interior: 0.25, overlapHigh: 0.7, effLow: 0.3, rejectMin: 2, chopMinFacts: 3, pressBars: 6, lossStale: 10, rotStale: 20, rotCross: 3, odStart: 3, odBars: 20, odStale: 3, trendNetAtr: 1, earlyBars: 3, early15: 2 },
     evaluator: { windowBars: 500 },
     readAudit: { forwardBars: 20, stopAtr: 1 },
   },
