@@ -129,6 +129,9 @@ const ALLOWED = [
   ['skills/trade-session/SKILL.md', /Then `chop`, `unclear`, or a trend class your 4h and 1h don't show/],
   // Examples that quote the printed line and give its class.
   ['skills/pullback-vs-reversal/SKILL.md', /the Market state line prints the pullback -> class trend-up \(the line's\)/],
+  // #338 pinned (q91's anchor); "not chop" contrasts a pause with chop, does not assign the class (audit row 29). This
+  // exact sentence only: a variant ("... is chop.", "... is not chop, unclear.") still trips the scan.
+  ['skills/pullback-vs-reversal/SKILL.md', /A 15m `range` or `transition` here is the pause, not chop\./],
   ['skills/trend-vs-range/SKILL.md', /Chop: the line prints `chop: [^`]*` -> sit out\. It prints `trend up: [^`]*` -> trend-up\./],
   // The owner's chop definition, the one reference home, after "the class word is the line's, never this definition's".
   ['skills/trend-vs-range/SKILL.md', /Structure broken both ways with no continuation is chop, not a run of reversals\./],
@@ -185,6 +188,11 @@ test('market state authority: the scan catches a competing row or sentence (it f
   for (const s of ['The line means what it prints.', 'It gives the class word: the Market state line.', 'The read becomes clear later.', 'It counts as a pullback.'])
     assert.deepStrictEqual(scanText(s), [], s);
   for (const row of ['| 15m range | `unclear`: no trade |', '| 15m range | class `unclear` |', '| 3m CHoCH pair | chop, sit out |']) assert.strictEqual(scanText(row).length, 1, row);
+  // The restored #338 sentence is allowed exactly: a near-variant is not blanked, and the scan still catches it.
+  const pause = ALLOWED.find(([, re]) => re.source.includes('the pause, not chop'))[1];
+  for (const v of ['A 15m `range` or `transition` here is chop.', 'A 15m `range` or `transition` here is the pause, not chop, unclear.', 'A 15m `range` here is the pause, not chop.']) {
+    assert.ok(scanText(v.replace(pause, ' ')).length > 0, v);
+  }
   for (const s of ['A take: `class` on its side.', 'Chop ends when the line\'s state word is no longer `chop`.', 'The class word: the Market state line.', '| Depth | up to about 50-62% | past the origin |'])
     assert.deepStrictEqual(scanText(s), [], s);
 });

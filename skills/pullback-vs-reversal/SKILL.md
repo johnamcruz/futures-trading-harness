@@ -43,7 +43,7 @@ never the composed setup read (`compose_check` takes a live strong one):
 3. Price pulls back toward it: small counter candles inside the impulse
    candle's range (`N in a row inside the <time> candle`: `compression`'s
    pennant), `Pullback` volume falling, its 15m swing holding. A 15m
-   `range` or `transition` here is the pause (a pullback); the class word
+   `range` or `transition` here is the pause, not chop. The class word
    is the Market state line's (`trade-session`). The label is no
    evidence of resumption either. The impulse (a 15m `displacement` the
    side's way, or the CISD's `leg`) sets the leg: measure the pullback on
