@@ -1340,14 +1340,14 @@ A wick through a swing that closes back inside is a sweep, not a break
 (the `breakout-vs-fakeout` skill).
 
 - BOS: a close beyond the last swing in the trend's direction.
+  In the
+  code, that is the previous break's direction (the first break too): a
+  continuation.
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
-- The trend is the confirmed one: it changes only when a CHoCH is
-  followed by a BOS the new way; a break back is a failed reversal; CHoCH after CHoCH, no confirming
-  BOS: unconfirmed (chop with its facts).
-  The code's `kind` compares each
-  break with the one before it; the Market state line (`trade-session`)
-  reads them against the confirmed trend.
+  A potential reversal: CHoCH then BOS: confirmed; CHoCH then CHoCH back:
+  a failed reversal (with the Day so far `rotational` or many RTH VWAP
+  crosses: chop); repeated, no BOS: unconfirmed (the Market state line).
 
 **Fields**: `m3.lastBreak.last`, `.previous` and `.before` (3m); the same
 under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
@@ -2760,14 +2760,14 @@ A wick through a swing that closes back inside is a sweep, not a break
 (the `breakout-vs-fakeout` skill).
 
 - BOS: a close beyond the last swing in the trend's direction.
+  In the
+  code, that is the previous break's direction (the first break too): a
+  continuation.
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
-- The trend is the confirmed one: it changes only when a CHoCH is
-  followed by a BOS the new way; a break back is a failed reversal; CHoCH after CHoCH, no confirming
-  BOS: unconfirmed (chop with its facts).
-  The code's `kind` compares each
-  break with the one before it; the Market state line (`trade-session`)
-  reads them against the confirmed trend.
+  A potential reversal: CHoCH then BOS: confirmed; CHoCH then CHoCH back:
+  a failed reversal (with the Day so far `rotational` or many RTH VWAP
+  crosses: chop); repeated, no BOS: unconfirmed (the Market state line).
 
 **Fields**: `m3.lastBreak.last`, `.previous` and `.before` (3m); the same
 under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
@@ -4189,14 +4189,14 @@ A wick through a swing that closes back inside is a sweep, not a break
 (the `breakout-vs-fakeout` skill).
 
 - BOS: a close beyond the last swing in the trend's direction.
+  In the
+  code, that is the previous break's direction (the first break too): a
+  continuation.
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
-- The trend is the confirmed one: it changes only when a CHoCH is
-  followed by a BOS the new way; a break back is a failed reversal; CHoCH after CHoCH, no confirming
-  BOS: unconfirmed (chop with its facts).
-  The code's `kind` compares each
-  break with the one before it; the Market state line (`trade-session`)
-  reads them against the confirmed trend.
+  A potential reversal: CHoCH then BOS: confirmed; CHoCH then CHoCH back:
+  a failed reversal (with the Day so far `rotational` or many RTH VWAP
+  crosses: chop); repeated, no BOS: unconfirmed (the Market state line).
 
 **Fields**: `m3.lastBreak.last`, `.previous` and `.before` (3m); the same
 under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
@@ -5609,14 +5609,14 @@ A wick through a swing that closes back inside is a sweep, not a break
 (the `breakout-vs-fakeout` skill).
 
 - BOS: a close beyond the last swing in the trend's direction.
+  In the
+  code, that is the previous break's direction (the first break too): a
+  continuation.
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
-- The trend is the confirmed one: it changes only when a CHoCH is
-  followed by a BOS the new way; a break back is a failed reversal; CHoCH after CHoCH, no confirming
-  BOS: unconfirmed (chop with its facts).
-  The code's `kind` compares each
-  break with the one before it; the Market state line (`trade-session`)
-  reads them against the confirmed trend.
+  A potential reversal: CHoCH then BOS: confirmed; CHoCH then CHoCH back:
+  a failed reversal (with the Day so far `rotational` or many RTH VWAP
+  crosses: chop); repeated, no BOS: unconfirmed (the Market state line).
 
 **Fields**: `m3.lastBreak.last`, `.previous` and `.before` (3m); the same
 under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
@@ -7038,14 +7038,14 @@ A wick through a swing that closes back inside is a sweep, not a break
 (the `breakout-vs-fakeout` skill).
 
 - BOS: a close beyond the last swing in the trend's direction.
+  In the
+  code, that is the previous break's direction (the first break too): a
+  continuation.
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
-- The trend is the confirmed one: it changes only when a CHoCH is
-  followed by a BOS the new way; a break back is a failed reversal; CHoCH after CHoCH, no confirming
-  BOS: unconfirmed (chop with its facts).
-  The code's `kind` compares each
-  break with the one before it; the Market state line (`trade-session`)
-  reads them against the confirmed trend.
+  A potential reversal: CHoCH then BOS: confirmed; CHoCH then CHoCH back:
+  a failed reversal (with the Day so far `rotational` or many RTH VWAP
+  crosses: chop); repeated, no BOS: unconfirmed (the Market state line).
 
 **Fields**: `m3.lastBreak.last`, `.previous` and `.before` (3m); the same
 under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
@@ -8458,14 +8458,14 @@ A wick through a swing that closes back inside is a sweep, not a break
 (the `breakout-vs-fakeout` skill).
 
 - BOS: a close beyond the last swing in the trend's direction.
+  In the
+  code, that is the previous break's direction (the first break too): a
+  continuation.
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
-- The trend is the confirmed one: it changes only when a CHoCH is
-  followed by a BOS the new way; a break back is a failed reversal; CHoCH after CHoCH, no confirming
-  BOS: unconfirmed (chop with its facts).
-  The code's `kind` compares each
-  break with the one before it; the Market state line (`trade-session`)
-  reads them against the confirmed trend.
+  A potential reversal: CHoCH then BOS: confirmed; CHoCH then CHoCH back:
+  a failed reversal (with the Day so far `rotational` or many RTH VWAP
+  crosses: chop); repeated, no BOS: unconfirmed (the Market state line).
 
 **Fields**: `m3.lastBreak.last`, `.previous` and `.before` (3m); the same
 under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
@@ -9878,14 +9878,14 @@ A wick through a swing that closes back inside is a sweep, not a break
 (the `breakout-vs-fakeout` skill).
 
 - BOS: a close beyond the last swing in the trend's direction.
+  In the
+  code, that is the previous break's direction (the first break too): a
+  continuation.
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
-- The trend is the confirmed one: it changes only when a CHoCH is
-  followed by a BOS the new way; a break back is a failed reversal; CHoCH after CHoCH, no confirming
-  BOS: unconfirmed (chop with its facts).
-  The code's `kind` compares each
-  break with the one before it; the Market state line (`trade-session`)
-  reads them against the confirmed trend.
+  A potential reversal: CHoCH then BOS: confirmed; CHoCH then CHoCH back:
+  a failed reversal (with the Day so far `rotational` or many RTH VWAP
+  crosses: chop); repeated, no BOS: unconfirmed (the Market state line).
 
 **Fields**: `m3.lastBreak.last`, `.previous` and `.before` (3m); the same
 under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
@@ -11395,14 +11395,14 @@ A wick through a swing that closes back inside is a sweep, not a break
 (the `breakout-vs-fakeout` skill).
 
 - BOS: a close beyond the last swing in the trend's direction.
+  In the
+  code, that is the previous break's direction (the first break too): a
+  continuation.
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
-- The trend is the confirmed one: it changes only when a CHoCH is
-  followed by a BOS the new way; a break back is a failed reversal; CHoCH after CHoCH, no confirming
-  BOS: unconfirmed (chop with its facts).
-  The code's `kind` compares each
-  break with the one before it; the Market state line (`trade-session`)
-  reads them against the confirmed trend.
+  A potential reversal: CHoCH then BOS: confirmed; CHoCH then CHoCH back:
+  a failed reversal (with the Day so far `rotational` or many RTH VWAP
+  crosses: chop); repeated, no BOS: unconfirmed (the Market state line).
 
 **Fields**: `m3.lastBreak.last`, `.previous` and `.before` (3m); the same
 under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
@@ -12909,14 +12909,14 @@ A wick through a swing that closes back inside is a sweep, not a break
 (the `breakout-vs-fakeout` skill).
 
 - BOS: a close beyond the last swing in the trend's direction.
+  In the
+  code, that is the previous break's direction (the first break too): a
+  continuation.
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
-- The trend is the confirmed one: it changes only when a CHoCH is
-  followed by a BOS the new way; a break back is a failed reversal; CHoCH after CHoCH, no confirming
-  BOS: unconfirmed (chop with its facts).
-  The code's `kind` compares each
-  break with the one before it; the Market state line (`trade-session`)
-  reads them against the confirmed trend.
+  A potential reversal: CHoCH then BOS: confirmed; CHoCH then CHoCH back:
+  a failed reversal (with the Day so far `rotational` or many RTH VWAP
+  crosses: chop); repeated, no BOS: unconfirmed (the Market state line).
 
 **Fields**: `m3.lastBreak.last`, `.previous` and `.before` (3m); the same
 under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
@@ -14417,14 +14417,14 @@ A wick through a swing that closes back inside is a sweep, not a break
 (the `breakout-vs-fakeout` skill).
 
 - BOS: a close beyond the last swing in the trend's direction.
+  In the
+  code, that is the previous break's direction (the first break too): a
+  continuation.
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
-- The trend is the confirmed one: it changes only when a CHoCH is
-  followed by a BOS the new way; a break back is a failed reversal; CHoCH after CHoCH, no confirming
-  BOS: unconfirmed (chop with its facts).
-  The code's `kind` compares each
-  break with the one before it; the Market state line (`trade-session`)
-  reads them against the confirmed trend.
+  A potential reversal: CHoCH then BOS: confirmed; CHoCH then CHoCH back:
+  a failed reversal (with the Day so far `rotational` or many RTH VWAP
+  crosses: chop); repeated, no BOS: unconfirmed (the Market state line).
 
 **Fields**: `m3.lastBreak.last`, `.previous` and `.before` (3m); the same
 under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
@@ -15852,14 +15852,14 @@ A wick through a swing that closes back inside is a sweep, not a break
 (the `breakout-vs-fakeout` skill).
 
 - BOS: a close beyond the last swing in the trend's direction.
+  In the
+  code, that is the previous break's direction (the first break too): a
+  continuation.
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
-- The trend is the confirmed one: it changes only when a CHoCH is
-  followed by a BOS the new way; a break back is a failed reversal; CHoCH after CHoCH, no confirming
-  BOS: unconfirmed (chop with its facts).
-  The code's `kind` compares each
-  break with the one before it; the Market state line (`trade-session`)
-  reads them against the confirmed trend.
+  A potential reversal: CHoCH then BOS: confirmed; CHoCH then CHoCH back:
+  a failed reversal (with the Day so far `rotational` or many RTH VWAP
+  crosses: chop); repeated, no BOS: unconfirmed (the Market state line).
 
 **Fields**: `m3.lastBreak.last`, `.previous` and `.before` (3m); the same
 under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
@@ -17369,14 +17369,14 @@ A wick through a swing that closes back inside is a sweep, not a break
 (the `breakout-vs-fakeout` skill).
 
 - BOS: a close beyond the last swing in the trend's direction.
+  In the
+  code, that is the previous break's direction (the first break too): a
+  continuation.
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
-- The trend is the confirmed one: it changes only when a CHoCH is
-  followed by a BOS the new way; a break back is a failed reversal; CHoCH after CHoCH, no confirming
-  BOS: unconfirmed (chop with its facts).
-  The code's `kind` compares each
-  break with the one before it; the Market state line (`trade-session`)
-  reads them against the confirmed trend.
+  A potential reversal: CHoCH then BOS: confirmed; CHoCH then CHoCH back:
+  a failed reversal (with the Day so far `rotational` or many RTH VWAP
+  crosses: chop); repeated, no BOS: unconfirmed (the Market state line).
 
 **Fields**: `m3.lastBreak.last`, `.previous` and `.before` (3m); the same
 under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
@@ -18877,14 +18877,14 @@ A wick through a swing that closes back inside is a sweep, not a break
 (the `breakout-vs-fakeout` skill).
 
 - BOS: a close beyond the last swing in the trend's direction.
+  In the
+  code, that is the previous break's direction (the first break too): a
+  continuation.
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
-- The trend is the confirmed one: it changes only when a CHoCH is
-  followed by a BOS the new way; a break back is a failed reversal; CHoCH after CHoCH, no confirming
-  BOS: unconfirmed (chop with its facts).
-  The code's `kind` compares each
-  break with the one before it; the Market state line (`trade-session`)
-  reads them against the confirmed trend.
+  A potential reversal: CHoCH then BOS: confirmed; CHoCH then CHoCH back:
+  a failed reversal (with the Day so far `rotational` or many RTH VWAP
+  crosses: chop); repeated, no BOS: unconfirmed (the Market state line).
 
 **Fields**: `m3.lastBreak.last`, `.previous` and `.before` (3m); the same
 under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
@@ -20385,14 +20385,14 @@ A wick through a swing that closes back inside is a sweep, not a break
 (the `breakout-vs-fakeout` skill).
 
 - BOS: a close beyond the last swing in the trend's direction.
+  In the
+  code, that is the previous break's direction (the first break too): a
+  continuation.
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
-- The trend is the confirmed one: it changes only when a CHoCH is
-  followed by a BOS the new way; a break back is a failed reversal; CHoCH after CHoCH, no confirming
-  BOS: unconfirmed (chop with its facts).
-  The code's `kind` compares each
-  break with the one before it; the Market state line (`trade-session`)
-  reads them against the confirmed trend.
+  A potential reversal: CHoCH then BOS: confirmed; CHoCH then CHoCH back:
+  a failed reversal (with the Day so far `rotational` or many RTH VWAP
+  crosses: chop); repeated, no BOS: unconfirmed (the Market state line).
 
 **Fields**: `m3.lastBreak.last`, `.previous` and `.before` (3m); the same
 under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
@@ -21827,14 +21827,14 @@ A wick through a swing that closes back inside is a sweep, not a break
 (the `breakout-vs-fakeout` skill).
 
 - BOS: a close beyond the last swing in the trend's direction.
+  In the
+  code, that is the previous break's direction (the first break too): a
+  continuation.
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
-- The trend is the confirmed one: it changes only when a CHoCH is
-  followed by a BOS the new way; a break back is a failed reversal; CHoCH after CHoCH, no confirming
-  BOS: unconfirmed (chop with its facts).
-  The code's `kind` compares each
-  break with the one before it; the Market state line (`trade-session`)
-  reads them against the confirmed trend.
+  A potential reversal: CHoCH then BOS: confirmed; CHoCH then CHoCH back:
+  a failed reversal (with the Day so far `rotational` or many RTH VWAP
+  crosses: chop); repeated, no BOS: unconfirmed (the Market state line).
 
 **Fields**: `m3.lastBreak.last`, `.previous` and `.before` (3m); the same
 under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
@@ -23260,14 +23260,14 @@ A wick through a swing that closes back inside is a sweep, not a break
 (the `breakout-vs-fakeout` skill).
 
 - BOS: a close beyond the last swing in the trend's direction.
+  In the
+  code, that is the previous break's direction (the first break too): a
+  continuation.
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
-- The trend is the confirmed one: it changes only when a CHoCH is
-  followed by a BOS the new way; a break back is a failed reversal; CHoCH after CHoCH, no confirming
-  BOS: unconfirmed (chop with its facts).
-  The code's `kind` compares each
-  break with the one before it; the Market state line (`trade-session`)
-  reads them against the confirmed trend.
+  A potential reversal: CHoCH then BOS: confirmed; CHoCH then CHoCH back:
+  a failed reversal (with the Day so far `rotational` or many RTH VWAP
+  crosses: chop); repeated, no BOS: unconfirmed (the Market state line).
 
 **Fields**: `m3.lastBreak.last`, `.previous` and `.before` (3m); the same
 under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
@@ -24603,14 +24603,14 @@ A wick through a swing that closes back inside is a sweep, not a break
 (the `breakout-vs-fakeout` skill).
 
 - BOS: a close beyond the last swing in the trend's direction.
+  In the
+  code, that is the previous break's direction (the first break too): a
+  continuation.
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
-- The trend is the confirmed one: it changes only when a CHoCH is
-  followed by a BOS the new way; a break back is a failed reversal; CHoCH after CHoCH, no confirming
-  BOS: unconfirmed (chop with its facts).
-  The code's `kind` compares each
-  break with the one before it; the Market state line (`trade-session`)
-  reads them against the confirmed trend.
+  A potential reversal: CHoCH then BOS: confirmed; CHoCH then CHoCH back:
+  a failed reversal (with the Day so far `rotational` or many RTH VWAP
+  crosses: chop); repeated, no BOS: unconfirmed (the Market state line).
 
 **Fields**: `m3.lastBreak.last`, `.previous` and `.before` (3m); the same
 under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);

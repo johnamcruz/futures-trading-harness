@@ -48,7 +48,11 @@ test('pullback line: the runner\'s briefing carries the read of its own bars, on
   // Another read is said; the rest of the text unchanged.
   const deep = B.renderBriefing(withPb(b, DEEP));
   assert.match(deep, /- Pullback \(15m, short leg 21600 -> 21500\): the leg given back past its origin; 30 bars since the extreme; swings since the extreme: 15m 21600 broken by a close, 1h 21640 holds; 15m break against: CHoCH up 21590 \(2 bars ago\), 1h: CHoCH up 21610 \(0 bars ago\); stacked\./);
-  assert.deepStrictEqual(deep.split('\n').filter(l => !l.startsWith('- Pullback (')), text.split('\n').filter(l => !l.startsWith('- Pullback (')));
+  // The Market state line carries the read too (its pullback clause, market-state.js): a given-back leg prints none.
+  const other = t => t.split('\n').filter(l => !l.startsWith('- Pullback (') && !l.startsWith('- Market state ('));
+  assert.deepStrictEqual(other(deep), other(text));
+  assert.match(text, /\n- Market state \(3m\): [^\n]*; pullback \(/);
+  assert.doesNotMatch(deep, /\n- Market state \(3m\): [^\n]*; pullback \(/);
   // Without one (with the trend, or an older file), no line.
   assert.deepStrictEqual(lineOf(B.renderBriefing(withPb(b, undefined))), []);
 });

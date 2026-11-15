@@ -251,10 +251,9 @@ const PINS = {
   'bos-vs-choch': [
     'Confirmed fractal swings (k=2: a pivot with 2 strictly lower highs or higher lows on each side, confirmed 2 bars later).',
     'A close strictly beyond the last confirmed swing not yet broken; each swing breaks once. Only closes count, on completed candles.',
-    // The owner's labelling rule (feat/chop-read, 2026-11-14): BOS and CHoCH against the confirmed trend; the code's kind
-    // compares each break with the one before it, and the Market state line reads them the owner's way.
-    'The trend is the confirmed one: it changes only when a CHoCH is followed by a BOS the new way;',
-    'The code\'s `kind` compares each break with the one before it;',
+    'In the code, that is the previous break\'s direction (the first break too)',
+    // The owner's reading (feat/chop-read, 2026-11-14): CHoCH then BOS confirms; CHoCH then CHoCH back a failed reversal.
+    'A potential reversal: CHoCH then BOS: confirmed; CHoCH then CHoCH back: a failed reversal (with the Day so far `rotational` or many RTH VWAP crosses: chop);',
     'No one timeframe is the signal; read them top-down.',
     '| 3m, 5m | a candle fact only: never the setup, never a wait (unless a `Pullback` line is printed: `pullback-vs-reversal`) | a candle fact only (its swings are the stop\'s) |',
     '| 15m | the working structure continues | the working structure shifting: a deeper pullback, or a reversal starting |',

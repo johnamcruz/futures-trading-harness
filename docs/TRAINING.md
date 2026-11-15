@@ -1800,25 +1800,27 @@ Frozen definitions:
   only; B: chop outnumbers trend; D: both, trend at least chop.
 - **The coded read** = the briefing's Market state (scripts/lib/trading/
   market-state.js `readState`, the one definition the summary line prints;
-  the Market state pull request): pullback and trending read
-  `trend-<way>`, chop reads `chop`, not aligned reads `unclear`. The
-  precedence, once: pullback (the 4h and 1h both one way and an open
-  `Pullback` line their way), chop (the 3m breaking both ways, its last
-  and previous breaks both CHoCH, and either the day so far rotational or
-  its RTH VWAP crosses, the Day so far line's count, at or above
-  `signals.crossesChop`; never one fact alone; no open `Pullback` line;
-  aligned or not), trending (aligned), not aligned. Chop ends on the last
-  CHoCH followed by a live 3m CISD its way confirmed on a later candle, or
-  on a close beyond the initial balance (complete from 10:30 ET) with the
-  previous break inside it and the last break that way; a CHoCH then a BOS
-  is not the pair. A chop ended against the alignment reads not aligned.
-  It is never the model's. Against the coded read before it, the only
-  difference is a `Pullback` leg against the 4h and 1h (not on a live
-  briefing): it no longer blocks chop; the chop's end is new. (`day-context`'s
-  `daySoFar` config has no crosses threshold, so the existing
-  `crossesChop` is used: 5 is a 30-bar-window count, applied here to the
-  whole RTH morning's RTH VWAP crosses; the skills' "many" is
-  unquantified; the briefing passes config/analysis.json
+  the Market state pull request), the class word of its table: chop reads
+  `chop`; the 4h and 1h not both one way read `unclear`; a pullback read
+  their way (an open `Pullback` line, or the 15m trending their way under a
+  3m trend against it) reads `trend-<way>`; a 3m trend their way, or
+  ranging under them, reads `trend-<way>`; a 3m trend against them reads
+  `unclear`. The 3m state, once: chop (the last two 3m breaks both CHoCH,
+  and either the day so far rotational or its RTH VWAP crosses, the Day so
+  far line's count, at or above `signals.crossesChop`; never one fact
+  alone; no open `Pullback` line; no confirmed turn), trend (the owner's
+  reading on the last break's labels: a BOS, a CHoCH then a BOS the same way,
+  or a CHoCH then a CHoCH back, a failed reversal, the trend before being
+  the break before the pair, else the 4h and 1h way; or a CHoCH confirmed
+  by a live 3m CISD its way on a later candle, or by a close beyond the
+  initial balance, complete from 10:30 ET, with the previous break inside
+  it), else ranging. It is never the model's. Against the coded read before
+  it, it differs where the 4h and 1h agree, the 3m's last break is a BOS
+  against them and no pullback read runs their way (old trend, new
+  `unclear`). (`day-context`'s `daySoFar` config has no crosses
+  threshold, so the existing `crossesChop` is used: 5 is a 30-bar-window
+  count, applied here to the whole RTH morning's RTH VWAP crosses; the
+  skills' "many" is unquantified; the briefing passes config/analysis.json
   `regime.rangeCrosses`, pinned equal. C7 still reads the session crosses,
   as frozen.)
 - **Three reads, kept apart** (the chop pull request):

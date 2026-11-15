@@ -11,6 +11,8 @@ const S0 = Date.parse('2021-06-11T13:33:00.000Z');
 const met = ids => ids.map(([id, field]) => ({ id, field }));
 const key = (o = {}) => ({
   biasSide: 'long', cls: { long: 'C', short: 'B', none: 'A' },
+  // The Market state the coded read restates (market-state.js; presentKey carries it): a 3m trend up under 4h + 1h up.
+  state: { state: 'trend', way: 'up', align: 'up', pullback: null, early: false },
   facts: { frames: { '4h': 'up', '1h': 'up', '15m': 'up' }, regime: 'trend-up', day: { word: 'mixed', dir: null }, declared: { long: true, short: false } },
   signals: { long: { c: [], t: ['T2', 'T3'], met: met([['T2', '15m'], ['T3', 'regime']]) }, short: { c: ['C9'], t: [], met: met([['C9', '15m']]) }, none: { c: [], t: [], met: [] } },
   ...o,

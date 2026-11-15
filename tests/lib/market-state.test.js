@@ -49,7 +49,7 @@ test('chopMet: the 3m breaks both ways AND the Day so far rotational or its RTH 
 test('the state, once: chop (the facts, no open Pullback line, no confirmed turn) > trend (a BOS, or a confirmed CHoCH) > ranging; the alignment never decides it', () => {
   assert.strictEqual(st(CHOP), 'chop');
   assert.strictEqual(st({ ...CHOP, h4: 'range' }), 'chop', 'aligned or not');
-  assert.strictEqual(st({ ...CHOP, pullback: pb() }), 'ranging', 'an open Pullback line excludes chop: the pair is ranging');
+  assert.strictEqual(st({ ...CHOP, pullback: pb() }), 'trend', 'an open Pullback line excludes chop: the pair back the 4h + 1h way is a failed reversal');
   assert.deepStrictEqual([st({ lastBreak: BOS_UP }), S({ lastBreak: BOS_UP }).way], ['trend', 'up']);
   assert.deepStrictEqual([st({ lastBreak: BOS_DN }), S({ lastBreak: BOS_DN }).way], ['trend', 'down'], 'a 3m trend against the 4h + 1h is still the 3m trend');
   assert.strictEqual(st({ lastBreak: BOS_UP, h4: 'range' }), 'trend', 'not aligned: still the 3m trend');
@@ -58,7 +58,8 @@ test('the state, once: chop (the facts, no open Pullback line, no confirmed turn
   assert.strictEqual(st({ lastBreak: ONE, soFar: day('rotational', 9) }), 'ranging', 'one chop fact: ranging');
   assert.strictEqual(st({ ...CHOP, pullback: pb({ pastOrigin: true }) }), 'chop', 'a given-back Pullback line is not open');
   assert.strictEqual(st({ ...CHOP, pullback: pb({ pastOrigin: undefined, depth: 1.1 }) }), 'chop', 'an older record: depth >= 1 is given back');
-  assert.strictEqual(st({ ...CHOP, pullback: pb({ side: 'short' }) }), 'ranging', 'any open Pullback line excludes chop');
+  assert.strictEqual(st({ ...CHOP, pullback: pb({ side: 'short' }) }), 'trend', 'any open Pullback line excludes chop');
+  assert.strictEqual(st({ ...CHOP, pullback: pb(), h4: 'range' }), 'ranging', 'not aligned, the break before unknown: the pair unconfirmed');
 });
 
 test('a CHoCH then a BOS the same way is a BOS: trend (pinned)', () => {
@@ -69,7 +70,7 @@ test('a CHoCH then a BOS the same way is a BOS: trend (pinned)', () => {
 test('a CHoCH then a live 3m CISD the same way, confirmed on a later candle: trend; it ends a chop (causal)', () => {
   const c = at => ({ ...CHOP, m3: { cisd: cisd('bullish', at) } });
   assert.deepStrictEqual([st(c(T(36))), S(c(T(36))).way], ['trend', 'up']);
-  assert.strictEqual(line(c(T(36))), 'Market state (3m): trend up: 3m breaks alternating down, up (repeated potential reversals, none confirmed), then a 3m CISD up (confirmed); the chop ended; 4h+1h up');
+  assert.strictEqual(line(c(T(36))), 'Market state (3m): trend up: 3m CHoCH down then CHoCH up back (failed reversal; continuation up), then a 3m CISD up (confirmed); the chop ended; 4h+1h up');
   assert.strictEqual(st(c(T(30))), 'chop', 'confirmed on the CHoCH\'s own candle: not after it');
   assert.strictEqual(st(c(T(24))), 'chop', 'before the CHoCH');
   assert.strictEqual(st({ ...CHOP, m3: { cisd: cisd('bearish', T(36)) } }), 'chop', 'the other way');
@@ -84,15 +85,15 @@ test('a CHoCH then a live 3m CISD the same way, confirmed on a later candle: tre
 test('a CHoCH and a close beyond the initial balance it rotated in: trend; the IB complete, the previous break inside it', () => {
   const ib = { ibHigh: 21560, ibLow: 21480 };
   const at = (price, today = ib, o = {}) => ({ ...CHOP, ...o, m3: { price, today: { ...today, soFar: day('rotational', 7) } } });
-  assert.strictEqual(line(at(21563.25)), 'Market state (3m): trend up: 3m breaks alternating down, up (repeated potential reversals, none confirmed), then a close above the IB high 21560 (confirmed); the chop ended; 4h+1h up');
-  assert.strictEqual(line(at(21559.75)), 'Market state (3m): chop: 3m breaks alternating down, up (repeated potential reversals, none confirmed); Day so far rotational, RTH VWAP crosses 7; 4h+1h up', 'inside the range');
+  assert.strictEqual(line(at(21563.25)), 'Market state (3m): trend up: 3m CHoCH down then CHoCH up back (failed reversal; continuation up), then a close above the IB high 21560 (confirmed); the chop ended; 4h+1h up');
+  assert.strictEqual(line(at(21559.75)), 'Market state (3m): chop: 3m CHoCH down then CHoCH up (back and forth); Day so far rotational, RTH VWAP crosses 7; 4h+1h up', 'inside the range');
   assert.strictEqual(st(at(21563.25, { ibHigh: null, ibLow: null })), 'chop', 'the IB not complete: before 10:30 only a BOS or CISD ends it');
   const above = { last: brk('CHoCH', 'up', 21570.25, 30), previous: brk('CHoCH', 'down', 21562.75, 18) };
   assert.strictEqual(st(at(21573.25, ib, { lastBreak: above })), 'chop', 'both breaks beyond the IB: a new chop there');
   const down = { last: brk('CHoCH', 'down', 21562.25, 30), previous: brk('CHoCH', 'up', 21540.75, 18) };
   assert.strictEqual(st(at(21561.25, ib, { lastBreak: down })), 'chop', 'above the IB but the last break down');
   const low = { last: brk('CHoCH', 'down', 21481.25, 30), previous: brk('CHoCH', 'up', 21500.75, 18) };
-  assert.strictEqual(line(at(21477.75, ib, { lastBreak: low, h4: 'down', h1: 'down' })), 'Market state (3m): trend down: 3m breaks alternating up, down (repeated potential reversals, none confirmed), then a close below the IB low 21480 (confirmed); the chop ended; 4h+1h down');
+  assert.strictEqual(line(at(21477.75, ib, { lastBreak: low, h4: 'down', h1: 'down' })), 'Market state (3m): trend down: 3m CHoCH up then CHoCH down back (failed reversal; continuation down), then a close below the IB low 21480 (confirmed); the chop ended; 4h+1h down');
 });
 
 test('ranging prints its 3m breaks and whether price is inside the complete IB', () => {
@@ -107,7 +108,7 @@ test('ranging prints its 3m breaks and whether price is inside the complete IB',
 test('the Pullback read is no state: printed under trend or ranging whenever its line is open; it never makes chop', () => {
   assert.strictEqual(line({ lastBreak: BOS_UP, pullback: pb() }), 'Market state (3m): trend up: 3m BOS up (continuation); pullback (long leg 21361.25 -> 21437.5, depth 28%); 4h+1h up');
   assert.strictEqual(line({ lastBreak: ONE, pullback: pb() }), 'Market state (3m): ranging: 3m BOS down then CHoCH up (potential reversal, unconfirmed); pullback (long leg 21361.25 -> 21437.5, depth 28%); 4h+1h up');
-  assert.strictEqual(line({ ...CHOP, pullback: pb({ leg: { ...LEG, atr: 0.5 } }) }), 'Market state (3m): ranging: 3m breaks alternating down, up (repeated potential reversals, none confirmed); pullback (long leg 21361.25 -> 21437.5, small leg); 4h+1h up');
+  assert.strictEqual(line({ ...CHOP, pullback: pb({ leg: { ...LEG, atr: 0.5 } }) }), 'Market state (3m): trend up: 3m CHoCH down then CHoCH up back (failed reversal; continuation up); pullback (long leg 21361.25 -> 21437.5, small leg); 4h+1h up');
   assert.strictEqual(line({ lastBreak: BOS_UP, pullback: pb({ pastOrigin: true }) }), 'Market state (3m): trend up: 3m BOS up (continuation); 4h+1h up', 'given back: no read');
 });
 
@@ -164,23 +165,27 @@ test('the briefing\'s chop threshold equals the recognition key\'s', () => {
   assert.strictEqual(analysis().regime.rangeCrosses, rec.signals.crossesChop);
 });
 
-// The owner's structure-sequence reading and labelling rule (2026-11-14): BOS is a break the CONFIRMED trend's way,
-// CHoCH a break against it (no flip); the trend changes only when a CHoCH is followed by a break the new way. structure-
-// events.js labels against the last break, so the confirmed trend is the way of the most recent code BOS (two breaks in a
-// row one way). On the last three breaks (last, previous, before): a code CHoCH after an opposite code CHoCH whose own
-// previous break was a code BOS the last's way is the owner's BOS (a failed reversal: the trend continues); with the break
-// before a CHoCH too, or unknown, it is the repeated-CHoCH pattern (unconfirmed: chop with its facts, else ranging).
-test('the owner\'s sequence table, every row, and the repeated CHoCH: the state and the printed reading', () => {
+// The owner's structure-sequence reading (2026-11-14, his correction: "CHoCH then CHoCH = failed reversal"): his BOS and
+// CHoCH are relative to the last break, as structure-events.js labels them (BOS continues it, CHoCH changes direction, a
+// potential reversal). CHoCH then BOS the same way: a confirmed transition; a CHoCH against the trend, then a CHoCH back:
+// one back-and-forth, a failed reversal (the trend continues), chop with the chop facts; repeated CHoCH with no BOS:
+// unconfirmed, chop with the facts, else ranging. The trend before: the break before the pair, else the 4h + 1h way.
+test('the owner\'s sequence reading (labels relative to the last break), every row: the state and the printed reading', () => {
   const B = (kind, direction, at) => ({ kind, direction, level: 21500, at: T(at) });
   const row = (lastBreak, o = {}) => { const s = S({ lastBreak, ...o }); return [s.state, s.way, M.marketStateLine(s)]; };
   // Bearish trend -> bullish CHoCH -> bullish BOS: a confirmed bullish transition.
   assert.deepStrictEqual(row({ last: B('BOS', 'up', 36), previous: B('CHoCH', 'up', 24), before: B('BOS', 'down', 12) }), ['trend', 'up', 'Market state (3m): trend up: 3m CHoCH up then BOS up (confirmed transition up); 4h+1h up']);
   // Bullish trend -> bearish CHoCH -> bearish BOS: a confirmed bearish transition.
   assert.deepStrictEqual(row({ last: B('BOS', 'down', 36), previous: B('CHoCH', 'down', 24), before: B('BOS', 'up', 12) }, { h4: 'down', h1: 'down' }), ['trend', 'down', 'Market state (3m): trend down: 3m CHoCH down then BOS down (confirmed transition down); 4h+1h down']);
-  // Bullish trend -> bearish CHoCH -> bullish BOS: a failed bearish reversal, the trend up continues; never chop.
-  assert.deepStrictEqual(row({ last: B('CHoCH', 'up', 36), previous: B('CHoCH', 'down', 24), before: B('BOS', 'up', 12) }, { soFar: day('rotational', 9) }), ['trend', 'up', 'Market state (3m): trend up: 3m CHoCH down then BOS up (failed reversal; continuation up); 4h+1h up']);
-  // Bearish trend -> bullish CHoCH -> bearish BOS: a failed bullish reversal, the trend down continues.
-  assert.deepStrictEqual(row({ last: B('CHoCH', 'down', 36), previous: B('CHoCH', 'up', 24), before: B('BOS', 'down', 12) }, { h4: 'down', h1: 'down' }), ['trend', 'down', 'Market state (3m): trend down: 3m CHoCH up then BOS down (failed reversal; continuation down); 4h+1h down']);
+  // Up trend (a BOS run up) -> CHoCH down -> CHoCH back up: one back-and-forth, a failed reversal: the trend up continues;
+  // with the chop facts (rotational or the crosses, no open Pullback line) it is chop.
+  const fr = { last: B('CHoCH', 'up', 36), previous: B('CHoCH', 'down', 24), before: B('BOS', 'up', 12) };
+  assert.deepStrictEqual(row(fr, { soFar: day('mixed', 2) }), ['trend', 'up', 'Market state (3m): trend up: 3m CHoCH down then CHoCH up back (failed reversal; continuation up); 4h+1h up']);
+  assert.deepStrictEqual(row(fr, { soFar: day('rotational', 2) }), ['chop', null, 'Market state (3m): chop: 3m CHoCH down then CHoCH up (back and forth); Day so far rotational; 4h+1h up']);
+  assert.strictEqual(row(fr, { soFar: day('rotational', 2), pullback: pb() })[0], 'trend', 'an open Pullback line: never chop, the failed reversal');
+  assert.strictEqual(row(fr, { soFar: day('mixed', 2), h4: 'range' })[0], 'trend', 'the break before known: the 3m trend, whatever the 4h + 1h');
+  // Down trend -> CHoCH up -> CHoCH back down: a failed reversal, the trend down continues.
+  assert.deepStrictEqual(row({ last: B('CHoCH', 'down', 36), previous: B('CHoCH', 'up', 24), before: B('BOS', 'down', 12) }, { h4: 'down', h1: 'down' }), ['trend', 'down', 'Market state (3m): trend down: 3m CHoCH up then CHoCH down back (failed reversal; continuation down); 4h+1h down']);
   // Bullish trend -> bearish CHoCH, no bearish BOS yet: the reversal unconfirmed: ranging.
   assert.deepStrictEqual(row({ last: B('CHoCH', 'down', 36), previous: B('BOS', 'up', 24) }, { soFar: day('rotational', 9) }), ['ranging', null, 'Market state (3m): ranging: 3m BOS up then CHoCH down (potential reversal, unconfirmed); 4h+1h up']);
   // Bearish trend -> bullish CHoCH, no bullish BOS yet: ranging.
@@ -188,13 +193,17 @@ test('the owner\'s sequence table, every row, and the repeated CHoCH: the state 
   // Repeated CHoCH (CHoCH, BOS back, CHoCH, ... no confirming BOS the new way): the code's CHoCH, CHoCH, CHoCH:
   // unconfirmed: chop with its facts, else ranging.
   const rep = { last: B('CHoCH', 'up', 36), previous: B('CHoCH', 'down', 24), before: B('CHoCH', 'up', 12) };
-  assert.deepStrictEqual(row(rep, { soFar: day('rotational', 2) }), ['chop', null, 'Market state (3m): chop: 3m breaks alternating down, up (repeated potential reversals, none confirmed); Day so far rotational; 4h+1h up']);
+  assert.deepStrictEqual(row(rep, { soFar: day('rotational', 2) }), ['chop', null, 'Market state (3m): chop: 3m CHoCH down then CHoCH up (back and forth); Day so far rotational; 4h+1h up']);
   assert.deepStrictEqual(row(rep, { soFar: day('mixed', 2) }), ['ranging', null, 'Market state (3m): ranging: 3m breaks alternating down, up (repeated potential reversals, none confirmed); 4h+1h up']);
   const repD = { last: B('CHoCH', 'down', 36), previous: B('CHoCH', 'up', 24), before: B('CHoCH', 'down', 12) };
   assert.strictEqual(row(repD, { soFar: day('mixed', 6) })[0], 'chop');
   assert.strictEqual(row(repD, { soFar: day('mixed', 4) })[0], 'ranging');
-  // The break before not printed (an older record, the quiz's two-break lines): the repeated pattern, as before.
-  assert.strictEqual(row({ last: B('CHoCH', 'up', 36), previous: B('CHoCH', 'down', 24) }, { soFar: day('rotational', 9) })[0], 'chop');
+  // The break before not printed (an older record, the quiz's two-break lines): the trend before taken as the 4h + 1h way.
+  const two = { last: B('CHoCH', 'up', 36), previous: B('CHoCH', 'down', 24) };
+  assert.deepStrictEqual(row(two, { soFar: day('mixed', 2) }).slice(0, 2), ['trend', 'up'], 'back the aligned way: a failed reversal');
+  assert.deepStrictEqual(row(two, { soFar: day('mixed', 2), h4: 'down', h1: 'down' }).slice(0, 2), ['ranging', null], 'against the aligned way: unconfirmed');
+  assert.deepStrictEqual(row(two, { soFar: day('mixed', 2), h4: 'range' }).slice(0, 2), ['ranging', null], 'not aligned: unconfirmed');
+  assert.strictEqual(row(two, { soFar: day('rotational', 9) })[0], 'chop', 'with the chop facts: chop');
   // Two bullish BOS; one bullish BOS; one bullish CHoCH alone.
   assert.strictEqual(row({ last: B('BOS', 'up', 36), previous: B('BOS', 'up', 24) })[2], 'Market state (3m): trend up: 3m BOS up (continuation); 4h+1h up');
   assert.strictEqual(row({ last: B('BOS', 'up', 36), previous: null })[2], 'Market state (3m): trend up: 3m BOS up (continuation); 4h+1h up');

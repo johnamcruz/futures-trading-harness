@@ -266,7 +266,7 @@ test('context quiz: the chop-read questions (q113-q127, less q116, q120 and q122
     ['q124', 'head', undefined, 'F2', /chop ends: a CHoCH then a BOS or CISD the same way/g],
     ['q125', 'head', undefined, 'F2', /or a close beyond the range \(the IB; before 10:30 only a BOS or CISD ends it\)/g],
     // The owner: "BOS is same-trend continuation, while CHoCH is a potential reversal" (bos-vs-choch, a lookup).
-    ['q127', 'lookup', ['bos-vs-choch'], 'a potential reversal, unconfirmed: watch for the next BOS either way', /The trend is the confirmed one: it changes only when a CHoCH is followed by a BOS the new way/g],
+    ['q127', 'lookup', ['bos-vs-choch'], 'a potential reversal, unconfirmed: watch for the next BOS either way', /A potential reversal: CHoCH then BOS: confirmed/g],
     // The owner: "15min up trend, 3min down trend could mean pullback".
     ['q126', 'head', undefined, 'a pullback in the 15m trend: class trend-up; watch for the 15m turn, then a 3m BOS or CISD up', /a 3m trend against inside it is the pullback, not a new trend/g],
   ];

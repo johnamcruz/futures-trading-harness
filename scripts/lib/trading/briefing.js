@@ -217,7 +217,7 @@ const brief = (f, level = round2) => (f ? {
 /** The break before the previous one (breaksOf's third-last) in lastBreaks' shape, or null: causal, closed bars only. */
 function breakBefore(bars) {
   const all = breaksOf(bars);
-  const x = all.length >= 3 ? all[all.length - 3] : null;
+  const x = [...all].reverse()[2]; // the third-last, or undefined
   return x ? { kind: x.kind, direction: x.direction, level: x.level, swingAt: x.swingAt, at: x.at, barsAgo: bars.length - 1 - x.i } : null;
 }
 /** A higher timeframe's break: its times are candle opens (as on the 3m), and knownAt is the breaking candle's close. */
