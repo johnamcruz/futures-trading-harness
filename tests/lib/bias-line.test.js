@@ -80,3 +80,24 @@ test('parity: on the BG census fixture the Bias line\'s side is the gate\'s verd
   assert.deepStrictEqual(off, []);
   assert.ok(ROWS.length === 200);
 });
+
+// The class side (feat/chop-read, owner: "add class side now if it provides improvements"): a printed, taught-only fact
+// under the Bias line, from the same 4h and 1h trends the gate reads: the side a trend class may take (strict: both one
+// way). It never says unclear (choppy movement is still chop) and no gate path reads it.
+test('Class side (4h + 1h): up or down when both trend one way, none otherwise (the Bias line is the gate\'s floor), unknown when missing', () => {
+  const { classSideLine } = require('../../scripts/lib/trading/bias-line');
+  assert.strictEqual(classSideLine(bar(1, 1, -1)), 'Class side (4h + 1h): up (4h up, 1h up)');
+  assert.strictEqual(classSideLine(bar(-1, -1, 1)), 'Class side (4h + 1h): down (4h down, 1h down)');
+  const none = 'no trend class; the Bias line above is the gate\'s floor, not your class';
+  assert.strictEqual(classSideLine(bar(0, 1, 1)), `Class side (4h + 1h): none (4h range, 1h up): ${none}`);
+  assert.strictEqual(classSideLine(bar(1, 0, 1)), `Class side (4h + 1h): none (4h up, 1h range): ${none}`);
+  assert.strictEqual(classSideLine(bar(1, -1, 1)), `Class side (4h + 1h): none (4h up, 1h down): ${none}`);
+  assert.strictEqual(classSideLine(bar(0, 0, 1)), `Class side (4h + 1h): none (4h range, 1h range): ${none}`);
+  for (const s of [bar(0, 1, 1), bar(1, 1, 1)]) assert.doesNotMatch(classSideLine(s), /unclear|chop/, 'never names a class word');
+  const b = bar(1, 1, 1);
+  const noH4 = { ...b, sections: { ...b.sections, h1: { data: { h1: { trend: 'up' } } } } };
+  assert.strictEqual(classSideLine(noH4), 'Class side (4h + 1h): unknown (the 4h trend not in the briefing)');
+  assert.strictEqual(classSideLine({ ...b, minutes: 15 }), null, 'off the entry lane: no line (as the Bias line says no prop entry)');
+  assert.strictEqual(classSideLine({ minutes: 3, sections: {} }), null, 'no 1h part: no line');
+  assert.strictEqual(classSideLine(null), null);
+});

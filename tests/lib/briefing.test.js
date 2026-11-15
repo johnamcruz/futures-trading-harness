@@ -906,3 +906,14 @@ test('the Setups line on the bar that closed the setup states the record\'s wind
   for (const env of [{}, { FTH_STRATEGIES_DIRS: dir }]) assert.strictEqual(B.gateValidBars(env), gate(env), JSON.stringify(env));
   assert.deepStrictEqual([B.gateValidBars({}), B.gateValidBars({ FTH_STRATEGIES_DIRS: dir })], [2, 2]);
 });
+
+// The Class side line (bias-line.js classSideLine, feat/chop-read): printed right under the Bias line in the runner's
+// briefing, the same text classSideLine gives; taught only, no gate reads it.
+test('render: the Class side line follows the Bias line, from bias-line.js', () => {
+  const { biasLine, classSideLine } = require('../../scripts/lib/trading/bias-line');
+  const b = build(1300);
+  const text = B.renderBriefing(b, { now: new Date(b.closedAt) });
+  const side = classSideLine(b);
+  assert.ok(side && biasLine(b), 'the fixture has both lines');
+  assert.ok(text.includes(`\n- ${biasLine(b)}.\n- ${side}.\n`), side);
+});

@@ -503,13 +503,13 @@ test('state line: the decision follows the model\'s own STATE read (taught, no c
     // The class follows the frames the model wrote and the movement (feat/chop-read, the owner's chop): choppy movement is
     // chop, aligned frames too, on the full evidence only; else a trend class needs its 4h and 1h that way; else unclear.
     "The class follows your frames and the movement:",
+    "The printed `Class side (4h + 1h)` line `up` or `down` (your 4h and 1h both one way) → that trend class (a 15m pullback, `range` or `transition` under them doesn't cancel it, nor does your `frames disagree`).",
+    // A range day is no chop (owner: a range day is catchable).
+    "A lower-timeframe range inside the 4h + 1h trend (a range day too): setups at the edge the side's way are OK, or the breakout with follow-through.",
+    "`none`, your 4h and 1h not both one way → `unclear` (never a trend class, smooth or not), unless choppy → `chop`",
     "Open `Pullback` line: the `Pullback` line is printed and its leg is not given back past its origin.",
-    "Chop: `m3.lastBreak` last and previous both CHoCH, with the Day so far `rotational` or many RTH VWAP crosses, and no open `Pullback` line → class `chop`, whatever the 4h and 1h → no entry, sit out. One fact alone, or one BOS or CHoCH, is never chop.",
-    "Pause (`pullback-vs-reversal` step 3): inside an open `Pullback` line → never `chop`; a 3m CHoCH against then back is the watch.",
-    "Else your 4h and 1h both one way → that trend class (a 15m pullback, `range` or `transition` under them doesn't cancel it, nor does your `frames disagree`).",
-    "Else, not both one way → `unclear` (never a trend class, smooth or not)",
-    // Range is geometry; a lower-timeframe range inside the 4h + 1h trend is no chop (owner: a range day is catchable).
-    "A frame's `range` or `transition` alone is never `chop` (range is geometry, chop quality). A lower-timeframe range inside the 4h + 1h trend (a range day too): setups at the edge the side's way are OK.",
+    "Chop overrides both: `m3.lastBreak` last and previous both CHoCH, with the Day so far `rotational` or many RTH VWAP crosses, and no open `Pullback` line → class `chop`, whatever the 4h and 1h → no entry, sit out. One fact alone, or one BOS or CHoCH, is never chop. A frame's `range` or `transition` alone is never `chop` (range is geometry, chop quality).",
+    "Pause (`pullback-vs-reversal` step 3): inside an open `Pullback` line → the trend class of your 4h and 1h, never `chop`; a 3m CHoCH against then back is the watch; setup and entry: `pullback-vs-reversal` steps 4-6.",
     // A take agrees with the read: the class and the 4h and 1h on the setup's side (the never-counter-HTF rule, in its own words).
     'A take: `class` on its side (`trend-up` long, `trend-down` short), your 4h and 1h too (`up` long, `down` short).',
     // compose_check first (its record is what the pass is scored on), then a pass that names the read: the head trader's

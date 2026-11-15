@@ -254,9 +254,9 @@ test('context quiz: the chop-read questions (q113-q123, less q120) are asked aga
     ['q115', 'lookup', TR, 'F2', /transitional \(old trend weakening, new one unconfirmed\) → `unclear` \(frame `transition`\)/g],
     ['q116', 'lookup', TR, 'chop: choppy movement needs no edges', /Chop needs no edges; a range can rotate cleanly\./g],
     ['q117', 'lookup', TR, 'range, not chop: class trend-up; a long setup at the low edge is allowed', /A range day inside the 4h \+ 1h side is catchable: the turn at the edge the side's way/g],
-    ['q118', 'head', undefined, 'F4', /inside an open `Pullback` line → never `chop`/g],
-    ['q119', 'head', undefined, 'chop: choppy movement, aligned or not; sit out', /→ class `chop`, whatever the 4h and 1h/g],
-    ['q123', 'head', undefined, 'trend-up, not chop: the watch; wait for the 15m turn and a 3m BOS up', /a 3m CHoCH against then back is the watch\./g],
+    ['q118', 'head', undefined, 'F4', /→ the trend class of your 4h and 1h, never `chop`/g],
+    ['q119', 'head', undefined, 'F2', /→ class `chop`, whatever the 4h and 1h/g],
+    ['q123', 'head', undefined, 'F3', /a 3m CHoCH against then back is the watch/g],
     ['q121', 'head', undefined, 'enter long: the turn at the low edge the side\'s way, 3m BOS near value', /setups at the edge the side's way are OK/g],
     ['q122', 'head', undefined, 'chop: mid-range churn; sit out', /→ no entry, sit out\./g],
   ];
@@ -268,6 +268,10 @@ test('context quiz: the chop-read questions (q113-q123, less q120) are asked aga
     assert.ok(q.choices.includes(q.answer), `${id}: a closed choice`);
     assert.deepStrictEqual(Q.anchorsMissing(QUIZ, cut(re)).filter(x => x === id), [id], `${id}: its sentence deleted, its anchor goes missing`);
   }
+  // q112 prints the Class side line under its Bias line, as the briefing does (bias-line.js classSideLine).
+  const { classSideLine } = require('../../scripts/lib/trading/bias-line');
+  const side = classSideLine({ minutes: 3, sections: { h1: { data: { h4: { trend: 'range' }, h1: { trend: 'up' } } } } });
+  assert.ok(QUIZ.questions.find(x => x.id === 'q112').text.includes(`\n- Bias: long only (4h range, 1h up; short refused).\n- ${side}.\n`), side);
   // trend-vs-range is a lookup, not embedded in the head prompt.
   assert.ok(!prompts.head.includes('<skill name="trend-vs-range">'));
   // The briefing lines are the code's writers (Bias, Day so far); the Day so far score is efficiency x sqrt(bars), and its

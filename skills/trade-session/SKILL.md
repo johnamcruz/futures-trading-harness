@@ -135,31 +135,36 @@ CISD, near value or not); verdict (strong setup: enter, watch or wait)
 value (no 3m BOS or CISD near it): late, not an entry. Close to the level
 is the read: `long; 15m pullback to 21500.00 (stopped at 21502.25, no
 touch); 15m turn: rejected the RTH VWAP up, long-wick; 3m: BOS up, near
-value; strong setup: enter`: no exact touch, no named candle: no wait.
+value; strong setup: enter`: no exact touch, no named candle: no wait;
+a 15m rejection of any printed key level inside the pullback is the
+reaction.
 
 **The decision follows your STATE read** (the head trader's own, the last
 line of its PLAN; taught: the gate and `compose_check` do not read it):
 
 - The class follows your frames and the movement:
+  - The printed `Class side (4h + 1h)` line `up` or `down` (your 4h and
+    1h both one way) → that trend class (a 15m pullback, `range` or
+    `transition` under them doesn't cancel it, nor does your `frames
+    disagree`). A lower-timeframe range inside the 4h + 1h trend (a range
+    day too): setups at the edge the side's way are OK, or the breakout
+    with follow-through.
+  - `none`, your 4h and 1h not both one way → `unclear` (never a trend
+    class, smooth or not), unless choppy → `chop`: 4h range, 1h up,
+    smooth → `unclear` (not `trend-up`: the 4h is not up; not `chop`:
+    smooth). The Bias line is the gate's floor, not your class.
   - Open `Pullback` line: the `Pullback` line is printed and its leg is
     not given back past its origin.
-  - Chop: `m3.lastBreak` last and previous both CHoCH, with the Day so
-    far `rotational` or many RTH VWAP crosses, and no open `Pullback`
-    line →
-    class `chop`, whatever the 4h and 1h → no entry, sit out. One fact
-    alone, or one BOS or CHoCH, is never chop.
+  - Chop overrides both: `m3.lastBreak` last and previous both CHoCH, with
+    the Day so far `rotational` or many RTH VWAP crosses, and no open
+    `Pullback` line → class `chop`, whatever the 4h and 1h → no entry, sit
+    out. One fact alone, or one BOS or CHoCH, is never chop. A frame's
+    `range` or `transition` alone is never `chop` (range is geometry,
+    chop quality).
   - Pause (`pullback-vs-reversal` step 3): inside an open `Pullback` line
-    → never `chop`; a 3m CHoCH against then back is the watch.
-  - Else your 4h and 1h both one way → that trend class (a 15m pullback,
-    `range` or `transition` under them doesn't cancel it, nor does your
-    `frames disagree`).
-  - Else, not both one way → `unclear` (never a trend class, smooth or
-    not): 4h range, 1h up, smooth → `unclear` (not `trend-up`: the 4h is
-    not up; not `chop`: smooth). The Bias line's `long only` is the gate's
-    floor, not your 4h.
-  - A frame's `range` or `transition` alone is never `chop` (range is
-    geometry, chop quality). A lower-timeframe range inside the 4h + 1h
-    trend (a range day too): setups at the edge the side's way are OK.
+    → the trend class of your 4h and 1h, never `chop`; a 3m CHoCH against
+    then back is the watch; setup and entry: `pullback-vs-reversal` steps
+    4-6.
 - A take: `class` on its side (`trend-up` long, `trend-down` short), your
   4h and 1h too (`up` long, `down` short).
 - `compose_check` still runs first (its record is the evidence the pass is

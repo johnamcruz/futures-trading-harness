@@ -110,7 +110,7 @@ const { structure5m, structureLine } = require('./m5-structure');
 const { compressionFrames, compressionLine } = require('./compression');
 const { declaredFacts, declaredLine } = require('./trend-declared');
 const { daySoFar, daySoFarLine, rthVolatility, volatilityText } = require('./day-so-far');
-const { biasLine } = require('./bias-line');
+const { biasLine, classSideLine } = require('./bias-line');
 const { pullbackRead, pullbackLine } = require('./pullback-read');
 const { GLOBEX_OPEN_MIN, RTH_OPEN_MIN, RTH_CLOSE_MIN } = require('./clock'); // the session boundaries' one home
 
@@ -833,6 +833,8 @@ function summaryLines(b, et) {
     // The side the entry rule (BG) allows, from its own check (bias-line.js): the runner's briefing only (a frame's has no
     // session facts, so no declared trend).
     ...(!own && biasLine(b) ? [`- ${biasLine(b)}.`] : []),
+    // The side a trend class may take (strict 4h + 1h; taught in trade-session), beside the gate's floor: no gate reads it.
+    ...(!own && classSideLine(b) ? [`- ${classSideLine(b)}.`] : []),
     alignment,
     own ? `- VWAP and the session's levels (today, overnight, opening range, IB, profile): each ${SESSION_ELSEWHERE}, one value in every briefing; ${typeof m3.setups === 'string' ? `the room below is this ${tf} bar's own levels` : `the room below and the setups' levels include them (the runner's values), with this ${tf} bar's own`}.`
       : `- VWAP (${vw.applies || '?'}): price ${vw.side || '?'}, ${Number.isFinite(vw.distanceAtr) ? Math.abs(vw.distanceAtr) : '?'} x ${tf} ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP ${vw.rthCrossesLast30 ?? '?'}, the session VWAP ${vw.sessionCrossesLast30 ?? '?'} (the regime's count).`,

@@ -13,6 +13,11 @@
  *                        → short only", "Bias: no side (4h up, 1h down) → no entry", "Bias: no side yet (15m down,
  *                        declared short: no)"; "Bias: no prop entry on this lane" off the chain's entry frame; null when
  *                        the briefing holds no 1h part (a frame's own briefing)
+ *   classSideLine(b)     the side a trend class may take (trade-session: the strict 4h + 1h), from the same trends:
+ *                        "Class side (4h + 1h): up (4h up, 1h up)", "... none (4h range, 1h up): no trend class; the Bias
+ *                        line above is the gate's floor, not your class", "... unknown (the 4h trend not in the
+ *                        briefing)"; null where biasLine says no prop entry or has no line. Taught only: no gate reads it,
+ *                        and it names no class word (choppy movement is still chop)
  */
 
 const { entryRuleOf, entryProblems, trendOf, declaredOf, BIAS_FRAMES, NEUTRAL } = require('./entry-rule');
@@ -50,4 +55,17 @@ function biasLine(b) {
   return `Bias: no side yet (${setup} ${t15 || 'unknown'}${side ? `, declared ${side}: ${dec === null ? 'unknown' : 'no'}` : ''})`;
 }
 
-module.exports = { RULE, biasSides, biasLine };
+function classSideLine(b) {
+  if (!isObj(b) || !isObj(b.sections) || !b.sections.h1) return null;
+  if (!(Number.isInteger(b.minutes) && label(b.minutes) === RULE.chain.entry)) return null;
+  const trends = RULE.biasFrames.map(tf => [tf, trendOf(b, tf)]);
+  const unknown = trends.filter(([, t]) => t === null).map(([tf]) => tf);
+  const head = `Class side (${RULE.biasFrames.join(' + ')})`;
+  if (unknown.length) return `${head}: unknown (the ${unknown.join(' and ')} trend not in the briefing)`;
+  const frames = trends.map(([tf, t]) => `${tf} ${t}`).join(', ');
+  const ways = new Set(trends.map(([, t]) => t));
+  const way = ways.size === 1 && (ways.has('up') || ways.has('down')) ? trends[0][1] : null;
+  return way ? `${head}: ${way} (${frames})` : `${head}: none (${frames}): no trend class; the Bias line above is the gate's floor, not your class`;
+}
+
+module.exports = { RULE, biasSides, biasLine, classSideLine };

@@ -46,8 +46,7 @@ never the composed setup read (`compose_check` takes a live strong one):
    `range` or `transition` here is the pause, not chop. Pause: one-way
    structure (the 15m swing holds; a 3m CHoCH against then back is the
    watch) inside an open `Pullback` line (`trade-session`) → never
-   `chop` (the class: your 4h and 1h, `trade-session`) → wait for the
-   15m turn. The label is no
+   `chop` (the class: your 4h and 1h, `trade-session`). The label is no
    evidence of resumption either. The impulse (a 15m `displacement` the
    side's way, or the CISD's `leg`) sets the leg: measure the pullback on
    it (`fib-retracement`, the CISD's `ote`), depth and location only, never
@@ -66,6 +65,9 @@ never the composed setup read (`compose_check` takes a live strong one):
    candle line shows no pattern (`15m cisd up|down`). The level: the
    broken one or a level next to it (the RTH VWAP, a 15m swing; within
    about 0.25 x the 15m ATR, a hypothesis: one zone; `levels-and-reactions`).
+   A 15m rejection of any printed key level inside the pullback (the RTH
+   VWAP, a swing) is the reaction; no exact touch of the broken level is
+   needed (the entry still needs the 3m BOS or CISD near value).
    Composed as `15m cisd up` (true while live), or that 15m candle's read
    (`15m rejected <level> up`: long-wick, engulfing or confirmed,
    `candle-reading`; a BOS's breaking candle `15m broke <level> up`), true
