@@ -124,7 +124,7 @@ test('the summary: a sweep only when the close is back inside; else the side it 
   assert.match(line({ of: 'previous 4h low', closedBack: false, closedBeyond: 'low' }), /; traded beyond the previous 4h low, closed below its low\.$/);
   assert.match(line({ of: 'previous 4h high and low', closedBack: false, closedBeyond: 'high' }), /; traded beyond the previous 4h high and low, closed above its high\.$/);
   assert.ok(!/swept/.test(line({ of: 'previous 4h high', closedBack: false, closedBeyond: 'high' })));
-  assert.strictEqual(line(null), '- 4h (closed 14:00): none.');
+  assert.strictEqual(line(null), '- 4h (closed 14:00): no pattern.'); // b8003f26c: a bare none reads "no pattern"
 });
 
 test('the 4h line is event-driven: in full within an hour of its close, then only a sweep closed back inside; never in the detail', () => {
