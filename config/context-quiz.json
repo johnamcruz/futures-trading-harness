@@ -1779,8 +1779,7 @@
       "lookup": [
         "bos-vs-choch"
       ],
-      "text": "Briefing lines (synthetic, 10:42 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): transition down: HL 21480.25 broken by a close 3 min ago, the new leg unconfirmed; 4h+1h up; class unclear.\n- Price 21478.75.\n- m3.lastBreak: last BOS up at 21495.00 (barsAgo 3; protected low 21480.25, broken at 10:39), previous BOS up at 21470.50 (barsAgo 10).\n- Day so far (24 3m bars; `day-context`): mixed up: efficiency 0.13 (x sqrt(bars) 0.64), RTH VWAP crosses 3, range 3.1 x 3m ATR(14), net up (its size: Trend declared? day's move).\nThe last 3m candle closed at 21478.75. What is the 3m trend read now?",
-      "layers": { "rthBars": 24, "structure": { "side": "down", "level": 21495, "status": "broken", "flip": { "barsAgo": 1, "disp": false, "oldSide": "up", "oldLevel": 21480.25 } } },
+      "text": "Briefing lines (synthetic, 10:42 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): range: 3m BOS up then BOS up, HL 21480.25 broken by a close; 4h+1h up; class trend-up.\n- Price 21478.75.\n- m3.lastBreak: last BOS up at 21495.00 (barsAgo 3; protected low 21480.25, broken at 10:39), previous BOS up at 21470.50 (barsAgo 10).\n- Day so far (24 3m bars; `day-context`): mixed up: efficiency 0.13 (x sqrt(bars) 0.64), RTH VWAP crosses 3, range 3.1 x 3m ATR(14), net up (its size: Trend declared? day's move).\nThe last 3m candle closed at 21478.75. What is the 3m trend read now?",
       "rule": "a close through the protected higher low invalidates the bullish BOS: the trend up has ended, a potential reversal, not yet a trend down",
       "anchor": "a BOS holds until the leg's higher low (lower high) breaks",
       "choices": [

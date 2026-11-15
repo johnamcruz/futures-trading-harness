@@ -17,15 +17,14 @@
  *                  and rotCross midpoint crossings, or its leg weakening); or an intact leg with no new extreme by close
  *                  for rotStale bars (layers.stale). No trend entry; never chop
  *   transition     the protected level broken by a close with displacement and follow-through, the new leg unconfirmed
- *                  (Transitioning); after chop: the 4h + 1h side's protected level broken without displacement, until a
- *                  new leg (round 20b, the owner: protected HL breaks -> structure invalidated; it ends no chop)
+ *                  (Transitioning)
  *   chop           the layers' chop (structural AND behavioral evidence, until displacement ends it), no pullback read
  *   weakening      an intact leg with the momentum trigger (a strong countertrend displacement breaking internal
  *                  structure); the protected level holds (Weakening: reduce confidence; wait)
  *   trend          an intact, established leg with the behavior word `trending` (Trend; "reversal confirmed" printed when
  *                  the leg's flip is recent and held: Reversal)
  *   leg            an intact, established leg otherwise ("in the up leg": a pullback or a range inside the trend)
- *   range          no established leg (no chop evidence), or a counter leg's protected level broken the side's way
+ *   range          no established leg (no chop evidence)
  * The early read (the 15m trending the 4h + 1h way, the 3m in an established leg against them; without layers its last
  * RTH break a BOS against): printed, blocks chop and
  * keeps the trend class, as the pullback does.
@@ -76,7 +75,7 @@ function turnOf({ last, previous, cisd3m, today, price, minutes } = {}) {
 }
 
 /** The state from the layers (round 20), the precedence once. */
-function layeredWord(L, { open, read, pb, align }) {
+function layeredWord(L, { open, read, pb }) {
   const P = isObj(L.structure) ? L.structure : null;
   const legOK = Boolean(P && P.legOK);
   if (!P) return open ? { state: 'pullback', way: LEG_WAY[pb.side] } : { state: 'forming', way: null };
@@ -87,10 +86,6 @@ function layeredWord(L, { open, read, pb, align }) {
   if (legOK && L.stale && !read) return { state: 'rotation', way: P.side, of: 'leg' };
   if (legOK && isObj(L.behavior) && L.behavior.word === 'trending') return { state: 'trend', way: P.side };
   if (legOK) return { state: 'leg', way: P.side };
-  // Round 20b (the owner's table: protected HL breaks -> structure invalidated): the 4h + 1h side's protected level broken
-  // without displacement is a transition (class unclear: avoid premature entries) until a new leg is established; a counter
-  // leg's broken the side's way keeps the range default. The chop end stays displacement only (market-layers.js).
-  if (P.status === 'broken' && isObj(P.flip) && align && P.flip.oldSide === align) return { state: 'transition', way: P.side };
   return { state: 'range', way: null };
 }
 
@@ -138,7 +133,7 @@ function readState(b, th = {}) {
   const today = isObj(m3.today) ? m3.today : {};
   let w;
   let turn = null;
-  if (L) w = layeredWord(L, { open, read: open || early, pb, align });
+  if (L) w = layeredWord(L, { open, read: open || early, pb });
   else {
     turn = broken ? null : turnOf({ last, previous, cisd3m: isObj(m3.cisd) ? m3.cisd['3m'] : null, today, price: m3.price, minutes });
     w = printedWord({ last, open, pb, forming: rthOpen !== null && !last, broken, turn });
