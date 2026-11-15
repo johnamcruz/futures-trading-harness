@@ -51,7 +51,11 @@ test('pullback line: the runner\'s briefing carries the read of its own bars, on
   // The Market state line carries the read too (its pullback clause, market-state.js): a given-back leg prints none.
   const other = t => t.split('\n').filter(l => !l.startsWith('- Pullback (') && !l.startsWith('- Market state ('));
   assert.deepStrictEqual(other(deep), other(text));
-  assert.match(text, /\n- Market state \(3m\): [^\n]*; pullback \(/);
+  // The fixture's leg once retraced past the state's bound (PREREG addendum 16: the deepest retrace since the extreme),
+  // so the state names no pullback here; the same read never past it does.
+  assert.ok(m3.pullback.maxDepth > require('../../scripts/lib/tunables').analysis().pullbackRead.maxStateDepth, `maxDepth ${m3.pullback.maxDepth}`);
+  assert.doesNotMatch(text, /\n- Market state \(3m\): [^\n]*; pullback \(/);
+  assert.match(B.renderBriefing(withPb(b, { ...m3.pullback, maxDepth: m3.pullback.depth })), /\n- Market state \(3m\): [^\n]*; pullback \(/);
   assert.doesNotMatch(deep, /\n- Market state \(3m\): [^\n]*; pullback \(/);
   // Without one (with the trend, or an older file), no line.
   assert.deepStrictEqual(lineOf(B.renderBriefing(withPb(b, undefined))), []);
