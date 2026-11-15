@@ -45,7 +45,7 @@ rest on.
 | Step | Read | Action |
 |---|---|---|
 | Side | The 4h and the 1h both trend one way. | Trade only that way; never counter it. |
-| Market | Chop: the 3m's last two breaks both CHoCH (structure broken both ways), weighed with the Day so far `rotational` or many RTH VWAP crosses; never one fact alone, never inside an open `Pullback` line (printed, its leg not given back past its origin). Chop is the quality of movement, range its geometry. A 15m pullback, `range` or `transition` inside an open `Pullback` line under a 4h and 1h that agree is a pause, not chop. | Chop: sit out, whatever the 4h and 1h. Pause: look for the setup. A range day inside the 4h + 1h side: setups at the edge, or the breakout, the side's way. |
+| Market | The briefing's `Market state` line: what the 3m market is doing, computed once by code: chop (repeated CHoCH both ways with the Day so far `rotational` or many RTH VWAP crosses, no open `Pullback` line), trend up or down (a BOS continuing the confirmed trend, or a CHoCH confirmed by a BOS, a 3m CISD or a close beyond the initial balance), else ranging; the `Pullback` read and the 4h and 1h beside it. A BOS is continuation; a CHoCH is a potential reversal until a BOS follows its way. A read, not a filter: no gate reads it. | A trend or ranging under the 4h and 1h, or a pullback their way: their trend class, setups their way (a pullback: wait for the 15m turn). A trend against them, or not aligned: no trade. Chop: sit out. |
 | Setup | The 15m pullback turns the side's way: a live 15m CISD, a 15m BOS, or a 15m reaction at the level. | The setup is on. |
 | Entry | The first 3m BOS or CISD the side's way, near VWAP or the EMA20. | Compose on that confirming 3m bar: a limit at its close. Never a limit back at the broken level, and never a chase. |
 | Manage | A later 15m BOS the side's way. | Hold. |
@@ -58,8 +58,9 @@ The model states its read as one chain, for example: "4h and 1h up; 15m
 pulling back to the broken level; 15m CISD up confirmed by a bullish
 engulfing candle; 3m BOS up near VWAP: a strong setup, enter."
 
-The chop, open `Pullback` and class definitions are in
-[skills/trade-session](skills/trade-session/SKILL.md) (step 3), and the
+The state table is in
+[skills/trade-session](skills/trade-session/SKILL.md) (step 3), the state's code in
+`scripts/lib/trading/market-state.js`, and the
 owner's chop definition in [skills/trend-vs-range](skills/trend-vs-range/SKILL.md).
 The full pullback sequence is in
 [skills/pullback-vs-reversal](skills/pullback-vs-reversal/SKILL.md), and the

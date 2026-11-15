@@ -76,29 +76,32 @@ test('evidenceWord: the bias side\'s class C trend, B chop, A or D unclear; no b
   assert.strictEqual(K.evidenceWord(key({ biasSide: null, cls: { long: 'C', short: 'C', none: 'A' } })), 'unclear');
 });
 
-test('choppy: the full choppy-movement evidence: the 3m breaks both ways (last and previous both CHoCH) AND the day so far rotational or its RTH VWAP crosses (the Day so far line\'s count, the one the skills teach) at crossesChop; never one fact alone; never inside an open Pullback', () => {
-  const g = o => K.choppy(f({ day: { word: 'mixed', dir: null }, sessionCrosses: 1, rthCrosses: 1, ...o }), TH);
-  assert.strictEqual(g({ bothWays: { '15m': false, '3m': true }, day: { word: 'rotational', dir: null } }), true);
-  assert.strictEqual(g({ bothWays: { '15m': false, '3m': true }, rthCrosses: 5 }), true, 'at the chop threshold');
-  assert.strictEqual(g({ bothWays: { '15m': false, '3m': true }, rthCrosses: 4 }), false, 'breaks both ways alone');
-  assert.strictEqual(g({ bothWays: { '15m': false, '3m': true }, sessionCrosses: 9 }), false, 'the session count is not the taught one');
-  assert.strictEqual(g({ day: { word: 'rotational', dir: null }, rthCrosses: 9 }), false, 'rotational and crosses without the breaks');
-  assert.strictEqual(g({ bothWays: { '15m': false, '3m': true }, day: { word: 'rotational', dir: null }, rthCrosses: 9, pullback: true }), false, 'inside an open Pullback the CHoCH pair is the watch');
-  assert.strictEqual(g({ bothWays: { '15m': true, '3m': false }, day: { word: 'rotational', dir: null } }), false, 'the 3m decides (m3.lastBreak, as taught)');
-  assert.strictEqual(g({ bothWays: { '15m': false, '3m': null }, day: { word: 'rotational', dir: null } }), false, 'unknown breaks');
+// The coded read and choppy come from the briefing's Market state (market-state.js readState, one definition; its own
+// unit tests cover every precedence case): here, on briefings, the key carries it.
+const kb = ({ h4 = 'up', h1 = 'up', lastBreak, soFar, pullback } = {}) => K.presentKey({ sections: {
+  h1: { data: { h4: { trend: h4 }, h1: { trend: h1 } } },
+  m3: { data: { ...(lastBreak ? { lastBreak } : {}), ...(pullback ? { pullback } : {}), vwap: { sessionCrossesLast30: 9, side: 'above' }, ...(soFar ? { today: { soFar } } : {}) } },
+} }, TH);
+const PAIR = { last: { kind: 'CHoCH', direction: 'up' }, previous: { kind: 'CHoCH', direction: 'down' } };
+const rot = n => ({ status: 'read', read: 'rotational', vwapCrosses: n });
+const mix = n => ({ status: 'read', read: 'mixed', vwapCrosses: n });
+test('choppy: the 3m breaks both ways AND the day so far rotational or its RTH VWAP crosses at crossesChop; never one fact alone; never inside an open Pullback', () => {
+  assert.strictEqual(kb({ lastBreak: PAIR, soFar: rot(1) }).choppy, true);
+  assert.strictEqual(kb({ lastBreak: PAIR, soFar: mix(5) }).choppy, true, 'at the chop threshold');
+  assert.strictEqual(kb({ lastBreak: PAIR, soFar: mix(4) }).choppy, false, 'breaks both ways alone (the session count 9 is not the taught one)');
+  assert.strictEqual(kb({ soFar: rot(9) }).choppy, false, 'rotational and crosses without the breaks');
+  const PB = { frame: '15m', side: 'long', leg: { origin: 21462.5, extreme: 21538.75 }, depth: 0.38, pastOrigin: false, counter: { bars: 10 }, swing: {}, against: {} };
+  assert.strictEqual(kb({ lastBreak: PAIR, soFar: rot(9), pullback: PB }).choppy, false, 'inside an open Pullback the CHoCH pair is the watch');
 });
 
-test('codedWord: choppy movement chop (aligned days too); else 4h and 1h agreeing trend; else unclear; a range alone, or one chop fact alone, never chop', () => {
-  const k = (frames, regime, choppy = false, word = 'mixed') => key({ choppy, facts: f({ frames, regime, day: { word, dir: null } }) });
-  assert.strictEqual(K.codedWord(k({ '4h': 'up', '1h': 'up', '15m': 'up' }, 'trend-up')), 'trend-up');
-  assert.strictEqual(K.codedWord(k({ '4h': 'up', '1h': 'up', '15m': 'up' }, 'trend-up', true)), 'chop', 'aligned but choppy: chop');
-  assert.strictEqual(K.codedWord(k({ '4h': 'up', '1h': 'up', '15m': 'up' }, 'trend-up', false, 'rotational')), 'trend-up', 'rotational alone is one fact');
-  assert.strictEqual(K.codedWord(k({ '4h': 'down', '1h': 'down', '15m': 'up' }, 'x')), 'trend-down');
-  assert.strictEqual(K.codedWord(k({ '4h': 'range', '1h': 'up', '15m': 'range' }, 'range')), 'unclear', 'range is geometry, not chop');
-  assert.strictEqual(K.codedWord(k({ '4h': 'up', '1h': 'up', '15m': 'range' }, 'range')), 'trend-up', 'a range under aligned frames: the trend class');
-  assert.strictEqual(K.codedWord(k({ '4h': 'range', '1h': 'up', '15m': 'up' }, 'x', true)), 'chop');
-  assert.strictEqual(K.codedWord(k({ '4h': 'range', '1h': 'up', '15m': 'up' }, 'x')), 'unclear');
-  assert.strictEqual(K.codedWord(k({ '4h': 'range', '1h': 'range', '15m': 'up' }, 'x')), 'unclear', 'agreeing range is no trend');
+test('codedWord: the Market state\'s class word: choppy -> chop (aligned too); else 4h and 1h agreeing -> trend; else unclear; a range alone never chop', () => {
+  assert.strictEqual(K.codedWord(kb({})), 'trend-up');
+  assert.strictEqual(K.codedWord(kb({ lastBreak: PAIR, soFar: rot(1) })), 'chop', 'aligned but choppy: chop');
+  assert.strictEqual(K.codedWord(kb({ soFar: rot(1) })), 'trend-up', 'rotational alone is one fact');
+  assert.strictEqual(K.codedWord(kb({ h4: 'down', h1: 'down' })), 'trend-down');
+  assert.strictEqual(K.codedWord(kb({ h4: 'range' })), 'unclear', 'range is geometry, not chop');
+  assert.strictEqual(K.codedWord(kb({ h4: 'range', lastBreak: PAIR, soFar: rot(1) })), 'chop');
+  assert.strictEqual(K.codedWord(kb({ h4: 'range', h1: 'range' })), 'unclear', 'agreeing range is no trend');
 });
 
 test('presentKey carries choppy from its facts and thresholds', () => {
@@ -188,4 +191,55 @@ test('facts read the briefing\'s own fields (a synthetic briefing): frames, regi
   assert.strictEqual(K.facts({ sections: { m3: { data: { lastBreak: { last: null, previous: null } } } } }).bothWays['3m'], false, 'no break yet: not both ways');
   assert.strictEqual(K.facts({ sections: { m3: { data: { today: { soFar: { status: 'too early' } } } } } }).day.word, 'too early');
   assert.strictEqual(K.facts({ sections: {} }).day.word, 'unknown');
+});
+
+// The Market state redesign (MARKET-STATE-SPEC, PREREG addendum 14): the coded read IS the briefing's Market state
+// (market-state.js), one definition: on every briefing of a grid, codedWord equals classWordOf(stateOf) and the key's
+// choppy equals the state chop.
+const MS = require('../../scripts/lib/trading/market-state');
+const GRID = (() => {
+  const out = [];
+  const PBL = { frame: '15m', side: 'long', leg: { origin: 21462.5, extreme: 21538.75 }, depth: 0.38, pastOrigin: false, counter: { bars: 10 }, swing: {}, against: {} };
+  const pbs = [undefined, null, PBL, { ...PBL, pastOrigin: true }, { ...PBL, side: 'short', leg: { origin: 21538.75, extreme: 21462.5 } }];
+  const lbs = [undefined, { last: { kind: 'CHoCH', direction: 'up' }, previous: { kind: 'CHoCH', direction: 'down' } }, { last: { kind: 'CHoCH', direction: 'up' }, previous: { kind: 'BOS', direction: 'down' } }, { last: { kind: 'BOS', direction: 'up' }, previous: { kind: 'BOS', direction: 'up' } }, { last: { kind: 'BOS', direction: 'down' }, previous: { kind: 'CHoCH', direction: 'down' } }];
+  const days = [undefined, { status: 'read', read: 'rotational', vwapCrosses: 2 }, { status: 'read', read: 'mixed', vwapCrosses: 5 }, { status: 'read', read: 'mixed', vwapCrosses: 4 }, { status: 'too early', vwapCrosses: 6 }];
+  for (const h4 of ['up', 'down', 'range', undefined]) for (const h1 of ['up', 'down', 'range']) for (const pullback of pbs) for (const lastBreak of lbs) for (const soFar of days) {
+    out.push({ minutes: 3, sections: { h1: { data: { ...(h4 ? { h4: { trend: h4 } } : {}), h1: { trend: h1 } } }, m3: { data: { ...(pullback === undefined ? {} : { pullback }), ...(lastBreak ? { lastBreak } : {}), ...(soFar ? { today: { soFar } } : {}), vwap: { sessionCrossesLast30: 1, side: 'above' } } } } });
+  }
+  return out;
+})();
+
+test('the coded read is the Market state: codedWord = classWordOf(stateOf) and choppy = the chop state, on every briefing of the grid', () => {
+  assert.ok(GRID.length >= 1500, `${GRID.length} briefings`);
+  for (const b of GRID) {
+    const k = K.presentKey(b, TH);
+    const s = MS.stateOf(b, TH);
+    assert.strictEqual(K.codedWord(k), MS.classWordOf(s), JSON.stringify(b));
+    assert.strictEqual(k.choppy, s.state === 'chop', JSON.stringify(b));
+  }
+});
+
+// What the redesign changes in the coded read (stated in the PR): the old read (chop = the chop facts with no open
+// Pullback line -> chop; else the 4h and 1h agreeing -> the trend; else unclear) and the new (the 3m state, trend /
+// ranging / chop, with the alignment) differ exactly where the 4h + 1h agree, the 3m's last break is a BOS against them,
+// and no pullback read runs their way (no open Pullback line their way; the grid holds no 15m trend): old trend-<way>,
+// new unclear (a 3m trend against the alignment: never counter). Everywhere else they agree.
+test('the old and the new coded read differ only on a 3m BOS against an aligned 4h + 1h with no pullback read their way', () => {
+  const old = b => {
+    const f = K.facts(b);
+    const ch = f.bothWays['3m'] === true && !f.pullback && (f.day.word === 'rotational' || (Number.isFinite(f.rthCrosses) && f.rthCrosses >= TH.crossesChop));
+    const fr = f.frames;
+    return ch ? 'chop' : fr['4h'] === fr['1h'] && (fr['4h'] === 'up' || fr['4h'] === 'down') ? `trend-${fr['4h']}` : 'unclear';
+  };
+  const diff = GRID.filter(b => old(b) !== K.codedWord(K.presentKey(b, TH)));
+  assert.ok(diff.length > 0);
+  for (const b of diff) {
+    const d = b.sections.h1.data;
+    const way = d.h4 && d.h4.trend;
+    const lb = b.sections.m3.data.lastBreak;
+    const p = b.sections.m3.data.pullback;
+    const pbWay = p && p.pastOrigin === false ? { long: 'up', short: 'down' }[p.side] : null;
+    assert.ok(way === d.h1.trend && lb && lb.last.kind === 'BOS' && lb.last.direction !== way && pbWay !== way, JSON.stringify(b));
+    assert.deepStrictEqual([old(b), K.codedWord(K.presentKey(b, TH))], [`trend-${way}`, 'unclear']);
+  }
 });

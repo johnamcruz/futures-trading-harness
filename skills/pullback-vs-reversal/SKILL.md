@@ -45,9 +45,8 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding. A 15m
    `range` or `transition` here is the pause, not chop. Pause: one-way
    structure (the 15m swing holds; a 3m CHoCH against then back is the
-   watch) inside an open `Pullback` line (`trade-session`) → never
-   `chop` (the class: `trade-session`'s class bullets: both one way →
-   that trend class; else `unclear`). The label is no
+   watch) under the Market state's pullback read (`trade-session`) →
+   never `chop`: the side's trend class. The label is no
    evidence of resumption either. The impulse (a 15m `displacement` the
    side's way, or the CISD's `leg`) sets the leg: measure the pullback on
    it (`fib-retracement`, the CISD's `ote`), depth and location only, never

@@ -63,7 +63,7 @@
   },
   "passBar": {
     "partA": {
-      "allCorrect": 98,
+      "allCorrect": 100,
       "bothWays": 0
     },
     "partB": {
@@ -1213,7 +1213,7 @@
       "lookup": [
         "pullback-vs-reversal"
       ],
-      "text": "Briefing lines (synthetic, 10:24 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Class side (4h + 1h): up (4h up, 1h up).\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 27% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): hammer, close top third, range 0.9 ATR, vol 0.7x; rejected prior RTH high (closed back above; long-wick rejection, long side).\n- m3.lastBreak: last BOS up at 21516.75 (barsAgo 0), previous CHoCH up at 21511.25 (barsAgo 2).\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nWhat is the read and the action?\nF1 - a reversal against the trend: no long\nF2 - the pullback is over: long, a limit at this 3m close\nF3 - wait for a 15m BOS up first\nF4 - chop: pass\nAnswer with ONE of F1-F4.",
+      "text": "Briefing lines (synthetic, 10:24 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): trend up: 3m CHoCH up then BOS up (confirmed transition up); pullback (long leg 21462.5 -> 21538.75, depth 27%); 4h+1h up.\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 27% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): hammer, close top third, range 0.9 ATR, vol 0.7x; rejected prior RTH high (closed back above; long-wick rejection, long side).\n- m3.lastBreak: last BOS up at 21516.75 (barsAgo 0), previous CHoCH up at 21511.25 (barsAgo 2).\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nWhat is the read and the action?\nF1 - a reversal against the trend: no long\nF2 - the pullback is over: long, a limit at this 3m close\nF3 - wait for a 15m BOS up first\nF4 - chop: pass\nAnswer with ONE of F1-F4.",
       "rule": "inside an open 15m pullback: the 15m reaction at the level (the setup read, still the last 15m candle), the 3m CHoCH up (watch), then the first 3m BOS up near value: the entry, a limit at that 3m close",
       "anchor": "the first 3m BOS or 3m CISD the side's way, near value",
       "choices": [
@@ -1249,7 +1249,7 @@
       "lookup": [
         "pullback-vs-reversal"
       ],
-      "text": "Briefing lines (synthetic, 10:48 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Class side (4h + 1h): up (4h up, 1h up).\n- m15.lastBreak: last CHoCH down at 21481.25 (barsAgo 0); the 15m swing low 21462.50 of the long leg 21462.50 -> 21538.75 is next below.\n- 15m (setup candle, closed 10:45): bearish engulfing, close bottom third; broke below prior RTH high (breakout).\nWhat is the read and the action?\nF1 - a reversal: short on the next 3m bar\nF2 - a deeper discount: long now\nF3 - chop: stand aside for the day\nF4 - the pullback failed, a reversal attempt: wait\nAnswer with ONE of F1-F4.",
+      "text": "Briefing lines (synthetic, 10:48 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): ranging: no 3m break printed; 4h+1h up.\n- m15.lastBreak: last CHoCH down at 21481.25 (barsAgo 0); the 15m swing low 21462.50 of the long leg 21462.50 -> 21538.75 is next below.\n- 15m (setup candle, closed 10:45): bearish engulfing, close bottom third; broke below prior RTH high (breakout).\nWhat is the read and the action?\nF1 - a reversal: short on the next 3m bar\nF2 - a deeper discount: long now\nF3 - chop: stand aside for the day\nF4 - the pullback failed, a reversal attempt: wait\nAnswer with ONE of F1-F4.",
       "rule": "a 15m CHoCH against the side: this pullback failed, a reversal attempt: wait for a new 15m turn the side's way; never counter",
       "anchor": "this pullback failed, a reversal attempt: wait for a new 15m turn the side's way",
       "choices": [
@@ -1267,7 +1267,7 @@
       "lookup": [
         "pullback-vs-reversal"
       ],
-      "text": "Briefing lines (synthetic, 10:06 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Class side (4h + 1h): up (4h up, 1h up).\n- m15.lastBreak: last BOS up at 21538.75 (barsAgo 2); 15m up, HH/HL.\n- m3.lastBreak: last CHoCH down at 21529.50 (barsAgo 0).\nWhat does the 3m CHoCH down mean here?",
+      "text": "Briefing lines (synthetic, 10:06 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): ranging: 3m CHoCH down (potential reversal, unconfirmed); 4h+1h up.\n- m15.lastBreak: last BOS up at 21538.75 (barsAgo 2); 15m up, HH/HL.\n- m3.lastBreak: last CHoCH down at 21529.50 (barsAgo 0).\nWhat does the 3m CHoCH down mean here?",
       "rule": "a 3m CHoCH against the side inside an intact 15m trend: a pullback starting, not a reversal: wait",
       "anchor": "a 3m CHoCH against the side inside an intact 15m trend: a pullback starting, wait.",
       "choices": [
@@ -1285,7 +1285,7 @@
       "lookup": [
         "pullback-vs-reversal"
       ],
-      "text": "Briefing lines (synthetic, 11:00 ET):\n- Bias: long only (4h up, 1h up; short refused).\n- Class side (4h + 1h): up (4h up, 1h up).\n- m15.lastBreak: last BOS up at 21500.00 (10:00).\n- 15m (setup candle, closed 11:00): inside, 3 in a row inside the 10:00 candle 21494.25-21541.5, close middle third, range 0.4 ATR, vol 0.5x.\n- The trend-momentum analyst's report: Regime (computed): 15m transition/normal, 3m transition/normal.\nWhich do these lines show: chop evidence, a pause in the trend (a pullback), a reversal, or no read yet?",
+      "text": "Briefing lines (synthetic, 11:00 ET):\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): ranging: no 3m break printed; 4h+1h up.\n- m15.lastBreak: last BOS up at 21500.00 (10:00).\n- 15m (setup candle, closed 11:00): inside, 3 in a row inside the 10:00 candle 21494.25-21541.5, close middle third, range 0.4 ATR, vol 0.5x.\n- The trend-momentum analyst's report: Regime (computed): 15m transition/normal, 3m transition/normal.\nWhich do these lines show: chop evidence, a pause in the trend (a pullback), a reversal, or no read yet?",
       "rule": "after a 15m break the side's way, small counter candles inside the impulse with the 15m transition: the pause, not chop",
       "anchor": "A 15m `range` or `transition` here is the pause, not chop.",
       "choices": [
@@ -1303,7 +1303,7 @@
       "lookup": [
         "pullback-vs-reversal"
       ],
-      "text": "Briefing lines (synthetic, 10:39 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Class side (4h + 1h): up (4h up, 1h up).\n- The 15m broke the prior RTH high 21500.00 up at 10:00; no pullback since; price 21571.25.\n- m3.lastBreak: last BOS up at 21566.75 (barsAgo 0).\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +2.4, EMA20 +1.9, overnight range broke out its way, day's move +3.1, regime with; short RTH VWAP -2.4, EMA20 -1.9, overnight range broke out against, day's move -3.1, regime against.\nIs this the pullback read's entry?",
+      "text": "Briefing lines (synthetic, 10:39 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): trend up: 3m BOS up (continuation); 4h+1h up.\n- The 15m broke the prior RTH high 21500.00 up at 10:00; no pullback since; price 21571.25.\n- m3.lastBreak: last BOS up at 21566.75 (barsAgo 0).\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +2.4, EMA20 +1.9, overnight range broke out its way, day's move +3.1, regime with; short RTH VWAP -2.4, EMA20 -1.9, overnight range broke out against, day's move -3.1, regime against.\nIs this the pullback read's entry?",
       "rule": "far past the level, no retest: late, not this read's entry",
       "anchor": "Far past the level, no retest: late, not this read's entry",
       "choices": [
@@ -1321,7 +1321,7 @@
       "lookup": [
         "pullback-vs-reversal"
       ],
-      "text": "Briefing lines (synthetic, 10:24 ET), flat:\n- Bias: short only (4h down, 1h down; long refused).\n- Class side (4h + 1h): down (4h down, 1h down).\n- Pullback (15m, short leg 21437.5 -> 21361.25): depth 28% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21437.5 holds, 1h 21510.75 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): none, close bottom third, range 1.1 ATR, vol 1.2x.\n- CISD (completed candles; a read, not a signal): 15m bearish at 21402.25 (closed 10:15, strong), no key-level sweep, OTE 21399.25-21404.25 (mid 21401.75), waiting.\n- m3.lastBreak: last BOS down at 21383.25 (barsAgo 0), previous CHoCH down at 21388.75 (barsAgo 2).\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against; short RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with.\nWhat is the read and the action?",
+      "text": "Briefing lines (synthetic, 10:24 ET), flat:\n- Bias: short only (4h down, 1h down; long refused).\n- Market state (3m): trend down: 3m CHoCH down then BOS down (confirmed transition down); pullback (short leg 21437.5 -> 21361.25, depth 28%); 4h+1h down.\n- Pullback (15m, short leg 21437.5 -> 21361.25): depth 28% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21437.5 holds, 1h 21510.75 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): none, close bottom third, range 1.1 ATR, vol 1.2x.\n- CISD (completed candles; a read, not a signal): 15m bearish at 21402.25 (closed 10:15, strong), no key-level sweep, OTE 21399.25-21404.25 (mid 21401.75), waiting.\n- m3.lastBreak: last BOS down at 21383.25 (barsAgo 0), previous CHoCH down at 21388.75 (barsAgo 2).\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against; short RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with.\nWhat is the read and the action?",
       "rule": "the down mirror: a live 15m CISD down (the setup read) and the first 3m BOS down near value: short at that 3m close",
       "anchor": "a live strong 15m CISD on the CISD line is the setup read even when the last 15m candle line shows no pattern",
       "choices": [
@@ -1336,9 +1336,9 @@
       "id": "q94",
       "layer": "bias",
       "prompt": "head",
-      "text": "Briefing lines (synthetic, 10:12 ET), flat:\n- Bias: long only (4h range, 1h up; short refused).\n- Class side (4h + 1h): none (4h range, 1h up): no trend class; the Bias line above is the gate's floor, not your class.\n- 15m (setup candle, closed 10:00): hammer; rejected prior VAH (closed back above; long-wick rejection, long side).\n- m3.lastBreak: last BOS up at 21516.75 (barsAgo 0), previous CHoCH up at 21511.25 (barsAgo 2).\nYour STATE read has 4h range, 1h up. What do you do?",
+      "text": "Briefing lines (synthetic, 10:12 ET), flat:\n- Bias: long only (4h range, 1h up; short refused).\n- Market state (3m): trend up: 3m CHoCH up then BOS up (confirmed transition up); 4h range, 1h up (not aligned).\n- 15m (setup candle, closed 10:00): hammer; rejected prior VAH (closed back above; long-wick rejection, long side).\n- m3.lastBreak: last BOS up at 21516.75 (barsAgo 0), previous CHoCH up at 21511.25 (barsAgo 2).\nYour STATE read has 4h range, 1h up. What do you do?",
       "rule": "one of the 4h/1h ranging: the class is unclear (chop only for choppy movement): no take, whatever the 3m",
-      "anchor": "not both one way → `unclear`",
+      "anchor": "| trend or ranging | not aligned | `unclear` | no trend trade |",
       "choices": [
         "long, a limit at this 3m close",
         "short",
@@ -1351,9 +1351,9 @@
       "id": "q95",
       "layer": "bias",
       "prompt": "head",
-      "text": "Briefing lines (synthetic, 09:39 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Class side (4h + 1h): up (4h up, 1h up).\nYour read at 09:39 ET: 4h up, 1h up; the 15m broke above the overnight high at 09:30 and is now `transition` (inside candles, its swing low holds). Which class do you write in STATE?\nF1 - chop\nF2 - unclear\nF3 - trend-up\nF4 - trend-down\nAnswer with ONE of F1-F4.",
+      "text": "Briefing lines (synthetic, 09:39 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): ranging: no 3m break printed; 4h+1h up.\nYour read at 09:39 ET: 4h up, 1h up; the 15m broke above the overnight high at 09:30 and is now `transition` (inside candles, its swing low holds). Which class do you write in STATE?\nF1 - chop\nF2 - unclear\nF3 - trend-up\nF4 - trend-down\nAnswer with ONE of F1-F4.",
       "rule": "the 4h and 1h both up: trend-up; a 15m pullback, range or transition under them does not cancel it",
-      "anchor": "a 15m pullback, `range` or `transition` under them doesn't cancel it",
+      "anchor": "| ranging | aligned | the side's trend class",
       "choices": [
         "F1",
         "F2",
@@ -1369,7 +1369,7 @@
       "lookup": [
         "pullback-vs-reversal"
       ],
-      "text": "Briefing lines (synthetic, 10:21 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Class side (4h + 1h): up (4h up, 1h up).\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 34% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): hammer, close top third, range 0.9 ATR, vol 0.7x; rejected prior RTH high (closed back above; long-wick rejection, long side).\n- m3.lastBreak: last CHoCH up at 21511.25 (barsAgo 0), previous BOS down at 21503.75 (barsAgo 3).\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nWhat is the read and the action?",
+      "text": "Briefing lines (synthetic, 10:21 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): ranging: 3m BOS down then CHoCH up (potential reversal, unconfirmed); pullback (long leg 21462.5 -> 21538.75, depth 34%); 4h+1h up.\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 34% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): hammer, close top third, range 0.9 ATR, vol 0.7x; rejected prior RTH high (closed back above; long-wick rejection, long side).\n- m3.lastBreak: last CHoCH up at 21511.25 (barsAgo 0), previous BOS down at 21503.75 (barsAgo 3).\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nWhat is the read and the action?",
       "rule": "a 3m CHoCH back the side's way: the 3m counter-move ended; watch for the 3m BOS; not the entry",
       "anchor": "watch for the BOS or CISD; not the entry.",
       "choices": [
@@ -1387,7 +1387,7 @@
       "lookup": [
         "pullback-vs-reversal"
       ],
-      "text": "Briefing lines (synthetic, 10:33 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Class side (4h + 1h): up (4h up, 1h up).\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 46% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:30): hammer, close top third, range 0.9 ATR, vol 0.7x; rejected prior RTH high (closed back above; long-wick rejection, long side).\n- m3.lastBreak: last CHoCH down at 21504.50 (barsAgo 0), previous CHoCH up at 21511.25 (barsAgo 3); no 3m BOS up since.\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nWhat is the action?",
+      "text": "Briefing lines (synthetic, 10:33 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): ranging: 3m breaks alternating up, down (repeated potential reversals, none confirmed); pullback (long leg 21462.5 -> 21538.75, depth 46%); 4h+1h up.\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 46% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:30): hammer, close top third, range 0.9 ATR, vol 0.7x; rejected prior RTH high (closed back above; long-wick rejection, long side).\n- m3.lastBreak: last CHoCH down at 21504.50 (barsAgo 0), previous CHoCH up at 21511.25 (barsAgo 3); no 3m BOS up since.\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nWhat is the action?",
       "rule": "the 3m CHoCH up failed with no BOS: no setup; the watch restarts (never counter)",
       "anchor": "No BOS or CISD after it: no setup, pass.",
       "choices": [
@@ -1405,7 +1405,7 @@
       "lookup": [
         "pullback-vs-reversal"
       ],
-      "text": "Briefing lines (synthetic, 10:51 ET), flat:\n- Bias: short only (4h down, 1h down; long refused).\n- Class side (4h + 1h): down (4h down, 1h down).\n- Pullback (15m, short leg 4337.5 -> 4246.25): depth 83% of the leg; 12 bars since the extreme, volume 1.1x the leg's per bar (rising), range 1.2x; swings since the extreme: 15m 4291.75 broken by a close, 1h 4352.5 holds; 15m break against: CHoCH up 4291.75 (3 bars ago), 1h: none.\n- 15m (setup candle, closed 10:45): shooting star, close bottom third; rejected prior VAH (closed back below; long-wick rejection, short side).\nWhat is the read and the action?",
+      "text": "Briefing lines (synthetic, 10:51 ET), flat:\n- Bias: short only (4h down, 1h down; long refused).\n- Market state (3m): ranging: no 3m break printed; pullback (short leg 4337.5 -> 4246.25, depth 83%); 4h+1h down.\n- Pullback (15m, short leg 4337.5 -> 4246.25): depth 83% of the leg; 12 bars since the extreme, volume 1.1x the leg's per bar (rising), range 1.2x; swings since the extreme: 15m 4291.75 broken by a close, 1h 4352.5 holds; 15m break against: CHoCH up 4291.75 (3 bars ago), 1h: none.\n- 15m (setup candle, closed 10:45): shooting star, close bottom third; rejected prior VAH (closed back below; long-wick rejection, short side).\nWhat is the read and the action?",
       "rule": "a 15m CHoCH against (deep, the 15m swing broken by a close): a reversal attempt: wait for a new 15m turn the side's way; the candle at the level alone is no confirmation",
       "anchor": "a candle at the level is no confirmation alone",
       "choices": [
@@ -1423,7 +1423,7 @@
       "lookup": [
         "pullback-vs-reversal"
       ],
-      "text": "Briefing lines (synthetic, 10:27 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Class side (4h + 1h): up (4h up, 1h up).\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 27% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): none, close top third, range 0.8 ATR (15m ATR(14) 12.00), vol 0.9x; rejected VWAP (rth) (closed back above; long-wick rejection, long side).\n- Room below (R = the 3m reference stop): VWAP (rth) 21502.5 (15.5 pts, 1.82R), prior RTH high 21500 (18 pts, 2.12R).\n- m15.lastBreak: last BOS up at 21500.00 (barsAgo 6), previous BOS up at 21471.75 (barsAgo 15).\n- m3.lastBreak: last BOS up at 21517.25 (barsAgo 0), previous CHoCH up at 21510.75 (barsAgo 2).\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nWhat is the action?",
+      "text": "Briefing lines (synthetic, 10:27 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): trend up: 3m CHoCH up then BOS up (confirmed transition up); pullback (long leg 21462.5 -> 21538.75, depth 27%); 4h+1h up.\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 27% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): none, close top third, range 0.8 ATR (15m ATR(14) 12.00), vol 0.9x; rejected VWAP (rth) (closed back above; long-wick rejection, long side).\n- Room below (R = the 3m reference stop): VWAP (rth) 21502.5 (15.5 pts, 1.82R), prior RTH high 21500 (18 pts, 2.12R).\n- m15.lastBreak: last BOS up at 21500.00 (barsAgo 6), previous BOS up at 21471.75 (barsAgo 15).\n- m3.lastBreak: last BOS up at 21517.25 (barsAgo 0), previous CHoCH up at 21510.75 (barsAgo 2).\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nWhat is the action?",
       "rule": "close to the reference picture: the three lines hold (the 4h + 1h side, no CHoCH or CISD against, the 3m BOS up with a true 15m setup read up); the soft pieces weigh in the count: a take",
       "anchor": "The level: the broken one or a level next to it (the RTH VWAP, a 15m swing; within about 0.25 x the 15m ATR, a hypothesis: one zone; `levels-and-reactions`).",
       "choices": [
@@ -1441,7 +1441,7 @@
       "lookup": [
         "pullback-vs-reversal"
       ],
-      "text": "Briefing lines (synthetic, 10:27 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Class side (4h + 1h): up (4h up, 1h up).\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 38% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): none, close middle third, range 0.6 ATR, vol 0.6x.\n- CISD (completed candles; a read, not a signal): 15m bullish at 21497.25 (closed 10:00, strong), no key-level sweep, zone waiting.\n- m3.lastBreak: last BOS down at 21506.25 (barsAgo 4); no 3m BOS or CISD up since.\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nWhat is the action?",
+      "text": "Briefing lines (synthetic, 10:27 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): trend down: 3m BOS down (continuation); pullback (long leg 21462.5 -> 21538.75, depth 38%); 4h+1h up.\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 38% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): none, close middle third, range 0.6 ATR, vol 0.6x.\n- CISD (completed candles; a read, not a signal): 15m bullish at 21497.25 (closed 10:00, strong), no key-level sweep, zone waiting.\n- m3.lastBreak: last BOS down at 21506.25 (barsAgo 4); no 3m BOS or CISD up since.\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nWhat is the action?",
       "rule": "the 15m turn (a live 15m CISD up) without the 3m BOS or CISD up: watch; not the entry yet",
       "anchor": "the entry needs a 3m BOS or CISD the side's way and a true 15m setup read the side's way",
       "choices": [
@@ -1459,7 +1459,7 @@
       "lookup": [
         "pullback-vs-reversal"
       ],
-      "text": "Briefing lines (synthetic, 10:24 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Class side (4h + 1h): up (4h up, 1h up).\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 33% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): none, close middle third, range 0.6 ATR, vol 0.6x.\n- CISD (completed candles; a read, not a signal): 3m bullish at 21512.00 (closed 10:24, strong), no key-level sweep, zone waiting; 15m bullish at 21497.25 (closed 10:00, strong), no key-level sweep, zone waiting.\n- m3.lastBreak: last CHoCH down at 21505.25 (barsAgo 5), previous BOS up at 21531.25 (barsAgo 12).\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nWhat is the read and the action?",
+      "text": "Briefing lines (synthetic, 10:24 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): ranging: 3m BOS up then CHoCH down (potential reversal, unconfirmed); pullback (long leg 21462.5 -> 21538.75, depth 33%); 4h+1h up.\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 33% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): none, close middle third, range 0.6 ATR, vol 0.6x.\n- CISD (completed candles; a read, not a signal): 3m bullish at 21512.00 (closed 10:24, strong), no key-level sweep, zone waiting; 15m bullish at 21497.25 (closed 10:00, strong), no key-level sweep, zone waiting.\n- m3.lastBreak: last CHoCH down at 21505.25 (barsAgo 5), previous BOS up at 21531.25 (barsAgo 12).\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nWhat is the read and the action?",
       "rule": "a CISD the side's way reads as a BOS: a 3m CISD up near value with a live 15m CISD up is the entry, the 3m CISD stated beside the 15m read",
       "anchor": "`3m cisd up` in the setup step",
       "choices": [
@@ -1477,7 +1477,7 @@
       "lookup": [
         "pullback-vs-reversal"
       ],
-      "text": "Briefing lines (synthetic, 10:24 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Class side (4h + 1h): up (4h up, 1h up).\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 47% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): bearish engulfing, close bottom third, range 1.2 ATR, vol 1.3x.\n- CISD (completed candles; a read, not a signal): 15m bearish at 21505.00 (closed 10:15, strong), no key-level sweep, zone waiting.\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nWhat is the read and the action?",
+      "text": "Briefing lines (synthetic, 10:24 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): ranging: no 3m break printed; pullback (long leg 21462.5 -> 21538.75, depth 47%); 4h+1h up.\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 47% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): bearish engulfing, close bottom third, range 1.2 ATR, vol 1.3x.\n- CISD (completed candles; a read, not a signal): 15m bearish at 21505.00 (closed 10:15, strong), no key-level sweep, zone waiting.\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nWhat is the read and the action?",
       "rule": "a 15m CISD against the side during the pullback: a reversal sign, like a 15m CHoCH against: wait, never counter",
       "anchor": "a 15m CISD or CHoCH against overrides: wait, whatever the depth or the engulfing read",
       "choices": [
@@ -1492,7 +1492,7 @@
       "id": "q104",
       "layer": "entry",
       "prompt": "head",
-      "text": "Briefing lines (synthetic, 10:18 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Class side (4h + 1h): up (4h up, 1h up).\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 45% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): hammer, close top third, range 0.9 ATR, vol 0.7x; rejected prior RTH high (closed back above; long-wick rejection, long side).\n- m3.lastBreak: last CHoCH down at 21507.75 (barsAgo 6); no 3m BOS or CISD up since.\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nThe 15m setup closed at a key level on the side. What do you do now?",
+      "text": "Briefing lines (synthetic, 10:18 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): ranging: 3m CHoCH down (potential reversal, unconfirmed); pullback (long leg 21462.5 -> 21538.75, depth 45%); 4h+1h up.\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 45% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): hammer, close top third, range 0.9 ATR, vol 0.7x; rejected prior RTH high (closed back above; long-wick rejection, long side).\n- m3.lastBreak: last CHoCH down at 21507.75 (barsAgo 6); no 3m BOS or CISD up since.\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nThe 15m setup closed at a key level on the side. What do you do now?",
       "rule": "a Pullback line is printed: the 15m reaction is the setup read; the entry waits for the first 3m BOS or CISD the side's way near value",
       "anchor": "unless a `Pullback` line prints.",
       "choices": [
@@ -1510,7 +1510,7 @@
       "lookup": [
         "pullback-vs-reversal"
       ],
-      "text": "Briefing lines (synthetic, 10:27 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Class side (4h + 1h): up (4h up, 1h up).\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 44% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): hammer, close top third, range 0.9 ATR, vol 0.7x; rejected prior RTH high (closed back above; long-wick rejection, long side).\n- CISD (completed candles; a read, not a signal): 3m bearish at 21507.25 (closed 10:27, strong), no key-level sweep, zone waiting.\n- m3.lastBreak: last CHoCH up at 21511.25 (barsAgo 3); no 3m BOS up since.\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nWhat does the 3m CISD down mean, and what do you do?",
+      "text": "Briefing lines (synthetic, 10:27 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): ranging: 3m CHoCH up (potential reversal, unconfirmed); pullback (long leg 21462.5 -> 21538.75, depth 44%); 4h+1h up.\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 44% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): hammer, close top third, range 0.9 ATR, vol 0.7x; rejected prior RTH high (closed back above; long-wick rejection, long side).\n- CISD (completed candles; a read, not a signal): 3m bearish at 21507.25 (closed 10:27, strong), no key-level sweep, zone waiting.\n- m3.lastBreak: last CHoCH up at 21511.25 (barsAgo 3); no 3m BOS up since.\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nWhat does the 3m CISD down mean, and what do you do?",
       "rule": "a 3m CISD against the side inside an open pullback reads as a 3m CHoCH against: the watch restarts; never a counter trade",
       "anchor": "A 3m CHoCH or CISD against inside it: the watch restarts.",
       "choices": [
@@ -1528,7 +1528,7 @@
       "lookup": [
         "pullback-vs-reversal"
       ],
-      "text": "Briefing lines (synthetic, 10:24 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Class side (4h + 1h): up (4h up, 1h up).\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 27% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): bullish engulfing, close top third, range 1.3 ATR, vol 1.4x.\n- CISD (completed candles; a read, not a signal): 15m bullish at 21497.25 (closed 10:15, strong), no key-level sweep, zone waiting.\n- m3.lastBreak: last BOS up at 21516.75 (barsAgo 0), previous CHoCH up at 21511.25 (barsAgo 2).\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nHow strong is the 15m read, and what do you do?",
+      "text": "Briefing lines (synthetic, 10:24 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): trend up: 3m CHoCH up then BOS up (confirmed transition up); pullback (long leg 21462.5 -> 21538.75, depth 27%); 4h+1h up.\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 27% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): bullish engulfing, close top third, range 1.3 ATR, vol 1.4x.\n- CISD (completed candles; a read, not a signal): 15m bullish at 21497.25 (closed 10:15, strong), no key-level sweep, zone waiting.\n- m3.lastBreak: last BOS up at 21516.75 (barsAgo 0), previous CHoCH up at 21511.25 (barsAgo 2).\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nHow strong is the 15m read, and what do you do?",
       "rule": "a 15m CISD up confirmed by a bullish engulfing candle is the strong form (cisd): it weighs more in the count; with the first 3m BOS up near value: the entry",
       "anchor": "the CISD line's `strong` is its displacement's strength, not a pattern name",
       "choices": [
@@ -1543,7 +1543,7 @@
       "id": "q107",
       "layer": "setup",
       "prompt": "head",
-      "text": "Briefing lines (synthetic, 10:24 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Class side (4h + 1h): up (4h up, 1h up).\n- m15.lastBreak: last BOS up at 21500.00 (10:00), through the prior RTH high 21500.00.\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 27% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): bullish engulfing, close top third, range 1.3 ATR, vol 1.4x.\n- CISD (completed candles; a read, not a signal): 15m bullish at 21497.25 (closed 10:15, strong), no key-level sweep, zone waiting.\n- m3.lastBreak: last BOS up at 21516.75 (barsAgo 0), previous CHoCH up at 21511.25 (barsAgo 2).\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nCandidate 4 Setup lines:\nF1 - long; 3m: BOS up, near value; 15m turn: CISD up, strong; 15m pullback to 21500.00; enter\nF2 - long; 15m pullback to 21500.00; 15m turn: CISD up, strong; strong setup: enter\nF3 - long; 15m pullback to 21500.00; 15m turn: CISD up, strong; 3m: BOS up, near value; strong setup: enter\nF4 - long; 15m pullback to 21500.00; 15m turn: CISD up; a CISD is not a BOS: wait\nWhich ONE of F1-F4 is your PLAN's 4 Setup line?",
+      "text": "Briefing lines (synthetic, 10:24 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): trend up: 3m CHoCH up then BOS up (confirmed transition up); pullback (long leg 21462.5 -> 21538.75, depth 27%); 4h+1h up.\n- m15.lastBreak: last BOS up at 21500.00 (10:00), through the prior RTH high 21500.00.\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 27% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): bullish engulfing, close top third, range 1.3 ATR, vol 1.4x.\n- CISD (completed candles; a read, not a signal): 15m bullish at 21497.25 (closed 10:15, strong), no key-level sweep, zone waiting.\n- m3.lastBreak: last BOS up at 21516.75 (barsAgo 0), previous CHoCH up at 21511.25 (barsAgo 2).\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nCandidate 4 Setup lines:\nF1 - long; 3m: BOS up, near value; 15m turn: CISD up, strong; 15m pullback to 21500.00; enter\nF2 - long; 15m pullback to 21500.00; 15m turn: CISD up, strong; strong setup: enter\nF3 - long; 15m pullback to 21500.00; 15m turn: CISD up, strong; 3m: BOS up, near value; strong setup: enter\nF4 - long; 15m pullback to 21500.00; 15m turn: CISD up; a CISD is not a BOS: wait\nWhich ONE of F1-F4 is your PLAN's 4 Setup line?",
       "rule": "a Pullback line printed: the 4 Setup line is the read chain in order: side; 15m pullback; 15m turn; 3m timing; verdict",
       "anchor": "your PLAN's `4 Setup` line is the read chain",
       "choices": [
@@ -1561,7 +1561,7 @@
       "lookup": [
         "pullback-vs-reversal"
       ],
-      "text": "Briefing lines (synthetic, 10:45 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Class side (4h + 1h): up (4h up, 1h up).\n- m15.lastBreak: last BOS up at 21541.25 (barsAgo 0), the 15m candle that closed 10:45; price 21579.50.\n- m3.lastBreak: last BOS up at 21571.75 (barsAgo 1); no 3m BOS or CISD up near value since the pullback.\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +2.4, EMA20 +1.9, overnight range broke out its way, day's move +3.1, regime with; short RTH VWAP -2.4, EMA20 -1.9, overnight range broke out against, day's move -3.1, regime against.\nWhat do you do?",
+      "text": "Briefing lines (synthetic, 10:45 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): trend up: 3m BOS up (continuation); 4h+1h up.\n- m15.lastBreak: last BOS up at 21541.25 (barsAgo 0), the 15m candle that closed 10:45; price 21579.50.\n- m3.lastBreak: last BOS up at 21571.75 (barsAgo 1); no 3m BOS or CISD up near value since the pullback.\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +2.4, EMA20 +1.9, overnight range broke out its way, day's move +3.1, regime with; short RTH VWAP -2.4, EMA20 -1.9, overnight range broke out against, day's move -3.1, regime against.\nWhat do you do?",
       "rule": "a 15m BOS far past value with no 3m BOS or CISD near it: late, not an entry; wait for the next pullback",
       "anchor": "a 15m BOS far past value (no 3m BOS or CISD near it): late, not an entry",
       "choices": [
@@ -1579,7 +1579,7 @@
       "lookup": [
         "pullback-vs-reversal"
       ],
-      "text": "Briefing lines (synthetic, 10:48 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Class side (4h + 1h): up (4h up, 1h up).\n- The 15m candle that closed 10:00 was a displacement up, 21494.25 -> 21541.50 (range 2.4 ATR).\n- Pullback (15m, long leg 21494.25 -> 21541.5): depth 44% of the leg; 15 bars since the extreme, volume 0.5x the leg's per bar (falling), range 0.4x; swings since the extreme: 15m 21494.25 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:45): inside, 3 in a row inside the 10:00 candle 21494.25-21541.5, close bottom third, range 0.4 ATR, vol 0.5x; none closed below the 10:00 candle's open 21494.25.\n- m3.lastBreak: last CHoCH down at 21524.25 (barsAgo 4).\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nWhat is the read and the action?",
+      "text": "Briefing lines (synthetic, 10:48 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): ranging: 3m CHoCH down (potential reversal, unconfirmed); pullback (long leg 21494.25 -> 21541.5, depth 44%); 4h+1h up.\n- The 15m candle that closed 10:00 was a displacement up, 21494.25 -> 21541.50 (range 2.4 ATR).\n- Pullback (15m, long leg 21494.25 -> 21541.5): depth 44% of the leg; 15 bars since the extreme, volume 0.5x the leg's per bar (falling), range 0.4x; swings since the extreme: 15m 21494.25 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:45): inside, 3 in a row inside the 10:00 candle 21494.25-21541.5, close bottom third, range 0.4 ATR, vol 0.5x; none closed below the 10:00 candle's open 21494.25.\n- m3.lastBreak: last CHoCH down at 21524.25 (barsAgo 4).\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nWhat is the read and the action?",
       "rule": "counter candles that do not engulf the displacement: a pullback forming, not a reversal; the fib is location only; the entry waits for the 15m turn and the 3m BOS or CISD",
       "anchor": "Counter candles that don't engulf it: a pullback forming, not a reversal",
       "choices": [
@@ -1597,7 +1597,7 @@
       "lookup": [
         "pullback-vs-reversal"
       ],
-      "text": "Briefing lines (synthetic, 10:18 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Class side (4h + 1h): up (4h up, 1h up).\n- The 15m candle that closed 10:00 was a displacement up, open 21494.25, close 21541.50 (range 2.4 ATR).\n- Pullback (15m, long leg 21494.25 -> 21541.5): the leg given back past its origin; 6 bars since the extreme; swings since the extreme: 15m 21494.25 broken by a close, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): bearish engulfing, close bottom third, range 2.6 ATR, vol 1.6x; it closed at 21490.75, below the 10:00 candle's open 21494.25.\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nWhat is the read and the action?",
+      "text": "Briefing lines (synthetic, 10:18 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): ranging: no 3m break printed; 4h+1h up.\n- The 15m candle that closed 10:00 was a displacement up, open 21494.25, close 21541.50 (range 2.4 ATR).\n- Pullback (15m, long leg 21494.25 -> 21541.5): the leg given back past its origin; 6 bars since the extreme; swings since the extreme: 15m 21494.25 broken by a close, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): bearish engulfing, close bottom third, range 2.6 ATR, vol 1.6x; it closed at 21490.75, below the 10:00 candle's open 21494.25.\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nWhat is the read and the action?",
       "rule": "a counter candle engulfing the displacement reads as a CHoCH against: a reversal sign, wait; never counter",
       "anchor": "a counter candle engulfing it reads as a CHoCH against: wait",
       "choices": [
@@ -1612,9 +1612,9 @@
       "id": "q111",
       "layer": "bias",
       "prompt": "head",
-      "text": "Briefing lines (synthetic, 10:30 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Class side (4h + 1h): up (4h up, 1h up).\n- Pullback (15m, long leg 21494.25 -> 21541.5): depth 44% of the leg; 10 bars since the extreme, volume 0.5x the leg's per bar (falling), range 0.4x; swings since the extreme: 15m 21494.25 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- The trend-momentum analyst's report: Regime (computed): 15m range/normal, 3m range/normal.\nYour own read: 4h up, 1h up, the 15m ranging inside this pullback.\nF1 - STATE: 4h up | 1h up | 15m range | frames agree | class trend-up | cites 4h-trend, 1h-trend, pullback\nF2 - STATE: 4h up | 1h up | 15m range | frames disagree | class chop | cites 4h-trend, 1h-trend, pullback\nF3 - STATE: 4h up | 1h up | 15m range | frames disagree | class trend-up | cites 4h-trend, 1h-trend, pullback\nF4 - STATE: 4h up | 1h up | 15m range | frames disagree | class unclear | cites 4h-trend, 1h-trend, pullback\nWhich ONE of F1-F4 is your STATE line?",
+      "text": "Briefing lines (synthetic, 10:30 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): ranging: no 3m break printed; pullback (long leg 21494.25 -> 21541.5, depth 44%); 4h+1h up.\n- Pullback (15m, long leg 21494.25 -> 21541.5): depth 44% of the leg; 10 bars since the extreme, volume 0.5x the leg's per bar (falling), range 0.4x; swings since the extreme: 15m 21494.25 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- The trend-momentum analyst's report: Regime (computed): 15m range/normal, 3m range/normal.\nYour own read: 4h up, 1h up, the 15m ranging inside this pullback.\nF1 - STATE: 4h up | 1h up | 15m range | frames agree | class trend-up | cites 4h-trend, 1h-trend, pullback\nF2 - STATE: 4h up | 1h up | 15m range | frames disagree | class chop | cites 4h-trend, 1h-trend, pullback\nF3 - STATE: 4h up | 1h up | 15m range | frames disagree | class trend-up | cites 4h-trend, 1h-trend, pullback\nF4 - STATE: 4h up | 1h up | 15m range | frames disagree | class unclear | cites 4h-trend, 1h-trend, pullback\nWhich ONE of F1-F4 is your STATE line?",
       "rule": "the 15m ranging under an aligned 4h and 1h: the frames disagree, and the class stays trend-up (a 15m range does not cancel it, nor does frames disagree)",
-      "anchor": "nor does your `frames disagree`",
+      "anchor": "your STATE frames stay your own read",
       "choices": [
         "F1",
         "F2",
@@ -1627,9 +1627,9 @@
       "id": "q112",
       "layer": "bias",
       "prompt": "head",
-      "text": "Briefing lines (synthetic, 10:42 ET), flat:\n- Bias: long only (4h range, 1h up; short refused).\n- Class side (4h + 1h): none (4h range, 1h up): no trend class; the Bias line above is the gate's floor, not your class.\n- Day so far (24 3m bars; `day-context`): directional up: efficiency 0.52 (x sqrt(bars) 2.55), RTH VWAP crosses 1, range 3.1 x 3m ATR(14), net up (its size: Trend declared? day's move); IB day type: today.dayType.\n- 15m (setup candle, closed 10:30): none, close top third, range 0.7 ATR, vol 0.8x.\nYour own read: 4h range, 1h up, 15m up; the movement is smooth and one-way, no breaks both ways, little overlap. Which class do you write in STATE?",
+      "text": "Briefing lines (synthetic, 10:42 ET), flat:\n- Bias: long only (4h range, 1h up; short refused).\n- Market state (3m): ranging: no 3m break printed; 4h range, 1h up (not aligned).\n- Day so far (24 3m bars; `day-context`): directional up: efficiency 0.52 (x sqrt(bars) 2.55), RTH VWAP crosses 1, range 3.1 x 3m ATR(14), net up (its size: Trend declared? day's move); IB day type: today.dayType.\n- 15m (setup candle, closed 10:30): none, close top third, range 0.7 ATR, vol 0.8x.\nYour own read: 4h range, 1h up, 15m up; the movement is smooth and one-way, no breaks both ways, little overlap. Which class do you write in STATE?",
       "rule": "the 4h and 1h not both one way: unclear; chop only when the movement is choppy, and a frame's range alone is never chop",
-      "anchor": "not both one way → `unclear` (never a trend class, smooth or not)",
+      "anchor": "| trend or ranging | not aligned | `unclear` | no trend trade |",
       "choices": [
         "chop",
         "unclear",
@@ -1645,7 +1645,7 @@
       "lookup": [
         "trend-vs-range"
       ],
-      "text": "Briefing lines (synthetic, 10:36 ET), flat:\n- Bias: no side yet (15m range).\n- Class side (4h + 1h): none (4h range, 1h range): no trend class; the Bias line above is the gate's floor, not your class.\n- Day so far (22 3m bars; `day-context`): rotational: efficiency 0.04 (x sqrt(bars) 0.19), RTH VWAP crosses 7, range 3.4 x 3m ATR(14), net up (its size: Trend declared? day's move).\n- 15m (setup candle, closed 10:30): none, close middle third, range 0.6 ATR, vol 0.8x.\n- m3.lastBreak: last CHoCH up at 21512.25 (barsAgo 2), previous CHoCH down at 21497.75 (barsAgo 7).\nSince 09:45 the 15m printed a BOS up, a CHoCH down, a BOS down and a CHoCH up, each reversed within two candles, none followed through. What is your read and action?",
+      "text": "Briefing lines (synthetic, 10:36 ET), flat:\n- Bias: no side yet (15m range).\n- Market state (3m): chop: 3m breaks alternating down, up (repeated potential reversals, none confirmed); Day so far rotational, RTH VWAP crosses 7; 4h range, 1h range (not aligned).\n- Day so far (22 3m bars; `day-context`): rotational: efficiency 0.04 (x sqrt(bars) 0.19), RTH VWAP crosses 7, range 3.4 x 3m ATR(14), net up (its size: Trend declared? day's move).\n- 15m (setup candle, closed 10:30): none, close middle third, range 0.6 ATR, vol 0.8x.\n- m3.lastBreak: last CHoCH up at 21512.25 (barsAgo 2), previous CHoCH down at 21497.75 (barsAgo 7).\nSince 09:45 the 15m printed a BOS up, a CHoCH down, a BOS down and a CHoCH up, each reversed within two candles, none followed through. What is your read and action?",
       "rule": "a market breaking structure both ways with no continuation is chop, not a sequence of reversals; chop: sit out",
       "anchor": "Structure broken both ways with no continuation is chop, not a run of reversals.",
       "choices": [
@@ -1660,9 +1660,9 @@
       "id": "q114",
       "layer": "entry",
       "prompt": "head",
-      "text": "Briefing lines (synthetic, 10:21 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Class side (4h + 1h): up (4h up, 1h up).\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 54% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: CHoCH down 21500 (1 bars ago), 1h: none.\n- Day so far (17 3m bars; `day-context`): mixed up: efficiency 0.14 (x sqrt(bars) 0.58), RTH VWAP crosses 3, range 2.9 x 3m ATR(14), net up (its size: Trend declared? day's move).\n- 15m (setup candle, closed 10:15): bearish engulfing, close bottom third, range 1.1 ATR, vol 1.3x.\n- m3.lastBreak: last BOS down at 21494.75 (barsAgo 3), previous CHoCH down at 21503.25 (barsAgo 9).\nOne 15m CHoCH down inside the pullback. What is your class and action?",
+      "text": "Briefing lines (synthetic, 10:21 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): trend down: 3m CHoCH down then BOS down (confirmed transition down); pullback (long leg 21462.5 -> 21538.75, depth 54%); 4h+1h up.\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 54% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: CHoCH down 21500 (1 bars ago), 1h: none.\n- Day so far (17 3m bars; `day-context`): mixed up: efficiency 0.14 (x sqrt(bars) 0.58), RTH VWAP crosses 3, range 2.9 x 3m ATR(14), net up (its size: Trend declared? day's move).\n- 15m (setup candle, closed 10:15): bearish engulfing, close bottom third, range 1.1 ATR, vol 1.3x.\n- m3.lastBreak: last BOS down at 21494.75 (barsAgo 3), previous CHoCH down at 21503.25 (barsAgo 9).\nOne 15m CHoCH down inside the pullback. What is your class and action?",
       "rule": "one 15m CHoCH against inside a pullback is a reversal attempt: wait; one CHoCH never classifies the market as chop; never counter",
-      "anchor": "One fact alone, or one BOS or CHoCH, is never chop.",
+      "anchor": "wait for the 15m turn (a live strong 15m CISD, a 15m BOS or a 15m reaction at the level)",
       "choices": [
         "chop: sit out the rest of the day",
         "short: the 15m CHoCH down is the reversal",
@@ -1678,7 +1678,7 @@
       "lookup": [
         "trend-vs-range"
       ],
-      "text": "Briefing lines (synthetic, 10:48 ET), flat:\n- Bias: long only (4h up, 1h range; short refused).\n- Class side (4h + 1h): none (4h up, 1h range): no trend class; the Bias line above is the gate's floor, not your class.\n- Day so far (26 3m bars; `day-context`): mixed up: efficiency 0.1 (x sqrt(bars) 0.51), RTH VWAP crosses 3, range 3.1 x 3m ATR(14), net up (its size: Trend declared? day's move).\n- h1.lastBreak: last CHoCH down at 21488.50 (barsAgo 2), previous BOS up at 21540.25 (barsAgo 9).\nYour read: 4h up; the 1h up leg is weakening (a CHoCH down, no BOS down since), the 15m `transition`: the old trend weakening, a new one not confirmed. Which class do you write in STATE?\nF1 - chop\nF2 - unclear\nF3 - trend-up\nF4 - trend-down\nAnswer with ONE of F1-F4.",
+      "text": "Briefing lines (synthetic, 10:48 ET), flat:\n- Bias: long only (4h up, 1h range; short refused).\n- Market state (3m): ranging: no 3m break printed; 4h up, 1h range (not aligned).\n- Day so far (26 3m bars; `day-context`): mixed up: efficiency 0.1 (x sqrt(bars) 0.51), RTH VWAP crosses 3, range 3.1 x 3m ATR(14), net up (its size: Trend declared? day's move).\n- h1.lastBreak: last CHoCH down at 21488.50 (barsAgo 2), previous BOS up at 21540.25 (barsAgo 9).\nYour read: 4h up; the 1h up leg is weakening (a CHoCH down, no BOS down since), the 15m `transition`: the old trend weakening, a new one not confirmed. Which class do you write in STATE?\nF1 - chop\nF2 - unclear\nF3 - trend-up\nF4 - trend-down\nAnswer with ONE of F1-F4.",
       "rule": "transitional: the old trend weakening and a new one not confirmed -> unclear (frame word transition)",
       "anchor": "transitional (old trend weakening, new one unconfirmed) → `unclear` (frame `transition`)",
       "choices": [
@@ -1690,31 +1690,13 @@
       "answer": "F2"
     },
     {
-      "id": "q116",
-      "layer": "bias",
-      "prompt": "lookup",
-      "lookup": [
-        "trend-vs-range"
-      ],
-      "text": "Briefing lines (synthetic, 10:54 ET), flat:\n- Bias: short only (4h range, 1h down; long refused).\n- Class side (4h + 1h): none (4h range, 1h down): no trend class; the Bias line above is the gate's floor, not your class.\n- Day so far (28 3m bars; `day-context`): rotational: efficiency 0.05 (x sqrt(bars) 0.26), RTH VWAP crosses 8, range 3.6 x 3m ATR(14), net down (its size: Trend declared? day's move).\n- m3.lastBreak: last CHoCH down at 21471.50 (barsAgo 1), previous CHoCH up at 21486.25 (barsAgo 5).\nNo edges: each swing high and low broken in turn, the swings drifting lower, no support or resistance held. Chop or range?",
-      "rule": "chop is the quality of movement, range its geometry: choppy movement without boundaries is chop, not range",
-      "anchor": "Chop needs no edges; a range can rotate cleanly.",
-      "choices": [
-        "range: chop is a range",
-        "trend-down: the 1h is down",
-        "range: wait for the edges to trade",
-        "chop: choppy movement needs no edges"
-      ],
-      "answer": "chop: choppy movement needs no edges"
-    },
-    {
       "id": "q117",
       "layer": "bias",
       "prompt": "lookup",
       "lookup": [
         "trend-vs-range"
       ],
-      "text": "Briefing lines (synthetic, 11:06 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Class side (4h + 1h): up (4h up, 1h up).\n- Day so far (32 3m bars; `day-context`): mixed up: efficiency 0.09 (x sqrt(bars) 0.51), RTH VWAP crosses 3, range 3.3 x 3m ATR(14), net up (its size: Trend declared? day's move).\n- m3.lastBreak: last BOS up at 21486.75 (barsAgo 1), previous CHoCH up at 21483.25 (barsAgo 4).\nSince 09:45 the 15m rotated cleanly between 21480.00 and 21560.00 three times, each leg one-way in 3-4 candles, turning at the edges; price is at 21488.25. Your read and what is allowed?",
+      "text": "Briefing lines (synthetic, 11:06 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): trend up: 3m CHoCH up then BOS up (confirmed transition up); 4h+1h up.\n- Day so far (32 3m bars; `day-context`): mixed up: efficiency 0.09 (x sqrt(bars) 0.51), RTH VWAP crosses 3, range 3.3 x 3m ATR(14), net up (its size: Trend declared? day's move).\n- m3.lastBreak: last BOS up at 21486.75 (barsAgo 1), previous CHoCH up at 21483.25 (barsAgo 4).\nSince 09:45 the 15m rotated cleanly between 21480.00 and 21560.00 three times, each leg one-way in 3-4 candles, turning at the edges; price is at 21488.25. Your read and what is allowed?",
       "rule": "a clean rotation between edges is range geometry, not chop; inside the 4h + 1h side a range day is catchable at the edge the side's way",
       "anchor": "A range day inside the 4h + 1h side is catchable: the turn at the edge the side's way",
       "choices": [
@@ -1729,9 +1711,9 @@
       "id": "q118",
       "layer": "bias",
       "prompt": "head",
-      "text": "Briefing lines (synthetic, 10:33 ET), flat:\n- Bias: short only (4h down, 1h down; long refused).\n- Class side (4h + 1h): down (4h down, 1h down).\n- Pullback (15m, short leg 21610.5 -> 21530.25): depth 37% of the leg; 7 bars since the extreme, volume 0.5x the leg's per bar (falling), range 0.4x; swings since the extreme: 15m 21610.5 holds, 1h 21655.75 holds; 15m break against: none, 1h: none.\n- Day so far (21 3m bars; `day-context`): mixed down: efficiency 0.12 (x sqrt(bars) 0.55), RTH VWAP crosses 3, range 2.8 x 3m ATR(14), net down (its size: Trend declared? day's move).\n- 15m (setup candle, closed 10:30): inside bar, close middle third, range 0.4 ATR, vol 0.6x.\n- m3.lastBreak: last CHoCH up at 21556.25 (barsAgo 2), previous BOS down at 21531.75 (barsAgo 11).\nYour read: 4h down, 1h down, 15m `transition` (small overlapping inside candles, the swing holds). Which class do you write in STATE?\nF1 - chop\nF2 - unclear\nF3 - trend-up\nF4 - trend-down\nAnswer with ONE of F1-F4.",
+      "text": "Briefing lines (synthetic, 10:33 ET), flat:\n- Bias: short only (4h down, 1h down; long refused).\n- Market state (3m): ranging: 3m BOS down then CHoCH up (potential reversal, unconfirmed); pullback (short leg 21610.5 -> 21530.25, depth 37%); 4h+1h down.\n- Pullback (15m, short leg 21610.5 -> 21530.25): depth 37% of the leg; 7 bars since the extreme, volume 0.5x the leg's per bar (falling), range 0.4x; swings since the extreme: 15m 21610.5 holds, 1h 21655.75 holds; 15m break against: none, 1h: none.\n- Day so far (21 3m bars; `day-context`): mixed down: efficiency 0.12 (x sqrt(bars) 0.55), RTH VWAP crosses 3, range 2.8 x 3m ATR(14), net down (its size: Trend declared? day's move).\n- 15m (setup candle, closed 10:30): inside bar, close middle third, range 0.4 ATR, vol 0.6x.\n- m3.lastBreak: last CHoCH up at 21556.25 (barsAgo 2), previous BOS down at 21531.75 (barsAgo 11).\nYour read: 4h down, 1h down, 15m `transition` (small overlapping inside candles, the swing holds). Which class do you write in STATE?\nF1 - chop\nF2 - unclear\nF3 - trend-up\nF4 - trend-down\nAnswer with ONE of F1-F4.",
       "rule": "a pause inside an open Pullback is never chop: the 4h and 1h both down -> trend-down",
-      "anchor": "(both one way → that trend class; else `unclear`), never `chop`",
+      "anchor": "| a pullback their way (trend or ranging) | aligned | that trend class",
       "choices": [
         "F1",
         "F2",
@@ -1744,9 +1726,9 @@
       "id": "q119",
       "layer": "bias",
       "prompt": "head",
-      "text": "Briefing lines (synthetic, 10:39 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Class side (4h + 1h): up (4h up, 1h up).\n- Day so far (23 3m bars; `day-context`): rotational: efficiency 0.05 (x sqrt(bars) 0.24), RTH VWAP crosses 8, range 3.2 x 3m ATR(14), net up (its size: Trend declared? day's move).\n- 15m (setup candle, closed 10:30): spinning top, close middle third, range 0.5 ATR, vol 0.7x.\n- m3.lastBreak: last CHoCH down at 21518.75 (barsAgo 1), previous CHoCH up at 21526.50 (barsAgo 4).\nYour read: 4h up, 1h up, 15m range; the 3m breaking both ways again and again. What is your class and action?\nF1 - trend-up: the 4h and 1h are up; take the next long setup\nF2 - chop: sit out, aligned or not\nF3 - unclear: the 15m range cancels the trend\nF4 - trend-down: the last CHoCH is down\nAnswer with ONE of F1-F4.",
+      "text": "Briefing lines (synthetic, 10:39 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): chop: 3m breaks alternating up, down (repeated potential reversals, none confirmed); Day so far rotational, RTH VWAP crosses 8; 4h+1h up.\n- Day so far (23 3m bars; `day-context`): rotational: efficiency 0.05 (x sqrt(bars) 0.24), RTH VWAP crosses 8, range 3.2 x 3m ATR(14), net up (its size: Trend declared? day's move).\n- 15m (setup candle, closed 10:30): spinning top, close middle third, range 0.5 ATR, vol 0.7x.\n- m3.lastBreak: last CHoCH down at 21518.75 (barsAgo 1), previous CHoCH up at 21526.50 (barsAgo 4).\nYour read: 4h up, 1h up, 15m range; the 3m breaking both ways again and again. What is your class and action?\nF1 - trend-up: the 4h and 1h are up; take the next long setup\nF2 - chop: sit out, aligned or not\nF3 - unclear: the 15m range cancels the trend\nF4 - trend-down: the last CHoCH is down\nAnswer with ONE of F1-F4.",
       "rule": "aligned 4h and 1h with choppy movement (breaks both ways, rotational, many VWAP crosses) -> chop: sit out",
-      "anchor": "→ class `chop`, whatever the 4h and 1h",
+      "anchor": "| chop | any | `chop` | sit out;",
       "choices": [
         "F1",
         "F2",
@@ -1759,9 +1741,9 @@
       "id": "q121",
       "layer": "entry",
       "prompt": "head",
-      "text": "Briefing lines (synthetic, 10:48 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Class side (4h + 1h): up (4h up, 1h up).\n- Day so far (26 3m bars; `day-context`): mixed up: efficiency 0.11 (x sqrt(bars) 0.56), RTH VWAP crosses 3, range 3.4 x 3m ATR(14), net up (its size: Trend declared? day's move).\n- 15m (setup candle, closed 10:45): bullish engulfing, close top third, range 1.2 ATR, vol 1.5x; rejected IB low (closed back above; long-wick rejection, long side).\n- m3.lastBreak: last BOS up at 21489.25 (barsAgo 0), previous CHoCH up at 21485.50 (barsAgo 2).\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nA range day: since 09:45 price rotated between the IB low 21480.00 and the IB high 21560.00, each leg clean; now the 15m turned up at the low edge. What is the action?",
+      "text": "Briefing lines (synthetic, 10:48 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): trend up: 3m CHoCH up then BOS up (confirmed transition up); 4h+1h up.\n- Day so far (26 3m bars; `day-context`): mixed up: efficiency 0.11 (x sqrt(bars) 0.56), RTH VWAP crosses 3, range 3.4 x 3m ATR(14), net up (its size: Trend declared? day's move).\n- 15m (setup candle, closed 10:45): bullish engulfing, close top third, range 1.2 ATR, vol 1.5x; rejected IB low (closed back above; long-wick rejection, long side).\n- m3.lastBreak: last BOS up at 21489.25 (barsAgo 0), previous CHoCH up at 21485.50 (barsAgo 2).\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nA range day: since 09:45 price rotated between the IB low 21480.00 and the IB high 21560.00, each leg clean; now the 15m turned up at the low edge. What is the action?",
       "rule": "a range day inside the 4h + 1h side is catchable: the turn at the edge the side's way, a 3m BOS near value: enter",
-      "anchor": "setups at the edge the side's way are OK",
+      "anchor": "setups at the range edge or on a breakout, the side's way",
       "choices": [
         "range day: no trade",
         "chop: sit out",
@@ -1771,27 +1753,12 @@
       "answer": "enter long: the turn at the low edge the side's way, 3m BOS near value"
     },
     {
-      "id": "q122",
-      "layer": "entry",
-      "prompt": "head",
-      "text": "Briefing lines (synthetic, 11:21 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Class side (4h + 1h): up (4h up, 1h up).\n- Day so far (37 3m bars; `day-context`): rotational: efficiency 0.04 (x sqrt(bars) 0.24), RTH VWAP crosses 9, range 3.4 x 3m ATR(14), net up (its size: Trend declared? day's move).\n- 15m (setup candle, closed 11:15): doji, close middle third, range 0.4 ATR, vol 0.6x.\n- m3.lastBreak: last CHoCH up at 21523.75 (barsAgo 1), previous CHoCH down at 21516.25 (barsAgo 3).\nThe same range day, later: price churns mid-range at 21521.75, between the IB low 21480.00 and the IB high 21560.00, breaking both ways. What is the action?",
-      "rule": "mid-range churn on a range day is chop (breaks both ways, rotational): sit out; only the clean legs from the edges are setups",
-      "anchor": "→ no entry, sit out.",
-      "choices": [
-        "enter long: a range day with the 4h and 1h up",
-        "short: the CHoCH down",
-        "range day: take either edge from here",
-        "chop: mid-range churn; sit out"
-      ],
-      "answer": "chop: mid-range churn; sit out"
-    },
-    {
       "id": "q123",
       "layer": "entry",
       "prompt": "head",
-      "text": "Briefing lines (synthetic, 10:30 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Class side (4h + 1h): up (4h up, 1h up).\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 30% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- Day so far (20 3m bars; `day-context`): rotational: efficiency 0.06 (x sqrt(bars) 0.27), RTH VWAP crosses 6, range 2.7 x 3m ATR(14), net up (its size: Trend declared? day's move).\n- 15m (setup candle, closed 10:30): none, close middle third, range 0.5 ATR, vol 0.6x.\n- m3.lastBreak: last CHoCH up at 21514.75 (barsAgo 1), previous CHoCH down at 21509.25 (barsAgo 5).\nInside the pullback: a 3m CHoCH down, then a CHoCH up; the Day so far reads rotational, 6 RTH VWAP crosses. What is your class and action?\nF1 - chop: both CHoCH and rotational; sit out\nF2 - short: the 3m CHoCH down\nF3 - trend-up, not chop: the watch; wait for the 15m turn and a 3m BOS up\nF4 - enter long now: the 3m CHoCH up is the entry\nAnswer with ONE of F1-F4.",
+      "text": "Briefing lines (synthetic, 10:30 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): ranging: 3m breaks alternating down, up (repeated potential reversals, none confirmed); pullback (long leg 21462.5 -> 21538.75, depth 30%); 4h+1h up.\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 30% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- Day so far (20 3m bars; `day-context`): rotational: efficiency 0.06 (x sqrt(bars) 0.27), RTH VWAP crosses 6, range 2.7 x 3m ATR(14), net up (its size: Trend declared? day's move).\n- 15m (setup candle, closed 10:30): none, close middle third, range 0.5 ATR, vol 0.6x.\n- m3.lastBreak: last CHoCH up at 21514.75 (barsAgo 1), previous CHoCH down at 21509.25 (barsAgo 5).\nInside the pullback: a 3m CHoCH down, then a CHoCH up; the Day so far reads rotational, 6 RTH VWAP crosses. What is your class and action?\nF1 - chop: both CHoCH and rotational; sit out\nF2 - short: the 3m CHoCH down\nF3 - trend-up, not chop: the watch; wait for the 15m turn and a 3m BOS up\nF4 - enter long now: the 3m CHoCH up is the entry\nAnswer with ONE of F1-F4.",
       "rule": "inside an open Pullback line the 3m CHoCH against then back is the watch, never chop: the trend class; wait for the 15m turn and the first 3m BOS or CISD",
-      "anchor": "the watch ends at the first 3m BOS or CISD the side's way",
+      "anchor": "enter on the first 3m BOS or CISD the side's way near value",
       "choices": [
         "F1",
         "F2",
@@ -1799,6 +1766,69 @@
         "F4"
       ],
       "answer": "F3"
+    },
+    {
+      "id": "q124",
+      "layer": "entry",
+      "prompt": "head",
+      "text": "Briefing lines (synthetic, 10:45 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): trend up: 3m breaks alternating down, up (repeated potential reversals, none confirmed), then a 3m CISD up (confirmed); the chop ended; 4h+1h up.\n- Day so far (25 3m bars; `day-context`): rotational: efficiency 0.05 (x sqrt(bars) 0.25), RTH VWAP crosses 7, range 3.3 x 3m ATR(14), net up (its size: Trend declared? day's move).\n- m3.lastBreak: last CHoCH up at 21516.25 (barsAgo 3), previous CHoCH down at 21503.75 (barsAgo 8).\n- CISD (completed candles; a read, not a signal): 3m bullish at 21512.50 (closed 10:45, strong), no key-level sweep, OTE 21507.5-21510.5 (mid 21509), waiting.\nWhat is your class and action?\nF1 - chop: both CHoCH and rotational; sit out\nF2 - trend-up: the chop ended (a CHoCH up, then a 3m CISD up); long setups the side's way\nF3 - unclear: a rotational day has no side\nF4 - short: the previous CHoCH down\nAnswer with ONE of F1-F4.",
+      "rule": "chop ends on a CHoCH then a BOS or a 3m CISD the same way: the state follows the 4h + 1h (trending up)",
+      "anchor": "chop ends: a CHoCH then a BOS or CISD the same way",
+      "choices": [
+        "F1",
+        "F2",
+        "F3",
+        "F4"
+      ],
+      "answer": "F2"
+    },
+    {
+      "id": "q125",
+      "layer": "entry",
+      "prompt": "head",
+      "text": "Briefing lines (synthetic, 11:03 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): trend up: 3m breaks alternating down, up (repeated potential reversals, none confirmed), then a close above the IB high 21560 (confirmed); the chop ended; 4h+1h up.\n- Price 21563.25.\n- MNQ day: opened 21500 inside the prior value area; opening type open-auction; initial balance 21480-21560 (80 points), extended 4.25 up and 0 down: normal variation up; range so far 84.25 (no 20-day average: fewer days in the data).\n- Day so far (31 3m bars; `day-context`): rotational: efficiency 0.05 (x sqrt(bars) 0.28), RTH VWAP crosses 8, range 3.6 x 3m ATR(14), net up (its size: Trend declared? day's move).\n- m3.lastBreak: last CHoCH up at 21558.25 (barsAgo 0), previous CHoCH down at 21497.75 (barsAgo 6).\nWhat is your class and action?\nF1 - chop: both CHoCH and rotational; sit out\nF2 - trend-up: the chop ended (a close above the IB high); long setups the side's way\nF3 - unclear: a rotational day has no side\nF4 - short: the previous CHoCH down\nAnswer with ONE of F1-F4.",
+      "rule": "chop ends on a close beyond the range it rotated in (the IB): the state follows the 4h + 1h (trending up)",
+      "anchor": "or a close beyond the range (the IB; before 10:30 only a BOS or CISD ends it)",
+      "choices": [
+        "F1",
+        "F2",
+        "F3",
+        "F4"
+      ],
+      "answer": "F2"
+    },
+    {
+      "id": "q126",
+      "layer": "entry",
+      "prompt": "head",
+      "text": "Briefing lines (synthetic, 10:33 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): trend down: 3m CHoCH down then BOS down (confirmed transition down); 15m up: a pullback in the 15m trend; 4h+1h up.\n- m15.frame.trend: up.\n- m3.lastBreak: last BOS down at 21506.25 (barsAgo 1), previous CHoCH down at 21512.75 (barsAgo 5).\n- Day so far (21 3m bars; `day-context`): mixed up: efficiency 0.14 (x sqrt(bars) 0.64), RTH VWAP crosses 3, range 2.9 x 3m ATR(14), net up (its size: Trend declared? day's move).\nWhat is your read and action?",
+      "rule": "a 15m trend the 4h + 1h way with the 3m trending against it is a pullback in the 15m trend: the trend class; watch for the 15m turn, then the 3m BOS or CISD the side's way",
+      "anchor": "a 3m trend against inside it is the pullback, not a new trend",
+      "choices": [
+        "3m trend down: short",
+        "unclear: the 3m trend is against the 4h and 1h; no trade",
+        "enter long now: the 15m trend is up",
+        "a pullback in the 15m trend: class trend-up; watch for the 15m turn, then a 3m BOS or CISD up"
+      ],
+      "answer": "a pullback in the 15m trend: class trend-up; watch for the 15m turn, then a 3m BOS or CISD up"
+    },
+    {
+      "id": "q127",
+      "layer": "bias",
+      "prompt": "lookup",
+      "lookup": [
+        "bos-vs-choch"
+      ],
+      "text": "Briefing lines (synthetic, 10:42 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): ranging: 3m BOS up then CHoCH down (potential reversal, unconfirmed); 4h+1h up.\n- m3.lastBreak: last CHoCH down at 21508.75 (barsAgo 1), previous BOS up at 21526.25 (barsAgo 9).\n- Day so far (24 3m bars; `day-context`): mixed up: efficiency 0.13 (x sqrt(bars) 0.64), RTH VWAP crosses 3, range 3 x 3m ATR(14), net up (its size: Trend declared? day's move).\nThe 3m closed below a swing low, against its up trend. What does this break mean?",
+      "rule": "a CHoCH alone is a potential reversal, unconfirmed until a BOS follows its way; BOS is continuation of the confirmed trend",
+      "anchor": "The trend is the confirmed one: it changes only when a CHoCH is followed by a BOS the new way",
+      "choices": [
+        "reversal confirmed: trade the other way (short)",
+        "a continuation of the up trend: buy now",
+        "a potential reversal, unconfirmed: watch for the next BOS either way",
+        "chop: sit out for the day"
+      ],
+      "answer": "a potential reversal, unconfirmed: watch for the next BOS either way"
     }
   ],
   "partB": [

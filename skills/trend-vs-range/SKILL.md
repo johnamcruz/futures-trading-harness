@@ -41,6 +41,9 @@ belongs behind structure (a swing), not at an arbitrary distance (`invalidation`
   a range;
 - transition: regime `transition`, or regime and structure disagree.
 
+Trending: consistent BOS, directional displacement, follow-through. Chop:
+alternating BOS/CHoCH, overlapping candles, failed continuation.
+
 **Chop** (owner's definition; quality, not geometry): price swings back
 and forth with no sustained control either way.
 
@@ -48,15 +51,14 @@ and forth with no sustained control either way.
   breaks without displacement that reverse, no HH/HL or LH/LL sequence.
 - Price action: overlapping candles, direction flipping, low efficiency,
   weak momentum, local highs and lows rejected, failed breakouts.
-- The class `chop`, its printed facts and the open `Pullback` line:
-  `trade-session` (its Chop line). One CHoCH warns; it is not chop.
+- The state is printed: the Market state line (`trade-session`). One
+  CHoCH warns; it is not chop.
 - Never classify from one BOS or CHoCH: weigh significance, displacement,
   consistency, follow-through, overlap, efficiency. Structure broken both
   ways with no continuation is chop, not a run of reversals.
 
-Classes (STATE, `trade-session`): trending → `trend-up`/`trend-down`;
-choppy → `chop`; transitional (old trend weakening, new one unconfirmed)
-→ `unclear` (frame `transition`); ranging → frame `range`.
+Frames: transitional (old trend weakening, new one unconfirmed) → `unclear`
+(frame `transition`). The class: `trade-session`'s table.
 
 **Chop is not range.** Chop needs no edges; a range can rotate cleanly.
 A range day inside the 4h + 1h side is catchable: the turn at the edge

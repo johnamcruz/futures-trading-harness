@@ -29,12 +29,16 @@ broken; each swing breaks once. Only closes count, on completed candles.
 A wick through a swing that closes back inside is a sweep, not a break
 (the `breakout-vs-fakeout` skill).
 
-- BOS: a close beyond the last swing in the trend's direction. In the
-  code, that is the previous break's direction (the first break too).
+- BOS: a close beyond the last swing in the trend's direction.
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
+- The trend is the confirmed one: it changes only when a CHoCH is
+  followed by a BOS the new way; a break back is a failed reversal; CHoCH after CHoCH, no confirming
+  BOS: unconfirmed (chop with its facts). The code's `kind` compares each
+  break with the one before it; the Market state line (`trade-session`)
+  reads them against the confirmed trend.
 
-**Fields**: `m3.lastBreak.last` and `m3.lastBreak.previous`; the same
+**Fields**: `m3.lastBreak.last`, `.previous` and `.before` (3m); the same
 under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
 a 5m lane's briefing has it in its `bar` part. Each: `kind` (`BOS` or
 `CHoCH`), `direction` (`up` or `down`), `level`, `barsAgo` (that
@@ -48,9 +52,7 @@ timeframe's candles). The 4h has swings only (`h1.h4.swingPattern`).
 | 15m | the working structure continues | the working structure shifting: a deeper pullback, or a reversal starting |
 | 1h (4h swings) | the HTF trend continues | the strongest sign of an HTF trend change, not a reversal by itself: a BOS the new way confirms it |
 
-No single BOS or CHoCH classifies the market. Structure broken both
-ways again and again with no continuation is chop, not a run of
-reversals (the class: `trade-session`).
+No single BOS or CHoCH classifies the market.
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal

@@ -1782,8 +1782,8 @@ Frozen definitions:
   no such side, the side-free signals' class B reads `chop`, else
   `unclear`. It is a bars-only read independent of the lesson except
   through C3 (the in-Pullback CHoCH pair is not C3): inside an open
-  `Pullback` line (`trade-session`) it can still read `chop` (on C1 and
-  C7).
+  `Pullback` line (pullback-read.js `isOpen`) it can still read `chop` (on
+  C1 and C7).
   The signals per side, each a present fact of the candle's
   briefing: the day so far rotational (C1) or directional the side's way
   (T1); the 15m breaking both ways, its last and previous breaks both
@@ -1798,34 +1798,45 @@ Frozen definitions:
   inside the prior value area (C8) or an IB trend day the side's way (T7);
   the day's trend declared for the side (T5). Class A: no signal; C: trend
   only; B: chop outnumbers trend; D: both, trend at least chop.
-- **The coded read**: choppy movement reads `chop`, an aligned day too:
-  the 3m breaking both ways (its last and previous breaks both CHoCH) and
-  either the day so far rotational or its RTH VWAP crosses (the Day so far
-  line's count, the one the skills teach) at or above
-  `signals.crossesChop`, never one fact alone, and never inside an open
-  `Pullback` line (`trade-session`; pullback-read.js `isOpen`); else the 4h and 1h agreeing up or down read
-  `trend-<way>`; else `unclear`. It is never the model's. (`day-context`'s
+- **The coded read** = the briefing's Market state (scripts/lib/trading/
+  market-state.js `readState`, the one definition the summary line prints;
+  the Market state pull request): pullback and trending read
+  `trend-<way>`, chop reads `chop`, not aligned reads `unclear`. The
+  precedence, once: pullback (the 4h and 1h both one way and an open
+  `Pullback` line their way), chop (the 3m breaking both ways, its last
+  and previous breaks both CHoCH, and either the day so far rotational or
+  its RTH VWAP crosses, the Day so far line's count, at or above
+  `signals.crossesChop`; never one fact alone; no open `Pullback` line;
+  aligned or not), trending (aligned), not aligned. Chop ends on the last
+  CHoCH followed by a live 3m CISD its way confirmed on a later candle, or
+  on a close beyond the initial balance (complete from 10:30 ET) with the
+  previous break inside it and the last break that way; a CHoCH then a BOS
+  is not the pair. A chop ended against the alignment reads not aligned.
+  It is never the model's. Against the coded read before it, the only
+  difference is a `Pullback` leg against the 4h and 1h (not on a live
+  briefing): it no longer blocks chop; the chop's end is new. (`day-context`'s
   `daySoFar` config has no crosses threshold, so the existing
   `crossesChop` is used: 5 is a 30-bar-window count, applied here to the
   whole RTH morning's RTH VWAP crosses; the skills' "many" is
-  unquantified. C7 still reads the session crosses, as frozen.)
+  unquantified; the briefing passes config/analysis.json
+  `regime.rangeCrosses`, pinned equal. C7 still reads the session crosses,
+  as frozen.)
 - **Three reads, kept apart** (the chop pull request):
-  - *The coded read* = our rules restated (it follows the taught
-    guardrail: never `chop` inside an open `Pullback` line,
-    `trade-session`).
+  - *The coded read* = the Market state restated (never `chop` inside an
+    open `Pullback` line).
   - *The evidence word* = a bars-only read, independent of the lesson
     except through C3 (the in-Pullback CHoCH pair is not C3); scoring a
     model against it does not assume the lesson is right.
   - *Open-Pullback candles* (the post-merge moment-test plan) = a separate
     stratum: the candles whose present key has `facts.pullback` true
-    (pullback-read.js `isOpen`, `trade-session`'s definition), judged by
+    (pullback-read.js `isOpen`), judged by
     the pass check (did the pullback resume, or range or reverse: READ15's
     A/B/C, hindsight only) and the actual-exit R of entries there; the
     evidence word is reported beside, not used to score the guardrail.
   An open `Pullback` line: the briefing prints one and its leg is not
   given back past its origin (pullback-read.js `givenBack`: `pastOrigin`
-  when stated, else depth ≥ 1; pullback-vs-reversal step 8;
-  trade-session states it).
+  when stated, else depth ≥ 1; pullback-vs-reversal step 8); the
+  briefing's Market state reads it, the skills name the state.
 - **Chop is not range** (the owner's rule, the chop pull request): chop is
   the quality of movement, range its geometry. A 15m `range` or a 3m
   `range` regime is neither a chop signal nor the coded read's `chop`; C2,

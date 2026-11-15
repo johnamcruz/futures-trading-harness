@@ -144,33 +144,24 @@ about 0.25 × the 15m ATR of the broken level) is the reaction.
 **The decision follows your STATE read** (the head trader's own, the last
 line of its PLAN; taught: the gate and `compose_check` do not read it):
 
-- The class follows your frames and the movement, in this order:
-  - Open `Pullback` line: the `Pullback` line is printed and its leg is
-    not given back past its origin.
-  - Chop first: `m3.lastBreak` last and previous both CHoCH, with the Day
-    so far `rotational` (the printed Day so far word only, never your
-    reading of the efficiency number) or many RTH VWAP crosses, and no
-    open `Pullback` line → class `chop`, whatever the 4h and 1h → no
-    entry, sit out. One fact alone, or one BOS or CHoCH, is never chop. A
-    frame's `range` or `transition` alone is never `chop` (range is
-    geometry, chop quality).
-  - The printed `Class side (4h + 1h)` line `up` or `down` (your 4h and
-    1h both one way) → that trend class (a 15m pullback, `range` or
-    `transition` under them doesn't cancel it, nor does your `frames
-    disagree`). The `Class side` line is the 4h and 1h as printed; a
-    trend class needs it `up` or `down`. A lower-timeframe range inside
-    the 4h + 1h trend (a range day too): setups at the edge the side's way
-    are OK, or the breakout with follow-through.
-  - `none`, your 4h and 1h not both one way → `unclear` (never a trend
-    class, smooth or not): 4h range, 1h up, smooth → `unclear` (not
-    `trend-up`: the 4h is not up; not `chop`: smooth). The Bias line is
-    the gate's floor, not your class.
-  - Pause (`pullback-vs-reversal` step 3): inside an open `Pullback` line
-    → the class the two class bullets above give (both one way → that
-    trend class; else `unclear`), never `chop`; a 3m CHoCH against then
-    back: the watch; the watch ends at the first 3m BOS or CISD the side's
-    way = the entry timing; setup and entry: `pullback-vs-reversal` steps
-    4-6.
+- The class follows the printed `Market state` line: the 3m state
+  (code applies the order once: chop, trend, ranging), the Pullback read
+  and the 4h + 1h beside it; your STATE frames stay your own read; yours
+  off the line: the class stays the line's, say why in the PLAN.
+
+| 3m state | 4h + 1h | class | action |
+|---|---|---|---|
+| trend, their way | aligned | that trend class | setups the side's way |
+| ranging | aligned | the side's trend class (a range day inside the trend) | setups at the range edge or on a breakout, the side's way |
+| a pullback their way (trend or ranging) | aligned | that trend class (a 3m trend against inside it is the pullback, not a new trend) | wait for the 15m turn (a live strong 15m CISD, a 15m BOS or a 15m reaction at the level); enter on the first 3m BOS or CISD the side's way near value (`pullback-vs-reversal` steps 4-7) |
+| trend against them | aligned | `unclear` | no trade, never counter |
+| trend or ranging | not aligned | `unclear` | no trend trade |
+| chop | any | `chop` | sit out; chop ends: a CHoCH then a BOS or CISD the same way, or a close beyond the range (the IB; before 10:30 only a BOS or CISD ends it) |
+
+Trending: consistent BOS, directional displacement, follow-through. Chop:
+alternating BOS/CHoCH, overlapping candles, failed continuation
+(`trend-vs-range`).
+
 - A take: `class` on its side (`trend-up` long, `trend-down` short), your
   4h and 1h too (`up` long, `down` short).
 - `compose_check` still runs first (its record is the evidence the pass is

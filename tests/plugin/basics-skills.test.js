@@ -59,7 +59,9 @@ const PINS = {
     'the breaks a sequence of BOS that way;',
     'price rotating between a support and a resistance it keeps;',
     // feat/chop-read (owner-approved 2026-11-14): the owner's chop definition; chop is not range.
-    'The class `chop`, its printed facts and the open `Pullback` line: `trade-session` (its Chop line). One CHoCH warns; it is not chop.',
+    'The state is printed: the Market state line (`trade-session`). One CHoCH warns; it is not chop.',
+    // The Market state redesign: the owner's trending and chop definitions (the head core's table reads the same).
+    'Trending: consistent BOS, directional displacement, follow-through. Chop: alternating BOS/CHoCH, overlapping candles, failed continuation.',
     'Structure broken both ways with no continuation is chop, not a run of reversals.',
     '**Chop is not range.** Chop needs no edges; a range can rotate cleanly.',
     'a 15m setup the HTF way inside an HTF trend is the pullback ending (`pullback-vs-reversal`), not a range;',
@@ -249,7 +251,10 @@ const PINS = {
   'bos-vs-choch': [
     'Confirmed fractal swings (k=2: a pivot with 2 strictly lower highs or higher lows on each side, confirmed 2 bars later).',
     'A close strictly beyond the last confirmed swing not yet broken; each swing breaks once. Only closes count, on completed candles.',
-    'In the code, that is the previous break\'s direction (the first break too).',
+    // The owner's labelling rule (feat/chop-read, 2026-11-14): BOS and CHoCH against the confirmed trend; the code's kind
+    // compares each break with the one before it, and the Market state line reads them the owner's way.
+    'The trend is the confirmed one: it changes only when a CHoCH is followed by a BOS the new way;',
+    'The code\'s `kind` compares each break with the one before it;',
     'No one timeframe is the signal; read them top-down.',
     '| 3m, 5m | a candle fact only: never the setup, never a wait (unless a `Pullback` line is printed: `pullback-vs-reversal`) | a candle fact only (its swings are the stop\'s) |',
     '| 15m | the working structure continues | the working structure shifting: a deeper pullback, or a reversal starting |',
@@ -609,7 +614,7 @@ test('bos-vs-choch: the description is short, and the swings and breaks are the 
   assert.match(se, /kind: prev && prev\.direction !== direction \? 'CHoCH' : 'BOS'/);
   assert.match(se, /if \(direction === 'up'\) hi = null; else lo = null;/);
   const br = read('scripts/lib/trading/briefing.js');
-  assert.match(br, /lastBreak: lastBreaks\(bars\),/);
+  assert.match(br, /lastBreak: \{ \.\.\.lastBreaks\(bars\), before: breakBefore\(bars\) \},/);
   assert.match(br, /lastBreak: atClose\(lastBreaks\(c15\), 15\),/);
   assert.match(br, /lastBreak: atClose\(lastBreaks\(c60\), 60\)/);
   // On a real briefing: the kinds and directions the skill names, knownAt on 15m and 1h, and no 4h break.

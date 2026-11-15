@@ -182,13 +182,60 @@ function biasBriefing({ h4, h1, t15, declared = false }) {
   };
 }
 
-function excerptOf(excerpt) {
-  if (isObj(excerpt.bias)) {
-    // The Bias line, then the Class side line under it, as the live briefing prints them (bias-line.js).
-    const { biasLine, classSideLine } = require('../trading/bias-line');
-    const b = biasBriefing(excerpt.bias);
-    return [`${biasLine(b)}.`, ...(classSideLine(b) ? [`${classSideLine(b)}.`] : [])];
+// An item's synthetic briefing as the facts the Market state reads (quiz realism, feat/chop-read): the Bias line's 4h and
+// 1h (neutral and no side yet: both range), the Pullback line, m3.lastBreak (each break's candle placed by the clock and
+// its barsAgo), the Day so far line, the 3m CISD (its confirming candle by its close), the initial balance, the price and
+// the 15m frame's trend (the quiz's prose for the JSON field, `m15.frame.trend: up`).
+const NUM = '(-?\\d+(?:\\.\\d+)?)';
+const minOf = hhmm => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + m; };
+const isoAt = min => new Date(min * 60000).toISOString(); // only the order of the clock's candles matters
+function briefingOfText(text) {
+  const t = String(text || '');
+  const bias = /\n- Bias: ([^\n]*)/.exec(t);
+  if (!bias) return null;
+  const fr = /\(4h (up|down|range), 1h (up|down|range)/.exec(bias[1]);
+  const [h4, h1] = fr ? [fr[1], fr[2]] : /^(neutral|no side yet)/.test(bias[1]) ? ['range', 'range'] : [null, null];
+  const clock = /synthetic, (\d{1,2}:\d{2}) ET/.exec(t);
+  const now = clock ? minOf(clock[1]) : null;
+  const m3 = {};
+  const pb = new RegExp(`\\n- Pullback \\((\\w+), (long|short) leg ${NUM} -> ${NUM}\\): ([^\\n]*)`).exec(t);
+  if (pb) {
+    const small = new RegExp(`leg ${NUM}x ATR\\(14\\), under the`).exec(pb[5]);
+    const depth = /depth (\d+)% of the leg/.exec(pb[5]);
+    m3.pullback = { frame: pb[1], side: pb[2], leg: { origin: +pb[3], extreme: +pb[4], ...(small ? { atr: +small[1] } : {}) },
+      depth: depth ? +depth[1] / 100 : null, pastOrigin: /given back past its origin/.test(pb[5]) };
   }
+  const brk = (kind, dir, level, ago) => ({ kind, direction: dir, level: +level, barsAgo: +ago, ...(now !== null ? { at: isoAt(now - 3 * (+ago + 1)) } : {}) });
+  const lb = new RegExp(`\\n- m3\\.lastBreak: last (BOS|CHoCH) (up|down) at ${NUM} \\(barsAgo (\\d+)\\)(?:, previous (BOS|CHoCH) (up|down) at ${NUM} \\(barsAgo (\\d+)\\))?`).exec(t);
+  if (lb) m3.lastBreak = { last: brk(lb[1], lb[2], lb[3], lb[4]), previous: lb[5] ? brk(lb[5], lb[6], lb[7], lb[8]) : null };
+  const day = /\n- Day so far \([^\n]*?\): (rotational|mixed|directional|too early)[^\n]*?RTH VWAP crosses (\d+)/.exec(t);
+  const today = {};
+  if (day) today.soFar = day[1] === 'too early' ? { status: 'too early', vwapCrosses: +day[2] } : { status: 'read', read: day[1], vwapCrosses: +day[2] };
+  const ib = new RegExp(`initial balance ${NUM}-${NUM}`).exec(t);
+  if (ib) Object.assign(today, { ibLow: +ib[1], ibHigh: +ib[2] });
+  if (Object.keys(today).length) m3.today = today;
+  const cisd = /\n- CISD \([^\n]*?: 3m (bullish|bearish) at [\d.]+ \(closed (\d{1,2}:\d{2}), (strong|weak)\)[^;\n]*?(waiting|touched|bounced|void|expired|no zone)/.exec(t);
+  if (cisd) m3.cisd = { '3m': { dir: cisd[1], confirmedAt: isoAt(minOf(cisd[2]) - 3), status: cisd[3] === 'weak' || cisd[4] === 'no zone' ? 'weak' : cisd[4] } };
+  const price = new RegExp(`\\n- Price ${NUM}`).exec(t);
+  if (price) m3.price = +price[1];
+  const h1Data = { ...(h4 ? { h4: { trend: h4 } } : {}), ...(h1 ? { h1: { trend: h1 } } : {}) };
+  const t15 = /\n- m15\.frame\.trend: (up|down|range)/.exec(t);
+  return {
+    minutes: 3,
+    sections: { h1: { data: h1Data }, m3: { data: m3 }, ...(t15 ? { m15: { data: { frame: { trend: t15[1] } } } } : {}) },
+  };
+}
+
+/** The Market state line the live briefing would print for an item's synthetic lines (market-state.js; the briefing's threshold). */
+function marketStateOfText(text) {
+  const b = briefingOfText(text);
+  if (!b) return null;
+  const M = require('../trading/market-state');
+  return M.marketStateLine(M.stateOf(b, { crossesChop: require('../tunables').analysis().regime.rangeCrosses }));
+}
+
+function excerptOf(excerpt) {
+  if (isObj(excerpt.bias)) return [`${require('../trading/bias-line').biasLine(biasBriefing(excerpt.bias))}.`];
   // The attempt's facts and sizing are the quiz file's (the lines are the code's on them).
   if (isObj(excerpt.size)) return require('../prop/size-line').sizeLines(excerpt.size).map(l => `${l}.`);
   // Live context (round 8): per case its Bias line and the REACTION line compose_check gives for its read
@@ -312,4 +359,4 @@ function compare(a, b) {
   });
 }
 
-module.exports = { VERDICT, LAYERS, PROMPTS, PROMPT_ROLES, loadQuiz, quizErrors, questionErrors, promptKey, buildPrompts, excerptOf, questionText, answerLine, negated, gradeAnswer, summarize, compare, quizCommand, replyOf, anchorsMissing };
+module.exports = { VERDICT, LAYERS, PROMPTS, PROMPT_ROLES, loadQuiz, quizErrors, questionErrors, promptKey, buildPrompts, excerptOf, briefingOfText, marketStateOfText, questionText, answerLine, negated, gradeAnswer, summarize, compare, quizCommand, replyOf, anchorsMissing };

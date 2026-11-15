@@ -110,7 +110,11 @@ const { structure5m, structureLine } = require('./m5-structure');
 const { compressionFrames, compressionLine } = require('./compression');
 const { declaredFacts, declaredLine } = require('./trend-declared');
 const { daySoFar, daySoFarLine, rthVolatility, volatilityText } = require('./day-so-far');
-const { biasLine, classSideLine } = require('./bias-line');
+const { biasLine } = require('./bias-line');
+const { stateOf, marketStateLine } = require('./market-state');
+// The Market state's chop threshold: the regime's rotation count (config/analysis.json; a test pins it to the recognition
+// key's frozen crossesChop).
+const STATE_TH = { crossesChop: require('../tunables').analysis().regime.rangeCrosses };
 const { pullbackRead, pullbackLine } = require('./pullback-read');
 const { GLOBEX_OPEN_MIN, RTH_OPEN_MIN, RTH_CLOSE_MIN } = require('./clock'); // the session boundaries' one home
 
@@ -210,6 +214,12 @@ const brief = (f, level = round2) => (f ? {
   range: f.levels && Number.isFinite(f.levels.rangeHigh) ? { high: f.levels.rangeHigh, low: f.levels.rangeLow, mid: level((f.levels.rangeHigh + f.levels.rangeLow) / 2) } : null,
   ...(f.note ? { note: f.note } : {}),
 } : null);
+/** The break before the previous one (breaksOf's third-last) in lastBreaks' shape, or null: causal, closed bars only. */
+function breakBefore(bars) {
+  const all = breaksOf(bars);
+  const x = all.length >= 3 ? all[all.length - 3] : null;
+  return x ? { kind: x.kind, direction: x.direction, level: x.level, swingAt: x.swingAt, at: x.at, barsAgo: bars.length - 1 - x.i } : null;
+}
 /** A higher timeframe's break: its times are candle opens (as on the 3m), and knownAt is the breaking candle's close. */
 const atClose = (lb, mins) => {
   const shift = x => (x ? { ...x, knownAt: new Date(Date.parse(x.at) + mins * 60000).toISOString() } : null);
@@ -477,7 +487,9 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
         // Structure events (structure-events.js): the latest break on the trigger bars, sweeps of key liquidity in the last
         // 10 bars (only levels that existed before the sweep), the 1h swings not traded back to, and the 15m and 1h swings
         // against price (a 3m close through one since its candle closed: brokenAt).
-        lastBreak: lastBreaks(bars),
+        // `before`: the break before previous (breaksOf's third-last, lastBreaks' shape), so the Market state can read the
+        // confirmed trend (market-state.js sequenceOf, the owner's labelling rule).
+        lastBreak: { ...lastBreaks(bars), before: breakBefore(bars) },
         sweeps: sweeps(bars, [
           // The session's key levels: the runner's bars only (a frame's sweeps are of its own levels).
           ...(own ? [] : [['prior RTH high', (lv.priorRth || {}).high, 'high', true], ['prior RTH low', (lv.priorRth || {}).low, 'low', true]]),
@@ -833,8 +845,9 @@ function summaryLines(b, et) {
     // The side the entry rule (BG) allows, from its own check (bias-line.js): the runner's briefing only (a frame's has no
     // session facts, so no declared trend).
     ...(!own && biasLine(b) ? [`- ${biasLine(b)}.`] : []),
-    // The side a trend class may take (strict 4h + 1h; taught in trade-session), beside the gate's floor: no gate reads it.
-    ...(!own && classSideLine(b) ? [`- ${classSideLine(b)}.`] : []),
+    // The Market state (market-state.js): one present-tense read, the precedence applied once (taught in trade-session's
+    // table); a read, not a filter: no gate, hook, compose or decision code reads it, and it is never a data field.
+    ...(!own && stateOf(b, STATE_TH) ? [`- ${marketStateLine(stateOf(b, STATE_TH))}.`] : []),
     alignment,
     own ? `- VWAP and the session's levels (today, overnight, opening range, IB, profile): each ${SESSION_ELSEWHERE}, one value in every briefing; ${typeof m3.setups === 'string' ? `the room below is this ${tf} bar's own levels` : `the room below and the setups' levels include them (the runner's values), with this ${tf} bar's own`}.`
       : `- VWAP (${vw.applies || '?'}): price ${vw.side || '?'}, ${Number.isFinite(vw.distanceAtr) ? Math.abs(vw.distanceAtr) : '?'} x ${tf} ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP ${vw.rthCrossesLast30 ?? '?'}, the session VWAP ${vw.sessionCrossesLast30 ?? '?'} (the regime's count).`,

@@ -500,16 +500,20 @@ test('state line: the decision follows the model\'s own STATE read (taught, no c
     // The head trader's alone; taught, never a gate: the gate and compose_check stay as they are
     // (tests/e2e/state-read-invariance-e2e.test.js).
     "(the head trader's own, the last line of its PLAN; taught: the gate and `compose_check` do not read it)",
-    // The class follows the frames the model wrote and the movement (feat/chop-read, the owner's chop): choppy movement is
-    // chop, aligned frames too, on the full evidence only; else a trend class needs its 4h and 1h that way; else unclear.
-    "The class follows your frames and the movement, in this order:",
-    "Open `Pullback` line: the `Pullback` line is printed and its leg is not given back past its origin.",
-    "Chop first: `m3.lastBreak` last and previous both CHoCH, with the Day so far `rotational` (the printed Day so far word only, never your reading of the efficiency number) or many RTH VWAP crosses, and no open `Pullback` line → class `chop`, whatever the 4h and 1h → no entry, sit out. One fact alone, or one BOS or CHoCH, is never chop. A frame's `range` or `transition` alone is never `chop` (range is geometry, chop quality).",
-    "The printed `Class side (4h + 1h)` line `up` or `down` (your 4h and 1h both one way) → that trend class (a 15m pullback, `range` or `transition` under them doesn't cancel it, nor does your `frames disagree`). The `Class side` line is the 4h and 1h as printed; a trend class needs it `up` or `down`.",
+    // The class follows the printed Market state line (feat/chop-read, MARKET-STATE-SPEC, the owner's "trend, chop,
+    // ranging"): code applies the order once; the 3m state, the Pullback read and the 4h + 1h decide the row; the model's
+    // own frames stay its read (off the line: say why).
+    "The class follows the printed `Market state` line: the 3m state (code applies the order once: chop, trend, ranging), the Pullback read and the 4h + 1h beside it; your STATE frames stay your own read; yours off the line: the class stays the line's, say why in the PLAN.",
+    "| trend, their way | aligned | that trend class | setups the side's way |",
     // A range day is no chop (owner: a range day is catchable).
-    "A lower-timeframe range inside the 4h + 1h trend (a range day too): setups at the edge the side's way are OK, or the breakout with follow-through.",
-    "`none`, your 4h and 1h not both one way → `unclear` (never a trend class, smooth or not): 4h range, 1h up, smooth → `unclear`",
-    "Pause (`pullback-vs-reversal` step 3): inside an open `Pullback` line → the class the two class bullets above give (both one way → that trend class; else `unclear`), never `chop`; a 3m CHoCH against then back: the watch; the watch ends at the first 3m BOS or CISD the side's way = the entry timing; setup and entry: `pullback-vs-reversal` steps 4-6.",
+    "| ranging | aligned | the side's trend class (a range day inside the trend) | setups at the range edge or on a breakout, the side's way |",
+    // The pullback is a read inside trend or ranging, never a state (owner); a 3m BOS against inside it is the pullback.
+    "| a pullback their way (trend or ranging) | aligned | that trend class (a 3m trend against inside it is the pullback, not a new trend) | wait for the 15m turn (a live strong 15m CISD, a 15m BOS or a 15m reaction at the level); enter on the first 3m BOS or CISD the side's way near value (`pullback-vs-reversal` steps 4-7) |",
+    "| trend against them | aligned | `unclear` | no trade, never counter |",
+    "| trend or ranging | not aligned | `unclear` | no trend trade |",
+    "| chop | any | `chop` | sit out; chop ends: a CHoCH then a BOS or CISD the same way, or a close beyond the range (the IB; before 10:30 only a BOS or CISD ends it) |",
+    // The owner's definitions, verbatim with trend-vs-range (a test there keeps the two equal).
+    "Trending: consistent BOS, directional displacement, follow-through. Chop: alternating BOS/CHoCH, overlapping candles, failed continuation (`trend-vs-range`).",
     // A take agrees with the read: the class and the 4h and 1h on the setup's side (the never-counter-HTF rule, in its own words).
     'A take: `class` on its side (`trend-up` long, `trend-down` short), your 4h and 1h too (`up` long, `down` short).',
     // compose_check first (its record is what the pass is scored on), then a pass that names the read: the head trader's
@@ -521,10 +525,9 @@ test('state line: the decision follows the model\'s own STATE read (taught, no c
   assert.doesNotMatch(para.replace('not a decisive against', ''), /decisive/);
   // The other sentences stay true: pass only on a decisive against or the head trader's own read.
   assert.ok(ts.includes("pass only on a decisive against, or your own STATE read off the setup's side (above)."));
-  // The 15m is no condition: a pullback entry has the 15m ranging or turning (the recorded trend-leg takes: 15m range,
-  // transition); it is named once, only to say it doesn't cancel the 4h and 1h.
-  assert.strictEqual(para.split('15m').length, 2);
-  assert.ok(para.includes("(a 15m pullback, `range` or `transition` under them doesn't cancel it, nor does your `frames disagree`)"));
+  // The 15m is no class condition: it is named only in the pullback row's action (the turn), never in the class.
+  assert.strictEqual(para.split('15m').length, 5);
+  assert.doesNotMatch(para, /Class side|open `Pullback` line/, 'the dropped line and the rule the state settles');
   // No filled-in line here: the one example stays in trader-process (the class-word test below).
   assert.doesNotMatch(para, /`STATE:/);
   // Step 8 and the always-on decision rule point to it, addressed to the head trader alone.
@@ -541,9 +544,9 @@ test('state line: the decision follows the model\'s own STATE read (taught, no c
   const htf = read('skills/htf-to-ltf/SKILL.md');
   assert.ok(htf.includes('**The side rule** (in an attempt): each trending 4h or 1h your way, neither against; both ranging: the 15m and `Trend declared?` your way; else no trade.'));
   assert.ok(htf.includes('4h and 1h RANGE, 15m DOWN, declared short: short only.'));
-  assert.ok(htf.includes("Then the head trader's own STATE read decides the take (`trade-session`): its own 4h and 1h both range, or one of them not trending the side, is `unclear`; both the side's way, a 15m range, transition or pullback under them, is the side's trend class; `chop`: sit out, aligned or not."));
+  assert.ok(htf.includes("Then the class follows the Market state line (`trade-session`'s table); a take needs your own STATE 4h and 1h the side's way too."));
   assert.ok(htf.includes("The briefing's `Bias:`/`Trend rule:` lines are the gate's floor (what it refuses), never your side: your own STATE read is stricter."));
-  assert.ok(htf.indexOf('Then the head trader') > htf.indexOf('**The side rule**'), 'after the side rule');
+  assert.ok(htf.indexOf('Then the class follows the Market state line') > htf.indexOf('**The side rule**'), 'after the side rule');
   // The documented example (a full long take) satisfies the taught rule: class trend-up, 4h up, 1h up.
   const ex = /9 Manage:[^\n]*\n(STATE: [^\n]+)\n```/.exec(fs.readFileSync(path.join(ROOT, 'skills', 'trader-process', 'SKILL.md'), 'utf8').split('## Examples')[1]);
   const r = S.parseStateLine(ex[1]);

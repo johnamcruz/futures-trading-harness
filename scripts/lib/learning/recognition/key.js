@@ -26,19 +26,19 @@
  *                      trend rule allows (bias-line.js biasSides), its class C -> trend-<way>, B -> chop, A or D -> unclear;
  *                      no such side: the side-free signals (C1 C2 C3 C4 C7 C8) class B -> chop, else unclear; it stays
  *                      independent of the taught guardrail (inside an open Pullback line it can read chop on C1 + C7)
- *   choppy(facts, th)  the full choppy-movement evidence, never one fact alone: the 3m breaks both ways (its last and
- *                      previous breaks both CHoCH) AND (the day so far rotational OR its RTH VWAP crosses, the Day so far
- *                      line's count, >= crossesChop), and no open Pullback line (pullback-read.js isOpen)
- *   codedWord(key)     the briefing's labels restated (never the model's): choppy -> chop (an aligned day too); 4h and
- *                      1h agree up or down -> trend-<way>; else unclear (a range alone is never chop)
+ *   state              the briefing's Market state (trading/market-state.js readState, the one definition the summary
+ *                      line prints): pullback, chop, trending or not aligned; choppy = the state chop
+ *   codedWord(key)     the briefing's labels restated (never the model's): the Market state's class word (pullback and
+ *                      trending -> trend-<way>, chop -> chop, not aligned -> unclear); a range alone is never chop
  *
- *   facts(briefing), signals(facts, side, thresholds), classOf({ c, t }), choppy(facts, thresholds),
+ *   facts(briefing), signals(facts, side, thresholds), classOf({ c, t }),
  *   presentKey(briefing, thresholds), evidenceWord(key), codedWord(key), metFields(key, side)
  */
 
 const { biasLine, biasSides } = require('../../trading/bias-line');
 const { declaredOf } = require('../../trading/entry-rule');
 const { isOpen } = require('../../trading/pullback-read');
+const { readState, classWordOf } = require('../../trading/market-state');
 
 const SIDES = ['long', 'short'];
 const WAY = { long: 'up', short: 'down' };
@@ -113,9 +113,6 @@ function signals(f, side, th) {
   return { c, t, met };
 }
 
-const choppy = (f, th) => Boolean(f.bothWays && f.bothWays['3m'] === true && !f.pullback
-  && (f.day.word === 'rotational' || (Number.isFinite(f.rthCrosses) && f.rthCrosses >= th.crossesChop)));
-
 const classOf = ({ c, t }) => (!c.length && !t.length ? 'A' : !c.length ? 'C' : c.length > t.length ? 'B' : 'D');
 
 function presentKey(b, th) {
@@ -126,7 +123,8 @@ function presentKey(b, th) {
   const seen = new Set();
   const met = [...sig.long.met, ...sig.short.met].filter(m => SIDE_FREE.includes(m.id) && !seen.has(m.id) && seen.add(m.id));
   const none = { c: met.map(m => m.id), t: [], met };
-  return { facts: f, choppy: choppy(f, th), biasSide: allowed.length === 1 ? allowed[0] : null, signals: { ...sig, none }, cls: { long: classOf(sig.long), short: classOf(sig.short), none: classOf(none) } };
+  const state = readState(b, th);
+  return { facts: f, state, choppy: state.state === 'chop', biasSide: allowed.length === 1 ? allowed[0] : null, signals: { ...sig, none }, cls: { long: classOf(sig.long), short: classOf(sig.short), none: classOf(none) } };
 }
 
 const WORD_OF = { long: 'trend-up', short: 'trend-down' };
@@ -138,13 +136,9 @@ function evidenceWord(key) {
   return c === 'B' ? 'chop' : 'unclear';
 }
 
-function codedWord(key) {
-  const fr = key.facts.frames;
-  if (key.choppy === true) return 'chop';
-  if (fr['4h'] === fr['1h'] && (fr['4h'] === 'up' || fr['4h'] === 'down')) return fr['4h'] === 'up' ? 'trend-up' : 'trend-down';
-  return 'unclear';
-}
+/** The Market state's class word (market-state.js): the coded read is the state the summary line prints. */
+const codedWord = key => classWordOf(key.state);
 
 const metFields = (key, side) => [...new Set(key.signals[side || 'none'].met.map(m => m.field))];
 
-module.exports = { facts, signals, classOf, choppy, presentKey, evidenceWord, codedWord, metFields };
+module.exports = { facts, signals, classOf, presentKey, evidenceWord, codedWord, metFields };

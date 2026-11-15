@@ -55,7 +55,7 @@ Detail by timeframe:
   referenceStop: {"distance":3.6,"long":27007.9,"short":27015.1}
   swings: {"high":null,"highAt":null,"low":null,"lowAt":null}
   liquidity: {"swingHighs":[],"swingLows":[],"equalHighs":[],"equalLows":[],"openFvgs":[],"partlyFilledFvgs":[]}
-  lastBreak: {"last":null,"previous":null}
+  lastBreak: {"last":null,"previous":null,"before":null}
   sweeps: []
   htfLevels: [{"name":"15m swing high","type":"high","price":27099.75,"side":"above","brokenAt":null}]
   untested1hSwings: []
@@ -142,7 +142,7 @@ Detail by timeframe:
   referenceStop: {"distance":5.84,"long":26950.91,"short":26962.59}
   swings: {"high":null,"highAt":null,"low":null,"lowAt":null}
   liquidity: {"swingHighs":[],"swingLows":[],"equalHighs":[],"equalLows":[],"openFvgs":[],"partlyFilledFvgs":[]}
-  lastBreak: {"last":null,"previous":null}
+  lastBreak: {"last":null,"previous":null,"before":null}
   sweeps: []
   htfLevels: [{"name":"15m swing high","type":"high","price":27079.75,"side":"above","brokenAt":null},{"name":"15m swing low","type":"low","price":26890,"side":"below","brokenAt":null},{"name":"15m swing low","type":"low","price":26916.25,"side":"below","brokenAt":null},{"name":"15m swing low","type":"low","price":26941.75,"side":"below","brokenAt":null},{"name":"15m swing high","type":"high","price":26995,"side":"above","brokenAt":"07:46"},{"name":"1h swing low","type":"low","price":26865,"side":"below","brokenAt":null},{"name":"1h swing low","type":"low","price":26890,"side":"below","brokenAt":null},{"name":"1h swing high","type":"high","price":27013.5,"side":"above","brokenAt":"07:46"}]
   untested1hSwings: [{"type":"low","price":26865,"t":"04-22 23:00"},{"type":"low","price":26890,"t":"05:00"}]
@@ -230,7 +230,7 @@ Detail by timeframe:
   referenceStop: {"distance":2.75,"long":27535.25,"short":27540.75}
   swings: {"high":null,"highAt":null,"low":null,"lowAt":null}
   liquidity: {"swingHighs":[],"swingLows":[],"equalHighs":[],"equalLows":[],"openFvgs":[],"partlyFilledFvgs":[]}
-  lastBreak: {"last":null,"previous":null}
+  lastBreak: {"last":null,"previous":null,"before":null}
   sweeps: []
   htfLevels: [{"name":"15m swing low","type":"low","price":27344.25,"side":"below","brokenAt":null},{"name":"15m swing low","type":"low","price":27366.75,"side":"below","brokenAt":null},{"name":"15m swing high","type":"high","price":27454.5,"side":"below","brokenAt":"20:58"},{"name":"1h swing low","type":"low","price":27064.5,"side":"below","brokenAt":null},{"name":"1h swing low","type":"low","price":27130.25,"side":"below","brokenAt":null},{"name":"1h swing low","type":"low","price":27344.25,"side":"below","brokenAt":null},{"name":"1h swing high","type":"high","price":27462.5,"side":"below","brokenAt":"20:58"}]
   untested1hSwings: [{"type":"low","price":27016.25,"t":"04-24 00:00"},{"type":"low","price":27064.5,"t":"04-24 05:00"},{"type":"low","price":27130.25,"t":"04-24 09:00"},{"type":"low","price":27344.25,"t":"18:00"}]

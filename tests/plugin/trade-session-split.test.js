@@ -422,7 +422,9 @@ const OLD_AGENTS_MD = 24466;
 // out; a lower-timeframe range inside the 4h + 1h trend: setups at the edge the side's way), the pause inside a Pullback
 // never chop (its 3m CHoCH against then back the watch; open defined: printed, not given back past its origin; round 5: the printed Class side line names the trend class, the rule reordered with no else chain, the pause gives the class, a rejection inside the zone is the reaction; round 6: the Class side line's provenance, the pause gives the class bullets' class; round 7: chop first, rotational is the printed word, the watch ends at the first 3m BOS or CISD, the live strong 15m CISD is the turn; day-context's printed word; round 8: the Class side line as the one source), and two worked examples (4h range, 1h up, smooth: unclear; close
 // to the level: enter); htf-to-ltf is common to both sides.
-const RAISED = 154 + 130 + 1625 + 336 + 382 + 939 + 843 + 1823;
+// The Market state redesign (feat/chop-read, PREREG addendum 14) replaced the class rule's bullets with the state table:
+// the chop-read term falls 1823 -> 1413, the measured need of the worst path.
+const RAISED = 154 + 130 + 1625 + 336 + 382 + 939 + 843 + 1413;
 const EVERY_CYCLE = ['multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'trader-process', 'htf-to-ltf', 'autonomous-trading'];
 const PATHS = {
   'full cycle, no candidate': ['role-round', 'setup-judgment', 'day-context'],
@@ -556,9 +558,13 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // unclear, htf-to-ltf's class sentence, vwap-volume-profile's range-day edge (+108): the market-structure analyst 105053 ->
 // 107114 full, 46207 -> 46376 index; the trend-momentum analyst 63594 -> 65664 full, 42334 -> 42514 index; the
 // volume-liquidity analyst 50413 -> 50521 full, 35045 -> 35153 index; every other role within its pin.
+// Then the Market state redesign (feat/chop-read, PREREG addendum 14), at the measured need: bos-vs-choch's labelling rule
+// and the owner's trending and chop definitions in trend-vs-range, the class sentences that named the dropped rule now
+// pointing to the Market state line: the market-structure analyst 107114 -> 107078 full, 46376 -> 46377 index; the
+// trend-momentum analyst 65664 -> 65783 full, 42514 -> 42670 index; the trade reviewer 9454 -> 9400 both modes.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 107114, 'news-calendar-analyst': 10868, 'risk-manager': 95294, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 65664, 'volume-liquidity-analyst': 50521 },
-  index: { 'market-structure-analyst': 46376, 'news-calendar-analyst': 10868, 'risk-manager': 81182, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9454, 'trend-momentum-analyst': 42514, 'volume-liquidity-analyst': 35153 },
+  full: { 'market-structure-analyst': 107078, 'news-calendar-analyst': 10868, 'risk-manager': 95294, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9400, 'trend-momentum-analyst': 65783, 'volume-liquidity-analyst': 50521 },
+  index: { 'market-structure-analyst': 46377, 'news-calendar-analyst': 10868, 'risk-manager': 81182, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9400, 'trend-momentum-analyst': 42670, 'volume-liquidity-analyst': 35153 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

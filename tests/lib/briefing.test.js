@@ -907,13 +907,34 @@ test('the Setups line on the bar that closed the setup states the record\'s wind
   assert.deepStrictEqual([B.gateValidBars({}), B.gateValidBars({ FTH_STRATEGIES_DIRS: dir })], [2, 2]);
 });
 
-// The Class side line (bias-line.js classSideLine, feat/chop-read): printed right under the Bias line in the runner's
-// briefing, the same text classSideLine gives; taught only, no gate reads it.
-test('render: the Class side line follows the Bias line, from bias-line.js', () => {
-  const { biasLine, classSideLine } = require('../../scripts/lib/trading/bias-line');
+// The Market state line (market-state.js, feat/chop-read, MARKET-STATE-SPEC): printed right under the Bias line in the
+// runner's briefing, the text marketStateLine gives on stateOf with the briefing's threshold (config/analysis.json
+// regime.rangeCrosses); a read, not a filter; never a data field; the Class side line is gone.
+test('render: the Market state line follows the Bias line, from market-state.js; no Class side line; no data field', () => {
+  const { biasLine } = require('../../scripts/lib/trading/bias-line');
+  const M = require('../../scripts/lib/trading/market-state');
+  const TH = { crossesChop: require('../../scripts/lib/tunables').analysis().regime.rangeCrosses };
   const b = build(1300);
   const text = B.renderBriefing(b, { now: new Date(b.closedAt) });
-  const side = classSideLine(b);
-  assert.ok(side && biasLine(b), 'the fixture has both lines');
-  assert.ok(text.includes(`\n- ${biasLine(b)}.\n- ${side}.\n`), side);
+  const line = M.marketStateLine(M.stateOf(b, TH));
+  assert.ok(line && biasLine(b), 'the fixture has both lines');
+  assert.ok(text.includes(`\n- ${biasLine(b)}.\n- ${line}.\n`), line);
+  assert.doesNotMatch(text, /Class side/);
+  assert.doesNotMatch(JSON.stringify(b.sections), /Market state|marketState/, 'not stored in the briefing\'s data');
+});
+
+// The owner's labelling rule needs the confirmed trend, the way of the most recent code BOS: m3.lastBreak carries the
+// break before previous (`before`, structure-events.js breaksOf's third-last, in lastBreaks' shape), causal like the two.
+test('m3.lastBreak carries the break before previous (breaksOf\'s third-last), in lastBreaks\' shape', () => {
+  const { breaksOf } = require('../../scripts/lib/trading/structure-events');
+  for (const n of [600, 1300]) {
+    const b = build(n);
+    const lb = b.sections.m3.data.lastBreak;
+    const all = breaksOf(at(n));
+    const want = all.length >= 3 ? all[all.length - 3] : null;
+    assert.ok('before' in lb, 'the field is there');
+    if (!want) { assert.strictEqual(lb.before, null); continue; }
+    assert.deepStrictEqual(lb.before, { kind: want.kind, direction: want.direction, level: want.level, swingAt: want.swingAt, at: want.at, barsAgo: at(n).length - 1 - want.i }, String(n));
+    assert.deepStrictEqual(Object.keys(lb.before), Object.keys(lb.last), 'the same shape as last and previous');
+  }
 });
