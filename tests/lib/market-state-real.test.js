@@ -242,3 +242,15 @@ test('five cases (real): a normal deep pullback flips nothing (2022-08-16, the d
     assert.ok(m3.layers.structure.side === 'down' && m3.layers.structure.status === 'intact', `${hm} ${line}`);
   }
 });
+
+// Round 20b (the owner's table: protected HL breaks -> structure invalidated): the 4h + 1h side's protected HL broken by an
+// undisplaced close prints a transition, class unclear, until a new leg; before, the range default printed trend-up there.
+test('round 20b (real): the side\'s HL broken without displacement is a transition, class unclear (2021-05-27 10:57-11:09, 4h + 1h up)', () => {
+  for (const hm of ['10:57', '11:03', '11:09']) {
+    const { s, line, cls, m3 } = stateAt('2021-05-27', hm);
+    const P = m3.layers.structure;
+    assert.deepStrictEqual([s.align, P.status, P.flip.oldSide, P.flip.disp, m3.layers.transition], ['up', 'broken', 'up', false, false], `${hm}: the side's HL broken, undisplaced: ${line}`);
+    assert.deepStrictEqual([s.state, s.way, cls], ['transition', 'down', 'unclear'], `${hm} ${line}`);
+    assert.match(line, /^Market state \(3m\): transition down: HL 17025 broken by a close \d+ min ago, the new leg unconfirmed; behavior [a-z]+ \(/);
+  }
+});
