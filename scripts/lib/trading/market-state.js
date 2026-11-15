@@ -28,7 +28,8 @@
  *                   or weak) on a later 3m candle, or this bar's close beyond the initial balance's edge its way with the
  *                   previous break inside the IB (complete from 10:30 ET, so causal); a CHoCH then a BOS is a BOS
  *   the Pullback    pullback-read.js isOpen(m3.pullback): printed, never given back past its origin nor its 15m swing
- *                   broken since the extreme (sticky on the leg), and no deeper than th.maxPullbackDepth (the Depth row)
+ *                   broken since the extreme (sticky on the leg), and never deeper than th.maxPullbackDepth since the
+ *                   extreme (its maxDepth, sticky; the Depth row)
  *   the early read  the owner's "15min up trend, 3min down trend could mean pullback": the 15m frame trending the
  *                   4h + 1h way and the 3m trending against it (its last break a BOS against), no Pullback read yet
  *   the alignment   the rule's bias frames (4h, 1h) both one way, entry-rule.js trendOf, the trends the gate reads
@@ -143,7 +144,11 @@ function readState(b, th = {}) {
   const m3 = data(b, 'm3');
   // The state's pullback (round 15): open (never invalidated on its leg) and no deeper than the Depth row's bound.
   let open;
-  try { open = isOpen(m3.pullback) && !(Number.isFinite(m3.pullback.depth) && m3.pullback.depth > th.maxPullbackDepth); } catch (_err) { open = false; }
+  // Sticky (addendum 16): the deepest retrace since the extreme (maxDepth; an older record or a quiz item: its depth).
+  try {
+    const deepest = Number.isFinite(m3.pullback.maxDepth) ? m3.pullback.maxDepth : m3.pullback.depth;
+    open = isOpen(m3.pullback) && !(Number.isFinite(deepest) && deepest > th.maxPullbackDepth);
+  } catch (_err) { open = false; }
   const lb = isObj(m3.lastBreak) ? m3.lastBreak : {};
   const minutes = Number.isInteger(b.minutes) ? b.minutes : 3;
   // The RTH breaks (the structure audit: at 28% of decision bars the previous break was a premarket drift): only breaks
@@ -222,7 +227,11 @@ function marketStateLine(s) {
   }
   const pr = isObj(s.last) && isObj(s.last.protected) && Number.isFinite(s.last.protected.level) ? s.last.protected : null;
   const up = isObj(s.last) && s.last.direction === 'up';
-  const prot = !pr || s.state === 'forming' ? ''
+  // One status per lone CHoCH (addendum 16): its reading's "(potential reversal, unconfirmed)" becomes "(potential
+  // reversal, holds above X (origin))" or "(failed: a close below its origin X)", never both; the pair keeps its clause.
+  const lone = pr && s.last.kind === 'CHoCH' && state.includes('(potential reversal, unconfirmed)');
+  if (lone) state = state.replace('(potential reversal, unconfirmed)', `(${s.broken ? `failed: a close ${up ? 'below' : 'above'} its origin ${pr.level}` : `potential reversal, holds ${up ? 'above' : 'below'} ${pr.level} (origin)`})`);
+  const prot = !pr || s.state === 'forming' || lone ? ''
     : s.last.kind === 'BOS' ? `; protected ${up ? 'HL' : 'LH'} ${pr.level} ${s.broken ? 'broken by a close (the trend ended)' : 'holding'}`
       : s.broken ? `; failed: a close ${up ? 'below' : 'above'} its origin ${pr.level}` : `; holds ${up ? 'above' : 'below'} ${pr.level} (origin)`;
   const p = s.pullback;

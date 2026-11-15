@@ -178,8 +178,10 @@ test('CHoCH (real): a bullish CHoCH holds above its origin (2021-05-25 10:54) an
     assert.strictEqual(Boolean(last.protected.brokenAt), broken, `${date} ${hm}`);
     assert.strictEqual(through.length > 0, broken);
     const side = dir === 'up' ? ['above', 'below'] : ['below', 'above'];
-    if (broken) assert.match(line, new RegExp(`; failed: a close ${side[1]} its origin ${last.protected.level};`), line);
-    else if (!/^Market state \(3m\): chop/.test(line)) assert.match(line, new RegExp(`; holds ${side[0]} ${last.protected.level} \\(origin\\);`), line);
+    // One status: a lone CHoCH's in its parentheses, a pair's beside it; never "potential" and "failed" together.
+    if (broken) assert.match(line, new RegExp(`[(;] ?failed: a close ${side[1]} its origin ${last.protected.level}[);]`), line);
+    else assert.match(line, new RegExp(`holds ${side[0]} ${last.protected.level} \\(origin\\)`), line);
+    assert.ok(!(/potential reversal/.test(line) && /failed: a close/.test(line)), line);
   }
 });
 
@@ -199,4 +201,16 @@ test('sequences (real): CHoCH then BOS the same way a confirmed transition (2021
   assert.match(c.line, /: trend \w+: 3m BOS \w+ \(continuation\)/);
   const p = caseAt('2023-09-25', '10:24');
   assert.match(p.line, /: chop: 3m CHoCH \w+ then CHoCH \w+ \(failed reversal\)/);
+});
+
+// PREREG addendum 16: the sticky depth on a real briefing (2021-06-11, the flicker the re-measure found: 10:33 chop, 10:36
+// back to the watch at 61%, 10:39 chop). Past the bound once, the pullback no longer guards the pair.
+test('sticky depth (real): 2021-06-11 10:36, the pullback bounced back to 61% after 63%: the pair stays chop', () => {
+  const bars = require('../fixtures/pullback/depth-flicker-2021-06-11.json').map(([t, o, h, l, c, v]) => ({ t: `${t}:00.000Z`, o, h, l, c, v }));
+  const w = bars.slice(0, bars.findIndex(b => b.t === '2021-06-11T14:36:00.000Z') + 1);
+  const b = B.buildBriefing({ symbol: 'NQ', bars: w, minutes: 3, now: new Date(Date.parse(w[w.length - 1].t) + 180000) });
+  const s = M.stateOf(b, TH);
+  assert.strictEqual(b.sections.m3.data.pullback.depth, 0.61);
+  assert.ok(b.sections.m3.data.pullback.maxDepth > TH.maxPullbackDepth);
+  assert.deepStrictEqual([s.pair, s.pullback, s.state], [true, null, 'chop'], M.marketStateLine(s));
 });

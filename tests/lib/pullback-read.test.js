@@ -316,3 +316,19 @@ test('pullbackRead on real bars (2021-06-04): the leg given back at 07:09 never 
   const p = at(bars.length);
   assert.strictEqual(p.givenBackSince, true);
 });
+
+// PREREG addendum 16: the depth the Market state bounds is sticky: the deepest retrace any close since the extreme gave
+// back (maxDepth), not the current close. 2021-06-11 (real bars): the leg 17286.25 -> 17334 retraced 63% at 10:33 and
+// bounced to 61% at 10:36; the pullback had failed at 10:33 and stays failed.
+test('pullbackRead on real bars (2021-06-11): maxDepth is the deepest close since the extreme; the printed line keeps the current depth', () => {
+  const bars = require('../fixtures/pullback/depth-flicker-2021-06-11.json').map(([t, o, h, l, c, v]) => ({ t: `${t}:00.000Z`, o, h, l, c, v }));
+  const at = hm => PR.pullbackRead({ bars: bars.slice(0, bars.findIndex(b => b.t === `2021-06-11T${hm}:00.000Z`) + 1), base: 3, prevailing: '4h up' });
+  const deep = at('14:33');
+  const bounced = at('14:36');
+  assert.deepStrictEqual([bounced.leg.origin, bounced.leg.extreme, bounced.depth], [17286.25, 17334, 0.61]);
+  assert.ok(deep.depth >= 0.63 && bounced.maxDepth >= deep.depth, `maxDepth ${bounced.maxDepth}`);
+  assert.ok(bounced.maxDepth >= bounced.depth);
+  assert.match(PR.pullbackLine(bounced), /depth 61% of the leg/, 'the printed line: the current close');
+  const { maxDepth: _md, ...rest } = bounced;
+  assert.strictEqual(PR.pullbackLine(rest), PR.pullbackLine(bounced), 'the line never reads it');
+});

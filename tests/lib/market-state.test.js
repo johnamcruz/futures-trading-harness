@@ -82,6 +82,9 @@ test('the state\'s pullback: dead once given back since the extreme or its 15m s
   assert.strictEqual(st({ lastBreak: PAIR, pullback: pb({ swing: { '15m': { price: 21361.25, holds: false } } }) }), 'chop', 'its 15m swing broken by a close: dead');
   assert.strictEqual(st({ lastBreak: PAIR, pullback: pb({ swing: { '15m': { price: 21361.25, holds: true } } }) }), 'ranging', 'the swing holds: open');
   assert.strictEqual(st({ lastBreak: PAIR, pullback: pb({ depth: 0.62 }) }), 'ranging', 'at the bound: a pullback');
+  // PREREG addendum 16: sticky: the deepest retrace since the extreme (maxDepth) decides, not the current close.
+  assert.strictEqual(st({ lastBreak: PAIR, pullback: pb({ depth: 0.5, maxDepth: 0.7 }) }), 'chop', 'once past the bound: failed, though it bounced');
+  assert.strictEqual(st({ lastBreak: PAIR, pullback: pb({ depth: 0.5, maxDepth: 0.6 }) }), 'ranging');
   assert.strictEqual(st({ lastBreak: PAIR, pullback: pb({ depth: 0.63 }) }), 'chop', 'deeper than the bound: no pullback for the state');
   assert.strictEqual(line({ lastBreak: PAIR, pullback: pb({ depth: 0.63 }) }), 'Market state (3m): chop: 3m CHoCH down then CHoCH up (failed reversal); 4h+1h up', 'the line names no pullback the state did not use');
   assert.strictEqual(word({ lastBreak: BOS_DN, pullback: pb({ depth: 0.7 }) }), 'unclear', 'a deep pullback keeps no trend class: a 3m trend against');
@@ -283,10 +286,10 @@ test('protected swings: a BOS trend holds while its protected HL holds and ends 
   const deadAgainst = at({ ...BOS_DN, last: { ...BOS_DN.last, protected: prot(21520, T(42), 'high') } }, { m15: 'up' });
   assert.strictEqual(deadAgainst.early, false, 'a BOS against whose protected LH broke: the 3m no longer trends against');
   const ch = at({ ...ONE, last: { ...ONE.last, protected: prot(21462.5) } });
-  assert.strictEqual(M.marketStateLine(ch), 'Market state (3m): ranging: 3m BOS down then CHoCH up (potential reversal, unconfirmed); holds above 21462.5 (origin); 4h+1h up');
+  assert.strictEqual(M.marketStateLine(ch), 'Market state (3m): ranging: 3m BOS down then CHoCH up (potential reversal, holds above 21462.5 (origin)); 4h+1h up');
   const failed = at({ ...ONE, last: { ...ONE.last, protected: prot(21462.5, T(42)) } }, { m3: { cisd: cisd('bullish', T(36)) } });
   assert.strictEqual(failed.state, 'ranging', 'a failed CHoCH: its CISD no longer confirms a turn');
-  assert.strictEqual(M.marketStateLine(failed), 'Market state (3m): ranging: 3m BOS down then CHoCH up (potential reversal, unconfirmed); failed: a close below its origin 21462.5; 4h+1h up');
+  assert.strictEqual(M.marketStateLine(failed), 'Market state (3m): ranging: 3m BOS down then CHoCH up (failed: a close below its origin 21462.5); 4h+1h up', 'one status: never potential and failed at once');
   const pair = at({ ...PAIR, last: { ...PAIR.last, protected: prot(21497.75, T(42)) } });
   assert.strictEqual(pair.state, 'chop', 'the owner\'s chop rule unchanged: the status is printed beside it');
   assert.strictEqual(M.marketStateLine(pair), 'Market state (3m): chop: 3m CHoCH down then CHoCH up (failed reversal); failed: a close below its origin 21497.75; 4h+1h up');

@@ -35,6 +35,8 @@
  *                    the leg: { kind, direction, level, barsAgo }, else null
  *     stacked        both frames' last breaks against the leg
  *     givenBackSince any base close since the extreme at or past the origin (isOpen reads it; the line never does)
+ *     maxDepth       the deepest share of the leg any close since the extreme gave back (the Market state's depth bound;
+ *                    the line prints the current depth)
  *   pullbackLine(p, { level })   the summary's one line (null when absent)
  *   pullbackWord(p)              the line's few words (a record only)
  *   givenBack(p)                 the leg given back past its origin: pastOrigin when a boolean, else depth >= 1
@@ -124,6 +126,15 @@ function givenBackSinceOf(cs, iBest, origin, s) {
   return false;
 }
 
+/** The deepest share of the leg any close since the extreme cs[iBest] gave back (two decimals; the current depth at least). */
+function maxDepthOf(cs, iBest, imp) {
+  const span = imp.best - imp.origin; // signed: positive for a long leg, negative for a short one
+  if (!span) return imp.depth;
+  let worst = -Infinity;
+  for (let i = iBest + 1; i < cs.length; i += 1) worst = Math.max(worst, (imp.best - cs[i].c) / span);
+  return Number.isFinite(worst) ? r2(Math.max(worst, imp.raw === null ? -Infinity : imp.raw)) : imp.depth;
+}
+
 function pullbackRead({ bars, base, prevailing } = {}) {
   const m = /^(\S+) (up|down)$/.exec(String(prevailing || ''));
   if (!m) return null;
@@ -159,6 +170,8 @@ function pullbackRead({ bars, base, prevailing } = {}) {
     // since the extreme past the origin (the same test), so a leg once given back stays dead when price crosses back.
     depth: imp.depth, pastOrigin: imp.raw !== null && imp.raw >= 1, close: cs[cs.length - 1].c,
     givenBackSince: givenBackSinceOf(cs, iBest, imp.origin, s),
+    // The deepest retrace any close since the extreme gave back (the Market state's depth bound reads it: sticky).
+    maxDepth: maxDepthOf(cs, iBest, imp),
     swing: { [tfH]: imp.back ? swingOf(imp.back, FRAME, cs, s, tBest) : null, [label(HOUR)]: swingOf(h1Swing, HOUR, cs, s, tBest) },
     counter: counterOf(cs, imp.o, iBest),
     against, stacked: Object.values(against).every(Boolean),

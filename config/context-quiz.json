@@ -980,25 +980,6 @@
       "answer": "not invalidated: only a close below 21480.25 counts; the trend holds"
     },
     {
-      "id": "q55",
-      "layer": "bias",
-      "prompt": "lookup",
-      "lookup": [
-        "bos-vs-choch"
-      ],
-      "text": "The 15m is in an uptrend and prints its first close below the last confirmed swing low. BOS or CHoCH, and has the trend reversed?",
-      "rule": "the first close against the last swing is a CHoCH, an early warning, not a reversal by itself",
-      "anchor": "the first close beyond the last swing against it",
-      "required": [
-        "\\bCHoCH\\b"
-      ],
-      "forbidden": [
-        "^\\W*(a )?reversal\\b",
-        "^\\W*yes\\b",
-        "\\b(has )?reversed\\b"
-      ]
-    },
-    {
       "id": "q56",
       "layer": "bias",
       "prompt": "lookup",
@@ -1261,24 +1242,6 @@
         "wait: a pullback starting"
       ],
       "answer": "wait: a pullback starting"
-    },
-    {
-      "id": "q91",
-      "layer": "bias",
-      "prompt": "lookup",
-      "lookup": [
-        "pullback-vs-reversal"
-      ],
-      "text": "Briefing lines (synthetic, 11:00 ET):\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): ranging: no 3m break printed; 4h+1h up.\n- m15.lastBreak: last BOS up at 21500.00 (10:00).\n- 15m (setup candle, closed 11:00): inside, 3 in a row inside the 10:00 candle 21494.25-21541.5, close middle third, range 0.4 ATR, vol 0.5x.\n- The trend-momentum analyst's report: Regime (computed): 15m transition/normal, 3m transition/normal.\nWhich do these lines show: chop evidence, a pause in the trend (a pullback), a reversal, or no read yet?",
-      "rule": "after a 15m break the side's way, small counter candles inside the impulse with the 15m transition: the pause, not chop",
-      "anchor": "A 15m `range` or `transition` here is the pause, not chop.",
-      "choices": [
-        "chop evidence",
-        "a pause in the trend (a pullback)",
-        "a reversal",
-        "no read yet"
-      ],
-      "answer": "a pause in the trend (a pullback)"
     },
     {
       "id": "q92",
@@ -1608,6 +1571,21 @@
       "answer": "F3"
     },
     {
+      "id": "q112",
+      "layer": "bias",
+      "prompt": "head",
+      "text": "Briefing lines (synthetic, 10:42 ET), flat:\n- Bias: long only (4h range, 1h up; short refused).\n- Market state (3m): ranging: no 3m break printed; 4h range, 1h up (not aligned).\n- Day so far (24 3m bars; `day-context`): directional up: efficiency 0.52 (x sqrt(bars) 2.55), RTH VWAP crosses 1, range 3.1 x 3m ATR(14), net up (its size: Trend declared? day's move); IB day type: today.dayType.\n- 15m (setup candle, closed 10:30): none, close top third, range 0.7 ATR, vol 0.8x.\nYour own read: 4h range, 1h up, 15m up; the movement is smooth and one-way, no breaks both ways, little overlap. Which class do you write in STATE?",
+      "rule": "the 4h and 1h not both one way: unclear; chop only when the movement is choppy, and a frame's range alone is never chop",
+      "anchor": "| trend or ranging | not aligned | `unclear` | no trend trade |",
+      "choices": [
+        "chop",
+        "unclear",
+        "trend-up",
+        "trend-down"
+      ],
+      "answer": "unclear"
+    },
+    {
       "id": "q114",
       "layer": "entry",
       "prompt": "head",
@@ -1651,6 +1629,21 @@
         "F4"
       ],
       "answer": "F2"
+    },
+    {
+      "id": "q121",
+      "layer": "entry",
+      "prompt": "head",
+      "text": "Briefing lines (synthetic, 10:48 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): trend up: 3m CHoCH up then BOS up (confirmed transition up), 0 min ago; 4h+1h up.\n- Day so far (26 3m bars; `day-context`): mixed up: efficiency 0.11 (x sqrt(bars) 0.56), RTH VWAP crosses 3, range 3.4 x 3m ATR(14), net up (its size: Trend declared? day's move).\n- 15m (setup candle, closed 10:45): bullish engulfing, close top third, range 1.2 ATR, vol 1.5x; rejected IB low (closed back above; long-wick rejection, long side).\n- m3.lastBreak: last BOS up at 21489.25 (barsAgo 0), previous CHoCH up at 21485.50 (barsAgo 2).\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nA range day: since 09:45 price rotated between the IB low 21480.00 and the IB high 21560.00, each leg clean; now the 15m turned up at the low edge. What is the action?",
+      "rule": "a range day inside the 4h + 1h side is catchable: the turn at the edge the side's way, a 3m BOS near value: enter",
+      "anchor": "setups at the range edge or on a breakout, the side's way",
+      "choices": [
+        "range day: no trade",
+        "chop: sit out",
+        "enter long: the turn at the low edge the side's way, 3m BOS near value",
+        "wait for a breakout above 21560.00"
+      ],
+      "answer": "enter long: the turn at the low edge the side's way, 3m BOS near value"
     },
     {
       "id": "q123",
@@ -1719,7 +1712,7 @@
       "lookup": [
         "bos-vs-choch"
       ],
-      "text": "Briefing lines (synthetic, 10:42 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): ranging: 3m BOS down then CHoCH up (potential reversal, unconfirmed); holds above 21462.5 (origin); 4h+1h up.\n- Price 21470.\n- m3.lastBreak: last CHoCH up at 21478.00 (barsAgo 2; protected low 21462.50), previous BOS down at 21471.25 (barsAgo 9).\n- Day so far (24 3m bars; `day-context`): mixed up: efficiency 0.13 (x sqrt(bars) 0.64), RTH VWAP crosses 3, range 3 x 3m ATR(14), net up (its size: Trend declared? day's move).\nThe 3m CHoCH up started from the low 21462.50; price has since slipped back to 21470.00, under the broken level 21478.00. What does the CHoCH mean now?",
+      "text": "Briefing lines (synthetic, 10:42 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): ranging: 3m BOS down then CHoCH up (potential reversal, holds above 21462.5 (origin)); 4h+1h up.\n- Price 21470.\n- m3.lastBreak: last CHoCH up at 21478.00 (barsAgo 2; protected low 21462.50), previous BOS down at 21471.25 (barsAgo 9).\n- Day so far (24 3m bars; `day-context`): mixed up: efficiency 0.13 (x sqrt(bars) 0.64), RTH VWAP crosses 3, range 3 x 3m ATR(14), net up (its size: Trend declared? day's move).\nThe 3m CHoCH up started from the low 21462.50; price has since slipped back to 21470.00, under the broken level 21478.00. What does the CHoCH mean now?",
       "rule": "a CHoCH is a potential reversal, unconfirmed until a BOS follows its way; it holds until a close through the low that started the shift (its origin), not the broken level",
       "anchor": "a CHoCH holds until the low (high) that started the shift breaks",
       "choices": [
@@ -1803,7 +1796,7 @@
       "lookup": [
         "bos-vs-choch"
       ],
-      "text": "Briefing lines (synthetic, 10:42 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): ranging: 3m BOS down then CHoCH up (potential reversal, unconfirmed); failed: a close below its origin 21462.5; 4h+1h up.\n- Price 21460.75.\n- m3.lastBreak: last CHoCH up at 21478.00 (barsAgo 3; protected low 21462.50, broken at 10:39), previous BOS down at 21471.25 (barsAgo 10).\n- Day so far (24 3m bars; `day-context`): mixed up: efficiency 0.12 (x sqrt(bars) 0.59), RTH VWAP crosses 4, range 3 x 3m ATR(14), net up (its size: Trend declared? day's move).\nThe 3m closed at 21460.75, below the low 21462.50 that started the CHoCH up. What is the CHoCH now?",
+      "text": "Briefing lines (synthetic, 10:42 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): ranging: 3m BOS down then CHoCH up (failed: a close below its origin 21462.5); 4h+1h up.\n- Price 21460.75.\n- m3.lastBreak: last CHoCH up at 21478.00 (barsAgo 3; protected low 21462.50, broken at 10:39), previous BOS down at 21471.25 (barsAgo 10).\n- Day so far (24 3m bars; `day-context`): mixed up: efficiency 0.12 (x sqrt(bars) 0.59), RTH VWAP crosses 4, range 3 x 3m ATR(14), net up (its size: Trend declared? day's move).\nThe 3m closed at 21460.75, below the low 21462.50 that started the CHoCH up. What is the CHoCH now?",
       "rule": "a CHoCH fails on a close through the low (high) that started the shift: the potential reversal is invalidated",
       "anchor": "a CHoCH holds until the low (high) that started the shift breaks",
       "choices": [
