@@ -85,7 +85,7 @@ Detail by timeframe:
   indicators: {"regime":{"primary":"trend-up","volatility":"low"},"ema9":2283.4,"ema20":2282.38,"adx":27.38,"adxSlope":4.09,"supertrend":{"direction":"up","line":2280.12},"keltner":{"upper":2284.71,"mid":2282.38,"lower":2280.05},"atr14":1.45}
 [h1] version h1@2025-02-20T11:33:00.000Z, valid until 07:00 ET
   h1: {"trend":"range","bias":0,"swingPattern":"HH/HL","close":2283.9,"ema20":2283.93,"ema50":null,"adx":5.13,"atr":4.5,"range":{"high":2297,"low":2275.6,"mid":2286.3},"note":"no EMA50 vote, needs 50"}
-  h4: {"trend":"range","bias":0,"swingPattern":"unclear","close":2283.9,"ema20":2291.4,"ema50":null,"adx":null,"atr":null,"range":{"high":2321.3,"low":2275.6,"mid":2298.4},"note":"no EMA50 vote, needs 50"}
+  h4: {"trend":"range","bias":0,"swingPattern":"few-swings","close":2283.9,"ema20":2291.4,"ema50":null,"adx":null,"atr":null,"range":{"high":2321.3,"low":2275.6,"mid":2298.4},"note":"no EMA50 vote, needs 50"}
   lastBreak: {"last":{"kind":"CHoCH","direction":"up","level":2289.8,"swingAt":"02-19 11:00","at":"02-19 14:00","barsAgo":14,"knownAt":"02-19 15:00"},"previous":{"kind":"BOS","direction":"down","level":2298,"swingAt":"02-18 23:00","at":"02-19 02:00","barsAgo":26,"knownAt":"02-19 03:00"}}
 [day] version day@2025-02-20T11:33:00.000Z, valid until 16:03 ET
   priorRth: {"day":"2025-02-19","high":2297,"low":2275.6,"close":2289.4}
@@ -114,7 +114,7 @@ Summary (M2K 3m, 12:33 ET):
 - Price 2263.7. 1R = 1 pts (0.5 x 3m ATR(20) 2.01, the 3m reference stop); every distance below is in points and R.
 - Trend rule: SHORT allowed (prevailing 15m down; the 4h and 1h ranging: in a prop attempt only with the trend declared); no long against it.
 - Bias: no side yet (15m down, declared short: no).
-- Market state (3m): trend up: 3m BOS up (continuation), 0 min ago; protected HL 2260.9 holding; pullback (short leg 2286.7 -> 2254.4, depth 29%); 4h range, 1h range (not aligned); class unclear.
+- Market state (3m): pullback (short leg 2286.7 -> 2254.4, depth 29%): 3m up leg, HL 2260.9 holds; behavior trending (overlap 0.67, efficiency 0.37), 15m trending up; 4h range, 1h range (not aligned); class unclear.
 - Alignment: long mixed, short mixed. Regime: trend-up, normal volatility. RTH volatility: unknown (1 prior session with these minutes; needs 3).
 - VWAP (rth): price below, 0.57 x 3m ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP 0, the session VWAP 0 (the regime's count).
 - News: no blackout ahead.
@@ -179,7 +179,7 @@ Detail by timeframe:
   indicators: {"regime":{"primary":"trend-down","volatility":"high"},"ema9":2261.89,"ema20":2267.64,"adx":51.85,"adxSlope":7.73,"supertrend":{"direction":"down","line":2271.73},"keltner":{"upper":2273.31,"mid":2267.64,"lower":2261.97},"atr14":4.21}
 [h1] version h1@2025-02-20T17:33:00.000Z, valid until 13:00 ET
   h1: {"trend":"range","bias":0,"swingPattern":"mixed","close":2256.4,"ema20":2277.42,"ema50":null,"adx":14.15,"atr":6.26,"range":{"high":2294.2,"low":2254.4,"mid":2274.3},"note":"no EMA50 vote, needs 50"}
-  h4: {"trend":"range","bias":0,"swingPattern":"unclear","close":2263.5,"ema20":2288.74,"ema50":null,"adx":null,"atr":null,"range":{"high":2321.3,"low":2263.1,"mid":2292.2},"note":"no EMA50 vote, needs 50"}
+  h4: {"trend":"range","bias":0,"swingPattern":"few-swings","close":2263.5,"ema20":2288.74,"ema50":null,"adx":null,"atr":null,"range":{"high":2321.3,"low":2263.1,"mid":2292.2},"note":"no EMA50 vote, needs 50"}
   lastBreak: {"last":{"kind":"CHoCH","direction":"down","level":2277.5,"swingAt":"02-19 23:00","at":"09:00","barsAgo":2,"knownAt":"10:00"},"previous":{"kind":"CHoCH","direction":"up","level":2289.8,"swingAt":"02-19 11:00","at":"02-19 14:00","barsAgo":20,"knownAt":"02-19 15:00"}}
 [day] version day@2025-02-20T17:33:00.000Z, valid until 16:03 ET
   priorRth: {"day":"2025-02-19","high":2297,"low":2275.6,"close":2289.4}
@@ -210,7 +210,7 @@ Summary (M2K 3m, 09:51 ET):
 - Price 2261.2. 1R = 1.26 pts (0.5 x 3m ATR(20) 2.52, the 3m reference stop); every distance below is in points and R.
 - Trend rule: SHORT allowed (prevailing 4h down); no long against it.
 - Bias: short only (4h down, 1h range; long refused).
-- Market state (3m): ranging: 3m CHoCH down (potential reversal, holds below 2286.1 (origin)), the only RTH break; 4h down, 1h range (not aligned); class unclear.
+- Market state (3m): trend down: LH 2286.1 holds; behavior trending (overlap 0.54, efficiency 0.61), 15m early; 4h down, 1h range (not aligned); class unclear.
 - Alignment: long counter, short mixed. Regime: trend-down, high volatility. RTH volatility: unknown (2 prior sessions with these minutes; needs 3).
 - VWAP (rth): price below, 3.56 x 3m ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP 0, the session VWAP 1 (the regime's count).
 - News: no blackout ahead.
@@ -307,7 +307,7 @@ Summary (M2K 3m, 10:06 ET):
 - Price 2253.5. 1R = 1.4 pts (0.5 x 3m ATR(20) 2.8, the 3m reference stop); every distance below is in points and R.
 - Trend rule: SHORT allowed (prevailing 4h down); no long against it.
 - Bias: short only (4h down, 1h range; long refused).
-- Market state (3m): ranging: 3m CHoCH down (potential reversal, holds below 2286.1 (origin)), the only RTH break; 4h down, 1h range (not aligned); class unclear.
+- Market state (3m): trend down: LH 2286.1 holds; behavior trending (overlap 0.66, efficiency 0.44), 15m trending down; 4h down, 1h range (not aligned); class unclear.
 - Alignment: long counter, short mixed. Regime: trend-down, high volatility. RTH volatility: unknown (2 prior sessions with these minutes; needs 3).
 - VWAP (rth): price below, 4.33 x 3m ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP 0, the session VWAP 1 (the regime's count).
 - News: no blackout ahead.

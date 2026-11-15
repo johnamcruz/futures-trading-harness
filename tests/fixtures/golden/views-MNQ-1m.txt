@@ -70,7 +70,7 @@ Detail by timeframe:
   cisd: {"3m":{"dir":"bearish","level":27090.25,"confirmedClose":"20:03","displacement":"strong","engulfing":false,"sweep":null,"leg":{"origin":27098.75,"extreme":27011.5},"ote":{"top":27080.5,"bottom":27065.5,"mid":27073},"status":"waiting","priceInOte":false,"retracement":0},"5m":{"dir":"bullish","level":27093.75,"confirmedClose":"19:50","displacement":"strong","engulfing":true,"sweep":null,"leg":{"origin":27090,"extreme":27098.75},"ote":null,"status":"void","priceInOte":false,"retracement":9.971},"15m":"none in these bars","1h":"none in these bars"}
   candles: {"3m":{"t":"20:06","o":27079,"h":27084,"l":27077.75,"c":27083.25,"v":199,"body":0.68,"upperWick":0.12,"lowerWick":0.2},"5m":{"t":"20:05","o":27074.75,"h":27084,"l":27074.75,"c":27081.75,"v":931,"body":0.76,"upperWick":0.24,"lowerWick":0},"15m":{"t":"19:45","o":27090.25,"h":27098.75,"l":27090,"c":27096,"v":463,"body":0.66,"upperWick":0.31,"lowerWick":0.03},"1h":{"t":"19:00","o":27088,"h":27099.75,"l":27082,"c":27096,"v":1580,"body":0.45,"upperWick":0.21,"lowerWick":0.34}}
 [m15] version m15@2026-04-23T00:11:00.000Z, valid until 20:15 ET
-  frame: {"trend":"range","bias":0,"swingPattern":"unclear","close":27096,"ema20":27086.4,"ema50":null,"adx":null,"atr":null,"range":{"high":27099.75,"low":27077,"mid":27088.5},"note":"no EMA50 vote, needs 50"}
+  frame: {"trend":"range","bias":0,"swingPattern":"few-swings","close":27096,"ema20":27086.4,"ema50":null,"adx":null,"atr":null,"range":{"high":27099.75,"low":27077,"mid":27088.5},"note":"no EMA50 vote, needs 50"}
   alignment: {"long":"mixed","short":"mixed","bias":"neutral","score":0,"maxScore":1}
   lastBreak: {"last":null,"previous":null}
   indicators: null
@@ -162,7 +162,7 @@ Detail by timeframe:
   lastBreak: {"last":{"kind":"BOS","direction":"up","level":26995,"swingAt":"07:00","at":"07:45","barsAgo":3,"knownAt":"08:00"},"previous":{"kind":"BOS","direction":"up","level":26961.5,"swingAt":"05:30","at":"06:45","barsAgo":7,"knownAt":"07:00"}}
   indicators: {"regime":null,"ema9":27009,"ema20":26988.01,"adx":26.68,"adxSlope":-4.43,"supertrend":{"direction":"up","line":26941.98},"keltner":{"upper":27040.02,"mid":26988.01,"lower":26936},"atr14":35.18}
 [h1] version h1@2026-04-23T12:47:00.000Z, valid until 09:00 ET
-  h1: {"trend":"range","bias":0,"swingPattern":"unclear","close":27032.5,"ema20":27012.71,"ema50":null,"adx":null,"atr":null,"range":{"high":27099.75,"low":26848,"mid":26974},"note":"no EMA50 vote, needs 50"}
+  h1: {"trend":"range","bias":0,"swingPattern":"few-swings","close":27032.5,"ema20":27012.71,"ema50":null,"adx":null,"atr":null,"range":{"high":27099.75,"low":26848,"mid":26974},"note":"no EMA50 vote, needs 50"}
   h4: {"trend":"unknown","bias":0,"range":null}
   lastBreak: {"last":{"kind":"BOS","direction":"up","level":27013.5,"swingAt":"03:00","at":"07:00","barsAgo":0,"knownAt":"08:00"},"previous":null}
 [day] version day@2026-04-23T12:47:00.000Z, valid until 16:01 ET
@@ -251,7 +251,7 @@ Detail by timeframe:
   indicators: {"regime":{"primary":"transition","volatility":"normal"},"ema9":27482.46,"ema20":27445.77,"adx":29.34,"adxSlope":8.68,"supertrend":{"direction":"up","line":27435.44},"keltner":{"upper":27498.57,"mid":27445.77,"lower":27392.97},"atr14":33.1}
 [h1] version h1@2026-04-27T02:19:00.000Z, valid until 23:00 ET
   h1: {"trend":"up","bias":1,"swingPattern":"HH/HL","close":27537.75,"ema20":27323.1,"ema50":null,"adx":26.89,"atr":83.86,"range":{"high":27540,"low":27031.75,"mid":27286},"note":"no EMA50 vote, needs 50"}
-  h4: {"trend":"range","bias":0,"swingPattern":"unclear","close":27537.75,"ema20":27138.22,"ema50":null,"adx":null,"atr":null,"range":{"high":27540,"low":26681.75,"mid":27111},"note":"no EMA50 vote, needs 50"}
+  h4: {"trend":"range","bias":0,"swingPattern":"few-swings","close":27537.75,"ema20":27138.22,"ema50":null,"adx":null,"atr":null,"range":{"high":27540,"low":26681.75,"mid":27111},"note":"no EMA50 vote, needs 50"}
   lastBreak: {"last":{"kind":"BOS","direction":"up","level":27462.5,"swingAt":"04-24 13:00","at":"21:00","barsAgo":0,"knownAt":"22:00"},"previous":{"kind":"BOS","direction":"up","level":27363.75,"swingAt":"04-24 07:00","at":"04-24 11:00","barsAgo":9,"knownAt":"04-24 12:00"}}
 [day] version day@2026-04-27T02:19:00.000Z, valid until 04-27 16:01 ET
   priorRth: {"day":"2026-04-24","high":27462.5,"low":27130.25,"close":27434}
