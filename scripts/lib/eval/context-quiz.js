@@ -183,7 +183,12 @@ function biasBriefing({ h4, h1, t15, declared = false }) {
 }
 
 function excerptOf(excerpt) {
-  if (isObj(excerpt.bias)) return [`${require('../trading/bias-line').biasLine(biasBriefing(excerpt.bias))}.`];
+  if (isObj(excerpt.bias)) {
+    // The Bias line, then the Class side line under it, as the live briefing prints them (bias-line.js).
+    const { biasLine, classSideLine } = require('../trading/bias-line');
+    const b = biasBriefing(excerpt.bias);
+    return [`${biasLine(b)}.`, ...(classSideLine(b) ? [`${classSideLine(b)}.`] : [])];
+  }
   // The attempt's facts and sizing are the quiz file's (the lines are the code's on them).
   if (isObj(excerpt.size)) return require('../prop/size-line').sizeLines(excerpt.size).map(l => `${l}.`);
   // Live context (round 8): per case its Bias line and the REACTION line compose_check gives for its read

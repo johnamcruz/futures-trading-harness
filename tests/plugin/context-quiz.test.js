@@ -254,7 +254,7 @@ test('context quiz: the chop-read questions (q113-q123, less q120) are asked aga
     ['q115', 'lookup', TR, 'F2', /transitional \(old trend weakening, new one unconfirmed\) → `unclear` \(frame `transition`\)/g],
     ['q116', 'lookup', TR, 'chop: choppy movement needs no edges', /Chop needs no edges; a range can rotate cleanly\./g],
     ['q117', 'lookup', TR, 'range, not chop: class trend-up; a long setup at the low edge is allowed', /A range day inside the 4h \+ 1h side is catchable: the turn at the edge the side's way/g],
-    ['q118', 'head', undefined, 'F4', /→ the trend class of your 4h and 1h, never `chop`/g],
+    ['q118', 'head', undefined, 'F4', /\(both one way → that trend class; else `unclear`\), never `chop`/g],
     ['q119', 'head', undefined, 'F2', /→ class `chop`, whatever the 4h and 1h/g],
     ['q123', 'head', undefined, 'F3', /a 3m CHoCH against then back is the watch/g],
     ['q121', 'head', undefined, 'enter long: the turn at the low edge the side\'s way, 3m BOS near value', /setups at the edge the side's way are OK/g],
@@ -293,6 +293,27 @@ test('context quiz: the chop-read questions (q113-q123, less q120) are asked aga
   for (const id of ['q114', 'q117', 'q118', 'q121']) assert.ok(!both(id), `${id}: one CHoCH at most`);
   // The SETUP15 hard case: the pair and rotational with many crosses, inside an open Pullback: the trend class, not chop.
   assert.ok(both('q123') && /\n- Pullback \(15m, long leg/.test(text('q123')) && /rotational: .*RTH VWAP crosses [5-9]/.test(text('q123')), 'q123: the full chop facts inside a Pullback');
+});
+
+// Quiz realism (feat/chop-read): every synthetic briefing's Bias line is followed by the Class side line the live briefing
+// prints (bias-line.js classSideLine on the frames the Bias line names), so no item shows a Bias line the live briefing
+// would not follow with its Class side.
+test('context quiz: every item\'s Bias line is followed by its Class side line, built by classSideLine', () => {
+  const { classSideLine } = require('../../scripts/lib/trading/bias-line');
+  const side = bl => {
+    const m = /\(4h (up|down|range), 1h (up|down|range)/.exec(bl);
+    const [h4, h1] = m ? [m[1], m[2]] : /neutral|no side yet/.test(bl) ? ['range', 'range'] : [null, null];
+    assert.ok(h4, bl);
+    return classSideLine({ minutes: 3, sections: { h1: { data: { h4: { trend: h4 }, h1: { trend: h1 } } } } });
+  };
+  let n = 0;
+  for (const q of [...QUIZ.questions, ...QUIZ.partB]) {
+    for (const m of String(q.text || '').matchAll(/\n- (Bias: [^\n]*)\.(\n|$)/g)) {
+      n += 1;
+      assert.ok(q.text.includes(`\n- ${m[1]}.\n- ${side(m[1])}.`), `${q.id}: ${m[1]}`);
+    }
+  }
+  assert.ok(n >= 30, `${n} Bias lines`);
 });
 
 // The pullback and chop blocks' free-phrase choice items (q88-q129) hold the correct choice where a seeded shuffle put it (sha256 of

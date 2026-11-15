@@ -588,14 +588,14 @@ test('the headless argv comes from the user\'s runner config: its model, its ext
 });
 
 test('Part B\'s excerpts are the lines the code writes (bias-line.js, prop/size-line.js), asked with the question', () => {
-  assert.deepStrictEqual(Q.excerptOf({ bias: { h4: -1, h1: -1, t15: 1 } }), ['Bias: short only (4h down, 1h down; long refused).']);
-  assert.deepStrictEqual(Q.excerptOf({ bias: { h4: 0, h1: 0, t15: 1, declared: true } }), ['Bias: neutral → 15m up + declared long → long only.']);
+  assert.deepStrictEqual(Q.excerptOf({ bias: { h4: -1, h1: -1, t15: 1 } }), ['Bias: short only (4h down, 1h down; long refused).', 'Class side (4h + 1h): down (4h down, 1h down).']);
+  assert.deepStrictEqual(Q.excerptOf({ bias: { h4: 0, h1: 0, t15: 1, declared: true } }), ['Bias: neutral → 15m up + declared long → long only.', 'Class side (4h + 1h): none (4h range, 1h range): no trend class; the Bias line above is the gate\'s floor, not your class.']);
   const size = q('b4').excerpt.size;
   assert.match(Q.excerptOf({ size })[0], /^Size \(prop attempt\): the full verdict size; a serious factor against never cuts it\./);
   assert.match(Q.excerptOf({ size: { ...size, facts: { ...size.facts, balance: 99000, lossesToday: 1, lossStreak: 1 } } })[0], /^Size \(prop attempt\): phase 2 may cut \(pacing: after-loss, streak, drawdown\)/);
   assert.throws(() => Q.excerptOf({}), /excerpt/);
   const t = Q.questionText(QUIZ, q('b1'));
-  assert.match(t, /^Briefing excerpt:\nBias: short only[^\n]*\n\nA 15m bullish CHoCH/);
+  assert.match(t, /^Briefing excerpt:\nBias: short only[^\n]*\nClass side \(4h \+ 1h\): [^\n]*\n\nA 15m bullish CHoCH/);
   assert.ok(t.endsWith(QUIZ.answerFormat));
 });
 
@@ -773,4 +773,15 @@ test('quizErrors: gate.minChoices (2 or more) and gate.maxChoices (minChoices or
   assert.match(Q.quizErrors({ ...QUIZ, gate: { ...QUIZ.gate, maxChoices: 3 } }).join('\n'), /questions\[\d+\]\.choices: 2 to 3 distinct phrases/);
   // Without the quiz's gate a choice question is refused (never checked against a bound the code makes up).
   assert.deepStrictEqual(Q.questionErrors(q('q79'), { part: 'questions', at: 'question' }), ["question.choices: checked against the quiz file's gate.minChoices and gate.maxChoices (none given)"]);
+});
+
+// Quiz realism (feat/chop-read): a Bias excerpt prints the Class side line under it, as the live briefing does
+// (bias-line.js classSideLine on the same facts).
+test('excerptOf: a bias excerpt is the Bias line, then the Class side line', () => {
+  const { classSideLine } = require('../../scripts/lib/trading/bias-line');
+  const lines = Q.excerptOf({ bias: { h4: 0, h1: 1, t15: 1 } });
+  assert.strictEqual(lines.length, 2);
+  assert.match(lines[0], /^Bias: long only \(4h range, 1h up; short refused\)\.$/);
+  assert.strictEqual(lines[1], `${classSideLine({ minutes: 3, sections: { h1: { data: { h4: { trend: 'range' }, h1: { trend: 'up' } } } } })}.`);
+  assert.match(Q.excerptOf({ bias: { h4: 1, h1: 1, t15: 1 } })[1], /^Class side \(4h \+ 1h\): up \(4h up, 1h up\)\.$/);
 });
