@@ -1802,26 +1802,39 @@ Frozen definitions:
   market-state.js `readState`, the one definition the summary line prints;
   the Market state pull request), the class word of its table: chop reads
   `chop`; the 4h and 1h not both one way read `unclear`; a pullback read
-  their way (an open `Pullback` line, or the 15m trending their way under a
-  3m last break against them) reads `trend-<way>`; a 3m trend their way, or
-  ranging under them, reads `trend-<way>`; a 3m trend against them reads
-  `unclear`. The 3m state, once, on the RTH pair (the last two breaks whose
-  candles closed at or after 09:30 ET; fewer: ranging, not enough RTH
-  structure): chop (the last two breaks both CHoCH, a failed reversal; no
-  pullback read active; the 15m not confirming the way it ends, its last
-  break a BOS that way known by the close or its trend that way; no
-  confirmed turn), trend (the last break a BOS; the pair the 15m confirms; or
-  a CHoCH confirmed by a live 3m CISD its way closed on a later candle, or by
-  a close beyond the initial balance, complete from 10:30 ET, with the
-  previous break inside it), else ranging. The day so far rotational and the
-  RTH VWAP crosses at `signals.crossesChop` are printed beside a chop, never
-  its conditions. It is never the model's. Against the coded read before it:
+  their way (an open `Pullback` line no deeper than config/analysis.json
+  `pullbackRead.maxStateDepth`, or the 15m trending their way under a 3m
+  last break that is a BOS against them) reads `trend-<way>`; a 3m trend
+  their way, ranging or forming under them, reads `trend-<way>`; a 3m trend
+  against them reads `unclear`. The 3m state, once, on the RTH breaks (those
+  whose candles closed at or after 09:30 ET): none yet: forming; one: a BOS
+  a trend that way, a CHoCH ranging unless a live 3m CISD its way on a later
+  candle confirms it; two or more: chop (the last two breaks both CHoCH, a
+  failed reversal; no pullback read active; the 15m not confirming the way
+  it ends with its last break a BOS that way known at or after 09:30 ET and
+  by the close; no confirmed turn), trend (the last break a BOS whose
+  protected swing still holds; the pair the 15m confirms; or a CHoCH
+  confirmed by a live 3m CISD its way closed on a later candle, or by a close
+  beyond the initial balance, complete from 10:30 ET, with the previous break
+  inside it), else ranging. Each 3m break's protected swing (structure-
+  events.js `protectedOf`: the origin of the leg that made it): a BOS whose
+  protected higher low (lower high) a close went through has ended its
+  trend (ranging); a CHoCH whose origin a close went through has failed (its
+  CISD turn no longer confirms it; no new chop condition). The pullback read
+  is open while the leg was never given back past its origin and its 15m
+  swing was never broken by a close since the extreme (pullback-read.js
+  `isOpen`, sticky on the leg). The day so far rotational and the RTH VWAP
+  crosses at `signals.crossesChop` are printed beside a chop, never its
+  conditions. It is never the model's. Against the coded read before it:
   the bare CHoCH pair (no open `Pullback` line, no rotational day or crosses)
   now reads `chop`; the 4h and 1h agreeing with the 3m's last break a BOS
   against them and no pullback read reads `unclear` (it read the trend); the
-  RTH pair and the 15m guard are new. (The briefing passes config/analysis.json
-  `regime.rangeCrosses` for the printed crosses, pinned equal to
-  `crossesChop`. C7 still reads the session crosses, as frozen.)
+  RTH breaks, the 15m guard, the protected swings, the sticky and bounded
+  pullback and the early read on a BOS only are new. (The briefing passes
+  config/analysis.json `regime.rangeCrosses` for the printed crosses, pinned
+  equal to `crossesChop`, and `pullbackRead.maxStateDepth`; the recognition
+  key passes the same depth bound. C7 still reads the session crosses, as
+  frozen.)
 - **Three reads, kept apart** (the chop pull request):
   - *The coded read* = the Market state restated (never `chop` inside an
     open `Pullback` line).
@@ -1830,14 +1843,17 @@ Frozen definitions:
     model against it does not assume the lesson is right.
   - *Open-Pullback candles* (the post-merge moment-test plan) = a separate
     stratum: the candles whose present key has `facts.pullback` true
-    (pullback-read.js `isOpen`), judged by
+    (pullback-read.js `lineOpen`), judged by
     the pass check (did the pullback resume, or range or reverse: READ15's
     A/B/C, hindsight only) and the actual-exit R of entries there; the
     evidence word is reported beside, not used to score the guardrail.
   An open `Pullback` line: the briefing prints one and its leg is not
   given back past its origin (pullback-read.js `givenBack`: `pastOrigin`
-  when stated, else depth ≥ 1; pullback-vs-reversal step 8); the
-  briefing's Market state reads it, the skills name the state.
+  when stated, else depth ≥ 1; pullback-vs-reversal step 8; `lineOpen`,
+  what `facts.pullback` and C3 read, as frozen); the briefing's Market
+  state reads the stricter `isOpen` (never given back nor its 15m swing
+  broken since the extreme) with the depth bound; the skills name the
+  state.
 - **Chop is not range** (the owner's rule, the chop pull request): chop is
   the quality of movement, range its geometry. A 15m `range` or a 3m
   `range` regime is neither a chop signal nor the coded read's `chop`; C2,

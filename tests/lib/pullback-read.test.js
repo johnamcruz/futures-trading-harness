@@ -281,3 +281,38 @@ test('givenBack and isOpen: given back = pastOrigin when a boolean, else depth >
   assert.strictEqual(PR.pullbackWord(p({ depth: 1.1 })), 'leg given back');
   assert.strictEqual(PR.pullbackWord(p({ pastOrigin: false, depth: 1.1 })), 'depth 110%');
 });
+
+// Round 15 fix 1 (PREREG addendum 15): a leg given back past its origin is invalidated; it does not reopen when price
+// crosses back. isOpen (the Market state's read) is false for good once a close since the extreme was beyond the origin
+// (givenBackSince) or the leg-defining 15m swing was broken by a close; lineOpen (the printed line's openness, the
+// recognition key's frozen C3) keeps the pre-round rule. The printed line never reads the new field.
+test('isOpen is sticky within the leg: given back since the extreme, or its 15m swing broken; lineOpen and the line unchanged', () => {
+  const leg = { origin: 21462.5, extreme: 21538.75 };
+  const p = o => ({ frame: '15m', side: 'long', leg, depth: 0.38, pastOrigin: false, counter: { bars: 10 }, swing: { '15m': { price: 21462.5, holds: true } }, against: {}, ...o });
+  assert.strictEqual(PR.isOpen(p({ givenBackSince: false })), true);
+  assert.strictEqual(PR.isOpen(p({ givenBackSince: true })), false, 'given back since the extreme: dead though the close is back above the origin');
+  assert.strictEqual(PR.isOpen(p({ swing: { '15m': { price: 21462.5, holds: false } } })), false, 'its 15m swing broken by a close: dead');
+  assert.strictEqual(PR.isOpen(p({ swing: { '1h': { price: 21400, holds: false } } })), true, 'only the leg-defining (structure-frame) swing');
+  assert.strictEqual(PR.lineOpen(p({ givenBackSince: true })), true, 'the printed line still reads open');
+  assert.strictEqual(PR.lineOpen(p({ pastOrigin: true })), false);
+  assert.strictEqual(PR.pullbackLine(p({ givenBackSince: true })), PR.pullbackLine(p({})), 'the line never reads it');
+  assert.strictEqual(PR.pullbackWord(p({ givenBackSince: true })), PR.pullbackWord(p({})));
+});
+
+test('pullbackRead on real bars (2021-06-04): the leg given back at 07:09 never reopens, though the printed line reads open again at 07:12', () => {
+  const bars = require('../fixtures/pullback/given-back-2021-06-04.json').map(([t, o, h, l, c, v]) => ({ t: `${t}:00.000Z`, o, h, l, c, v }));
+  const at = n => PR.pullbackRead({ bars: bars.slice(0, n), base: 3, prevailing: '4h down' });
+  const leg = q => [q.leg.origin, q.leg.extreme];
+  const live = at(163); // 06:57: the counter-move inside the leg
+  assert.deepStrictEqual([leg(live), live.givenBackSince, PR.isOpen(live)], [[13531.75, 13492.5], false, true]);
+  const back = at(167); // 07:09: a close past the origin
+  assert.deepStrictEqual([leg(back), back.pastOrigin, back.givenBackSince, PR.isOpen(back)], [[13531.75, 13492.5], true, true, false]);
+  const reopened = at(168); // 07:12: the close back inside the leg
+  assert.deepStrictEqual([leg(reopened), reopened.pastOrigin, reopened.givenBackSince], [[13531.75, 13492.5], false, true]);
+  assert.strictEqual(PR.lineOpen(reopened), true, 'the pre-round rule reopened it');
+  assert.strictEqual(PR.isOpen(reopened), false, 'dead for good on this leg');
+  const { givenBackSince: _gbs, ...rest } = reopened;
+  assert.strictEqual(PR.pullbackLine(rest), PR.pullbackLine(reopened), 'the printed line ignores it');
+  const p = at(bars.length);
+  assert.strictEqual(p.givenBackSince, true);
+});

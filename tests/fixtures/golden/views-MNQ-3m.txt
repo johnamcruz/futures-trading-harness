@@ -23,7 +23,7 @@ Summary (MNQ 3m, 00:48 ET):
 - Price 27053.75. 1R = 5.13 pts (0.5 x 3m ATR(20) 10.26, the 3m reference stop); every distance below is in points and R.
 - Trend rule: no trend on 4h, 1h, or 15m; in a prop attempt no side (the entry rule), else both sides open.
 - Bias: no side yet (15m range).
-- Market state (3m): ranging: no RTH 3m break yet (not enough RTH structure); 4h range, 1h range (not aligned).
+- Market state (3m): forming (no RTH structure yet); 4h range, 1h range (not aligned).
 - Alignment: long mixed, short mixed. Regime: transition, normal volatility.
 - VWAP (session): price below, 1.95 x 3m ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP 0, the session VWAP 0 (the regime's count).
 - News: no blackout ahead.
@@ -62,7 +62,7 @@ Detail by timeframe:
   referenceStop: {"distance":5.13,"long":27048.62,"short":27058.88}
   swings: {"high":27046.25,"highAt":"00:12","low":27016.25,"lowAt":"00:24"}
   liquidity: {"swingHighs":[{"price":27126.25,"t":"04-23 21:48"},{"price":27078.25,"t":"04-23 23:00"},{"price":27049,"t":"04-23 23:51"},{"price":27046.25,"t":"00:12"}],"swingLows":[{"price":27056.5,"t":"04-23 23:03"},{"price":27023.25,"t":"04-23 23:30"},{"price":27019.75,"t":"00:00"},{"price":27016.25,"t":"00:24"}],"equalHighs":[],"equalLows":[],"openFvgs":[],"partlyFilledFvgs":[]}
-  lastBreak: {"last":{"kind":"CHoCH","direction":"up","level":27046.25,"swingAt":"00:12","at":"00:45","barsAgo":0},"previous":{"kind":"BOS","direction":"down","level":27056.5,"swingAt":"04-23 23:03","at":"04-23 23:21","barsAgo":28}}
+  lastBreak: {"last":{"kind":"CHoCH","direction":"up","level":27046.25,"swingAt":"00:12","at":"00:45","barsAgo":0,"protected":{"side":"low","level":27016.25,"at":"00:24","brokenAt":null}},"previous":{"kind":"BOS","direction":"down","level":27056.5,"swingAt":"04-23 23:03","at":"04-23 23:21","barsAgo":28,"protected":{"side":"high","level":27073,"at":"04-23 23:03","brokenAt":null}}}
   sweeps: []
   htfLevels: [{"name":"15m swing high","type":"high","price":27135.75,"side":"above","brokenAt":null},{"name":"15m swing low","type":"low","price":26681.75,"side":"below","brokenAt":null},{"name":"15m swing low","type":"low","price":26842.25,"side":"below","brokenAt":null},{"name":"15m swing low","type":"low","price":26840.25,"side":"below","brokenAt":null},{"name":"15m swing high","type":"high","price":27053,"side":"below","brokenAt":"04-23 19:30"},{"name":"1h swing high","type":"high","price":27155.75,"side":"above","brokenAt":null},{"name":"1h swing high","type":"high","price":27135.75,"side":"above","brokenAt":null},{"name":"1h swing low","type":"low","price":26681.75,"side":"below","brokenAt":null},{"name":"1h swing low","type":"low","price":26865,"side":"below","brokenAt":"04-23 13:39"}]
   untested1hSwings: [{"type":"high","price":27155.75,"t":"04-23 11:00"},{"type":"high","price":27135.75,"t":"04-23 20:00"},{"type":"low","price":26681.75,"t":"04-23 13:00"}]
@@ -117,7 +117,7 @@ Summary (MNQ 3m, 10:33 ET):
 - Price 27325.5. 1R = 14.51 pts (0.5 x 3m ATR(20) 29.03, the 3m reference stop); every distance below is in points and R.
 - Trend rule: SHORT allowed (prevailing 15m down; the 4h and 1h ranging: in a prop attempt only with the trend declared); no long against it.
 - Bias: neutral → 15m down + declared short → short only.
-- Market state (3m): trend down: 3m BOS down (continuation), 0 min ago; pullback (short leg 27435 -> 27298.5, depth 20%); 4h range, 1h range (not aligned).
+- Market state (3m): trend down: 3m BOS down (continuation), 0 min ago; protected LH 27383.25 holding; pullback (short leg 27435 -> 27298.5, depth 20%); 4h range, 1h range (not aligned).
 - Alignment: long mixed, short mixed. Regime: trend-down, high volatility. RTH volatility: unknown (2 prior sessions with these minutes; needs 3).
 - VWAP (rth): price below, 1.46 x 3m ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP 6, the session VWAP 0 (the regime's count).
 - News: no blackout ahead.
@@ -167,7 +167,7 @@ Detail by timeframe:
   referenceStop: {"distance":14.51,"long":27310.99,"short":27340.01}
   swings: {"high":27383.25,"highAt":"10:24","low":27352.5,"lowAt":"10:18"}
   liquidity: {"swingHighs":[{"price":27435,"t":"09:30"},{"price":27413.25,"t":"09:57"},{"price":27393.25,"t":"10:15"},{"price":27383.25,"t":"10:24"}],"swingLows":[{"price":27353.5,"t":"09:36"},{"price":27298.5,"t":"09:51"},{"price":27348.25,"t":"10:09"},{"price":27352.5,"t":"10:18"}],"equalHighs":[],"equalLows":[],"openFvgs":[],"partlyFilledFvgs":[]}
-  lastBreak: {"last":{"kind":"BOS","direction":"down","level":27352.5,"swingAt":"10:18","at":"10:30","barsAgo":0},"previous":{"kind":"BOS","direction":"down","level":27353.5,"swingAt":"09:36","at":"09:45","barsAgo":15}}
+  lastBreak: {"last":{"kind":"BOS","direction":"down","level":27352.5,"swingAt":"10:18","at":"10:30","barsAgo":0,"protected":{"side":"high","level":27383.25,"at":"10:24","brokenAt":null}},"previous":{"kind":"BOS","direction":"down","level":27353.5,"swingAt":"09:36","at":"09:45","barsAgo":15,"protected":{"side":"high","level":27413.25,"at":"09:36","brokenAt":null}}}
   sweeps: []
   htfLevels: [{"name":"15m swing high","type":"high","price":27500.25,"side":"above","brokenAt":null},{"name":"15m swing high","type":"high","price":27435,"side":"above","brokenAt":null},{"name":"15m swing low","type":"low","price":27298.5,"side":"below","brokenAt":null},{"name":"15m swing low","type":"low","price":27388,"side":"above","brokenAt":"09:33"},{"name":"1h swing high","type":"high","price":27542.5,"side":"above","brokenAt":null},{"name":"1h swing high","type":"high","price":27500.25,"side":"above","brokenAt":null},{"name":"1h swing low","type":"low","price":27130.25,"side":"below","brokenAt":null},{"name":"1h swing low","type":"low","price":27344.25,"side":"above","brokenAt":"09:48"}]
   untested1hSwings: [{"type":"high","price":27542.5,"t":"04-26 22:00"},{"type":"high","price":27500.25,"t":"07:00"},{"type":"low","price":27064.5,"t":"04-24 05:00"},{"type":"low","price":27130.25,"t":"04-24 09:00"}]
@@ -221,7 +221,7 @@ Summary (MNQ 3m, 13:18 ET):
 - Price 27394.25. 1R = 8.15 pts (0.5 x 3m ATR(20) 16.3, the 3m reference stop); every distance below is in points and R.
 - Trend rule: no trend on 4h, 1h, or 15m; in a prop attempt no side (the entry rule), else both sides open.
 - Bias: no side yet (15m range).
-- Market state (3m): trend up: 3m BOS up (continuation), 3 min ago; 4h range, 1h range (not aligned).
+- Market state (3m): trend up: 3m BOS up (continuation), 3 min ago; protected HL 27379 holding; 4h range, 1h range (not aligned).
 - Alignment: long mixed, short mixed. Regime: range, low volatility. RTH volatility: unknown (2 prior sessions with these minutes; needs 3).
 - VWAP (rth): price above, 1.72 x 3m ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP 4, the session VWAP 5 (the regime's count).
 - News: no blackout ahead.
@@ -266,7 +266,7 @@ Detail by timeframe:
   referenceStop: {"distance":8.15,"long":27386.1,"short":27402.4}
   swings: {"high":27406.5,"highAt":"12:42","low":27379,"lowAt":"12:57"}
   liquidity: {"swingHighs":[{"price":27367,"t":"11:09"},{"price":27383,"t":"11:42"},{"price":27389.75,"t":"12:18"},{"price":27406.5,"t":"12:42"}],"swingLows":[{"price":27307.5,"t":"11:21"},{"price":27347.75,"t":"12:00"},{"price":27370,"t":"12:21"},{"price":27379,"t":"12:57"}],"equalHighs":[],"equalLows":[],"openFvgs":[],"partlyFilledFvgs":[]}
-  lastBreak: {"last":{"kind":"BOS","direction":"up","level":27406.5,"swingAt":"12:42","at":"13:12","barsAgo":1},"previous":{"kind":"BOS","direction":"up","level":27389.75,"swingAt":"12:18","at":"12:33","barsAgo":14}}
+  lastBreak: {"last":{"kind":"BOS","direction":"up","level":27406.5,"swingAt":"12:42","at":"13:12","barsAgo":1,"protected":{"side":"low","level":27379,"at":"12:57","brokenAt":null}},"previous":{"kind":"BOS","direction":"up","level":27389.75,"swingAt":"12:18","at":"12:33","barsAgo":14,"protected":{"side":"low","level":27370,"at":"12:21","brokenAt":null}}}
   sweeps: []
   htfLevels: [{"name":"15m swing high","type":"high","price":27500.25,"side":"above","brokenAt":null},{"name":"15m swing high","type":"high","price":27435,"side":"above","brokenAt":null},{"name":"15m swing low","type":"low","price":27298.5,"side":"below","brokenAt":null},{"name":"15m swing low","type":"low","price":27321.5,"side":"below","brokenAt":null},{"name":"15m swing low","type":"low","price":27307.5,"side":"below","brokenAt":null},{"name":"15m swing high","type":"high","price":27466.25,"side":"above","brokenAt":"06:36"},{"name":"1h swing high","type":"high","price":27542.5,"side":"above","brokenAt":null},{"name":"1h swing high","type":"high","price":27500.25,"side":"above","brokenAt":null},{"name":"1h swing low","type":"low","price":27298.5,"side":"below","brokenAt":null},{"name":"1h swing low","type":"low","price":27344.25,"side":"below","brokenAt":"09:48"}]
   untested1hSwings: [{"type":"high","price":27542.5,"t":"04-26 22:00"},{"type":"high","price":27500.25,"t":"07:00"},{"type":"low","price":27130.25,"t":"04-24 09:00"},{"type":"low","price":27298.5,"t":"09:00"}]
@@ -318,7 +318,7 @@ Summary (MNQ 3m, 19:21 ET):
 - Price 27488. 1R = 4.63 pts (0.5 x 3m ATR(20) 9.27, the 3m reference stop); every distance below is in points and R.
 - Trend rule: LONG allowed (prevailing 4h up); no short against it.
 - Bias: long only (4h up, 1h range; short refused).
-- Market state (3m): ranging: no RTH 3m break yet (not enough RTH structure); pullback (long leg 27411.25 -> 27501.5, depth 15%); 4h up, 1h range (not aligned).
+- Market state (3m): forming (no RTH structure yet); pullback (long leg 27411.25 -> 27501.5, depth 15%); 4h up, 1h range (not aligned).
 - Alignment: long aligned, short counter. Regime: transition, normal volatility.
 - VWAP (session): price above, 1.4 x 3m ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP 0, the session VWAP 0 (the regime's count).
 - News: no blackout ahead.
@@ -363,7 +363,7 @@ Detail by timeframe:
   referenceStop: {"distance":4.63,"long":27483.37,"short":27492.63}
   swings: {"high":27489.75,"highAt":"19:03","low":27474.75,"lowAt":"19:09"}
   liquidity: {"swingHighs":[{"price":27501.5,"t":"18:18"},{"price":27499.25,"t":"18:33"},{"price":27498.25,"t":"18:42"},{"price":27489.75,"t":"19:03"}],"swingLows":[{"price":27417.25,"t":"16:57"},{"price":27489.25,"t":"18:36"},{"price":27478.5,"t":"18:54"},{"price":27474.75,"t":"19:09"}],"equalHighs":[],"equalLows":[],"openFvgs":[],"partlyFilledFvgs":[]}
-  lastBreak: {"last":{"kind":"BOS","direction":"down","level":27478.5,"swingAt":"18:54","at":"19:09","barsAgo":3},"previous":{"kind":"CHoCH","direction":"down","level":27489.25,"swingAt":"18:36","at":"18:48","barsAgo":10}}
+  lastBreak: {"last":{"kind":"BOS","direction":"down","level":27478.5,"swingAt":"18:54","at":"19:09","barsAgo":3,"protected":{"side":"high","level":27489.75,"at":"19:03","brokenAt":null}},"previous":{"kind":"CHoCH","direction":"down","level":27489.25,"swingAt":"18:36","at":"18:48","barsAgo":10,"protected":{"side":"high","level":27498.25,"at":"18:42","brokenAt":null}}}
   sweeps: []
   htfLevels: [{"name":"15m swing high","type":"high","price":27501.5,"side":"above","brokenAt":null},{"name":"15m swing low","type":"low","price":27307.5,"side":"below","brokenAt":null},{"name":"15m swing low","type":"low","price":27390.5,"side":"below","brokenAt":null},{"name":"15m swing low","type":"low","price":27411.25,"side":"below","brokenAt":null},{"name":"15m swing high","type":"high","price":27454.75,"side":"below","brokenAt":"18:03"},{"name":"1h swing high","type":"high","price":27542.5,"side":"above","brokenAt":null},{"name":"1h swing high","type":"high","price":27500.25,"side":"above","brokenAt":null},{"name":"1h swing low","type":"low","price":27298.5,"side":"below","brokenAt":null},{"name":"1h swing low","type":"low","price":27344.25,"side":"below","brokenAt":"09:48"}]
   untested1hSwings: [{"type":"high","price":27542.5,"t":"04-26 22:00"},{"type":"low","price":27130.25,"t":"04-24 09:00"},{"type":"low","price":27298.5,"t":"09:00"}]

@@ -535,19 +535,17 @@ test('grading: q50-q63, the market-context questions: right and wrong answers pe
     ['q50', 'ANSWER: A rejection: it traded through the low and closed back.', true], ['q50', 'ANSWER: Acceptance: it broke the low.', false],
     ['q51', 'ANSWER: No: no reaction is not a rejection.', true], ['q51', 'ANSWER: Yes, the level rejected price.', false],
     ['q52', 'ANSWER: Acceptance, not rejection: the closes beyond the level hold.', true], ['q52', 'ANSWER: Rejection of the high.', false],
-    ['q54', 'ANSWER: No: a sweep, not a break.', true], ['q54', 'ANSWER: Yes, a BOS down.', false],
     ['q55', 'ANSWER: CHoCH: an early warning, not a reversal by itself.', true], ['q55', 'ANSWER: Reversal: the trend has turned.', false],
     ['q56', 'ANSWER: A declared trend up.', true], ['q56', 'ANSWER: Range: nothing has declared.', false],
     ['q57', 'ANSWER: Transition: regime and structure disagree.', true], ['q57', 'ANSWER: Trend up.', false],
     ['q58', 'ANSWER: Range: a chop day.', true], ['q58', 'ANSWER: Trend up.', false],
-    ['q59', 'ANSWER: No: a pause inside the trend.', true], ['q59', 'ANSWER: Yes, the market is ranging.', false],
     ['q60', 'ANSWER: A pullback: the CHoCH is inside an intact higher structure.', true], ['q60', 'ANSWER: Reversal.', false],
     ['q61', 'ANSWER: A reversal developing; the 1h CHoCH against is decisive: pass on the long.', true], ['q61', 'ANSWER: Pullback; take the long.', false],
     ['q55', 'ANSWER: CHoCH: the trend has reversed.', false], ['q56', 'ANSWER: A trend up but not yet declared.', false], ['q56', 'ANSWER: Uptrend, declared.', true],
     ['q57', 'ANSWER: Still an uptrend on the 15m, with the regime in transition.', false], ['q57', 'ANSWER: Transitional: the CHoCH disagrees with the trend read.', true],
     ['q61', 'ANSWER: Reversal; the long is still valid against the 1h.', false], ['q63', 'ANSWER: It is reversing; the weakening signs confirm it: exit.', false],
     ['q50', 'ANSWER: Not a rejection: a sweep.', false], ['q60', 'ANSWER: The start of a reversal, not a pullback.', false],
-    ['q51', 'ANSWER: Nothing has happened: no rejection yet.', true], ['q52', 'ANSWER: Yes, acceptance: both closes hold above.', true], ['q59', 'ANSWER: Not really; it is a breather inside the trend.', true],
+    ['q51', 'ANSWER: Nothing has happened: no rejection yet.', true], ['q52', 'ANSWER: Yes, acceptance: both closes hold above.', true],
     ['q61', 'ANSWER: Pullback is ruled out; a reversal is developing, so no long.', true],
     ['q62', 'ANSWER: No: depth alone is no edge.', true], ['q62', 'ANSWER: Yes, a 50% retrace is the entry.', false],
     ['q63', 'ANSWER: Weakening, not a reversal without a 15m break.', true], ['q63', 'ANSWER: Yes, a reversal: exit.', false],
@@ -810,5 +808,5 @@ test('marketStateOfText: the Market state line from an item\'s printed lines', (
   const IB = '- MNQ day: opened 21500; initial balance 21480-21560 (80 points), extended 3.25 up and 0 down: normal variation up.';
   assert.strictEqual(Q.marketStateOfText(head('11:00', [BL, '- Price 21563.25.', IB, ROT, '- m3.lastBreak: last CHoCH up at 21558.25 (barsAgo 0), previous CHoCH down at 21497.75 (barsAgo 5).'])), 'Market state (3m): trend up: 3m CHoCH down then CHoCH up (failed reversal), then a close above the IB high 21560 (confirmed); the chop ended; 4h+1h up');
   // The RTH pair: a previous break before 09:30 ET does not count.
-  assert.strictEqual(Q.marketStateOfText(head('09:36', [BL, '- m3.lastBreak: last CHoCH up at 21512.25 (barsAgo 0), previous CHoCH down at 21497.75 (barsAgo 4).'])), 'Market state (3m): ranging: 3m CHoCH up (potential reversal, unconfirmed), the only RTH break (not enough RTH structure); 4h+1h up');
+  assert.strictEqual(Q.marketStateOfText(head('09:36', [BL, '- m3.lastBreak: last CHoCH up at 21512.25 (barsAgo 0), previous CHoCH down at 21497.75 (barsAgo 4).'])), 'Market state (3m): ranging: 3m CHoCH up (potential reversal, unconfirmed), the only RTH break; 4h+1h up');
 });

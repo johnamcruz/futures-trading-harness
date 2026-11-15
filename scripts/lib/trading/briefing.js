@@ -96,7 +96,9 @@ const { familyRoot, tickOf, levelOnTick } = require('./contracts');
 const { candidateTrendRule } = require('./signal-state');
 const { sideTarget } = require('./order-plan');
 const { roundStepFor, roundStepError } = require('./round-numbers');
-const { pivots, lastBreaks, breaksOf, sweeps, untestedSwings, swingLevels } = require('./structure-events');
+const { pivots, lastBreaks, breaksOf, sweeps, untestedSwings, swingLevels, protectedOf } = require('./structure-events');
+// The 3m breaks with their protected swings (the owner's invalidation rule; the Market state reads them).
+const withProtected = (bars, lb) => Object.fromEntries(Object.entries(lb).map(([k, x]) => [k, x ? { ...x, protected: protectedOf(bars, x) } : x]));
 const { timingOf, timingLine } = require('./ltf-timing');
 const { sideValuesText, causalLevels } = require('./rules');
 const { cisdFacts } = require('./cisd');
@@ -114,7 +116,7 @@ const { biasLine } = require('./bias-line');
 const { stateOf, marketStateLine } = require('./market-state');
 // The Market state line's crosses context threshold: the regime's rotation count (config/analysis.json; a test pins it to the
 // recognition key's frozen crossesChop).
-const STATE_TH = { crossesChop: require('../tunables').analysis().regime.rangeCrosses };
+const STATE_TH = { crossesChop: require('../tunables').analysis().regime.rangeCrosses, maxPullbackDepth: require('../tunables').analysis().pullbackRead.maxStateDepth };
 const { pullbackRead, pullbackLine } = require('./pullback-read');
 const { GLOBEX_OPEN_MIN, RTH_OPEN_MIN, RTH_CLOSE_MIN } = require('./clock'); // the session boundaries' one home
 
@@ -481,7 +483,7 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
         // Structure events (structure-events.js): the latest break on the trigger bars, sweeps of key liquidity in the last
         // 10 bars (only levels that existed before the sweep), the 1h swings not traded back to, and the 15m and 1h swings
         // against price (a 3m close through one since its candle closed: brokenAt).
-        lastBreak: lastBreaks(bars),
+        lastBreak: withProtected(bars, lastBreaks(bars)),
         sweeps: sweeps(bars, [
           // The session's key levels: the runner's bars only (a frame's sweeps are of its own levels).
           ...(own ? [] : [['prior RTH high', (lv.priorRth || {}).high, 'high', true], ['prior RTH low', (lv.priorRth || {}).low, 'low', true]]),

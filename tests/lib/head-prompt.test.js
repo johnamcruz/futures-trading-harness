@@ -130,7 +130,9 @@ test('CORE: the composed bar\'s reads the gate requires (SITUATIONAL taught in t
   // examples, the CHoCH pair inside a Pullback its watch; htf-to-ltf's class sentence, aligned or not, open, chop and pause each defined once; round 5: the Class side line named, no else chain, the pause gives the class, a rejection inside the zone is the reaction; round 6: the Class side line's provenance, the pause gives the class bullets' class; round 7: chop first, rotational the printed word, the watch's end, the live strong 15m CISD is the turn; round 8: the Class side line as the one source (+1805).
   // Then 84568 with the Market state redesign (feat/chop-read, PREREG addendum 14): the class rule's bullets replaced by the
   // Market state table (the 3m state, the pullback read, the 4h + 1h) and the owner's trending and chop definitions, at the measured need.
-  assert.ok(Buffer.byteLength(prompt) <= 84568, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
+  // Then 84713 (round 15, PREREG addendum 15, same rule): the table's forming row, the chop row's current 15m BOS, a strong
+  // 15m CISD in the read chain and the setup sentence (+145, the measured need).
+  assert.ok(Buffer.byteLength(prompt) <= 84713, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
   // Only the head trader's prompt grows: no other role's prompt embeds trade-lifecycle (the risk manager's embeds
   // confluence-counting and invalidation as before; its prompt is unchanged, pinned in trade-session-split.test.js).
   for (const [name, a] of Object.entries(index.agent)) if (name !== H.HEAD_AGENT && a.prompt) assert.ok(!a.prompt.includes('<skill name="trade-lifecycle">'), name);

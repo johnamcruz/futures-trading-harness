@@ -38,7 +38,7 @@ is the entry; the 3m only times the entry: the next 3m bar, no
 confirming close, no 3m turn to wait for (waiting cost R), unless a
 `Pullback` line prints.
 **Pullback** (`pullback-vs-reversal`): BOS or CISD the side's way
-confirms, CHoCH or CISD against warns. Setup: the 15m turn: a live 15m
+confirms, CHoCH or CISD against warns. Setup: the 15m turn: a live strong 15m
 CISD, a 15m BOS, a 15m CHoCH back or a 15m reaction at the level, the side's way; no 3m BOS
 or CISD yet: watch (the bar stays a pass; the read stays open).
 Entry: the first 3m BOS or CISD the side's way near value

@@ -37,7 +37,9 @@
 
 const { biasLine, biasSides } = require('../../trading/bias-line');
 const { declaredOf } = require('../../trading/entry-rule');
-const { isOpen } = require('../../trading/pullback-read');
+const { lineOpen } = require('../../trading/pullback-read');
+// The state's deepest pullback: the briefing's own config value (the coded read restates the printed line).
+const MAX_PULLBACK_DEPTH = require('../../tunables').analysis().pullbackRead.maxStateDepth;
 const { readState, classWordOf } = require('../../trading/market-state');
 
 const SIDES = ['long', 'short'];
@@ -77,10 +79,10 @@ function facts(b) {
     bias, biasSides: sides, declared: Object.fromEntries(SIDES.map(s => [s, (() => { try { return declaredOf(b, s); } catch (_err) { return null; } })()])),
     day: dayOf(m3),
     bothWays: { '15m': bothWaysOf(m15.lastBreak), '3m': bothWaysOf(m3.lastBreak) },
-    // An open Pullback line (trade-session's class rule): the briefing prints one (the same writer) and the leg is not
-    // given back past its origin (pullback-vs-reversal step 8: no with-side read on that leg); inside it a pause, its 3m
-    // CHoCH pair included, is never chop.
-    pullback: (() => { try { return isOpen(m3.pullback); } catch (_err) { return false; } })(),
+    // The printed Pullback line reads open (frozen for C3, the evidence word): the briefing prints one (the same writer) and
+    // the leg is not given back past its origin at this close (pullback-read.js lineOpen; the Market state's stricter
+    // isOpen, sticky on the leg and bounded in depth, is the coded read's, not the evidence's).
+    pullback: (() => { try { return lineOpen(m3.pullback); } catch (_err) { return false; } })(),
     // The Day so far line's RTH VWAP crosses (the count the skills teach), printed while too early too.
     rthCrosses: orNull(at(m3, 'today', 'soFar', 'vwapCrosses')),
   };
@@ -123,7 +125,7 @@ function presentKey(b, th) {
   const seen = new Set();
   const met = [...sig.long.met, ...sig.short.met].filter(m => SIDE_FREE.includes(m.id) && !seen.has(m.id) && seen.add(m.id));
   const none = { c: met.map(m => m.id), t: [], met };
-  const state = readState(b, th);
+  const state = readState(b, { ...th, maxPullbackDepth: MAX_PULLBACK_DEPTH });
   return { facts: f, state, choppy: state.state === 'chop', biasSide: allowed.length === 1 ? allowed[0] : null, signals: { ...sig, none }, cls: { long: classOf(sig.long), short: classOf(sig.short), none: classOf(none) } };
 }
 

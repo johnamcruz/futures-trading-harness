@@ -1181,7 +1181,7 @@ never the composed setup read (`compose_check` takes a live strong one):
   Printed proxies: the printed `inside the <time> candle <low>-<high>`
    (the impulse candle's), the `Pullback` depth.
 4.
-  **The setup**: the 15m turn: a live 15m CISD, a 15m BOS, a 15m CHoCH
+  **The setup**: the 15m turn: a live strong 15m CISD, a 15m BOS, a 15m CHoCH
    back or a 15m reaction at the level, the side's way → the pullback ended
    on the 15m; no 15m BOS to wait for after a strong CISD, a CHoCH back or a
    reaction; a 15m CHoCH back: the first 15m break back after the
@@ -1242,7 +1242,7 @@ never the composed setup read (`compose_check` takes a live strong one):
 checklist: depth, the pause's shape, how near the level it stopped, the
 candle type and the distance to value weigh in the count
 (`confluence-counting`); a stop short of the level inside the zone, or no
-named candle, is no reason to wait (a live strong 15m CISD or a 15m BOS is the read then).
+named candle, is no reason to wait (a strong 15m CISD or a 15m BOS is the read).
   Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
 or CISD against → wait; the entry needs a 3m BOS or CISD the side's way
 and a true 15m setup read the side's way (`compose_check` requires the
@@ -1351,16 +1351,20 @@ A wick through a swing that closes back inside is a sweep, not a break
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
   A potential reversal: CHoCH then BOS: confirmed; a 3m CHoCH then CHoCH
-  back: a failed reversal, chop, unless a pullback read is active or the
-  15m breaks or trends the way it ends (then the 15m continuation; the
-  Market state line).
+  back: a failed reversal, chop, unless a pullback read is active or a
+  current 15m BOS (known in RTH) breaks the way it ends (then the 15m
+  continuation; the Market state line).
+- Each break has a protected swing: a BOS holds until the leg's higher
+  low (lower high) breaks; a CHoCH holds until the low (high) that started
+  the shift breaks.
+  Only a close through it counts; a wick is not.
 
 **Fields**: `m3.lastBreak.last` and `m3.lastBreak.previous`; the same
 under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
 a 5m lane's briefing has it in its `bar` part.
   Each: `kind` (`BOS` or
 `CHoCH`), `direction` (`up` or `down`), `level`, `barsAgo` (that
-timeframe's candles).
+timeframe's candles); the 3m ones also `protected` (`level`, `brokenAt`).
   The 4h has swings only (`h1.h4.swingPattern`).
 
 **By timeframe.** No one timeframe is the signal; read them top-down.
@@ -2619,7 +2623,7 @@ never the composed setup read (`compose_check` takes a live strong one):
   Printed proxies: the printed `inside the <time> candle <low>-<high>`
    (the impulse candle's), the `Pullback` depth.
 4.
-  **The setup**: the 15m turn: a live 15m CISD, a 15m BOS, a 15m CHoCH
+  **The setup**: the 15m turn: a live strong 15m CISD, a 15m BOS, a 15m CHoCH
    back or a 15m reaction at the level, the side's way → the pullback ended
    on the 15m; no 15m BOS to wait for after a strong CISD, a CHoCH back or a
    reaction; a 15m CHoCH back: the first 15m break back after the
@@ -2680,7 +2684,7 @@ never the composed setup read (`compose_check` takes a live strong one):
 checklist: depth, the pause's shape, how near the level it stopped, the
 candle type and the distance to value weigh in the count
 (`confluence-counting`); a stop short of the level inside the zone, or no
-named candle, is no reason to wait (a live strong 15m CISD or a 15m BOS is the read then).
+named candle, is no reason to wait (a strong 15m CISD or a 15m BOS is the read).
   Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
 or CISD against → wait; the entry needs a 3m BOS or CISD the side's way
 and a true 15m setup read the side's way (`compose_check` requires the
@@ -2789,16 +2793,20 @@ A wick through a swing that closes back inside is a sweep, not a break
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
   A potential reversal: CHoCH then BOS: confirmed; a 3m CHoCH then CHoCH
-  back: a failed reversal, chop, unless a pullback read is active or the
-  15m breaks or trends the way it ends (then the 15m continuation; the
-  Market state line).
+  back: a failed reversal, chop, unless a pullback read is active or a
+  current 15m BOS (known in RTH) breaks the way it ends (then the 15m
+  continuation; the Market state line).
+- Each break has a protected swing: a BOS holds until the leg's higher
+  low (lower high) breaks; a CHoCH holds until the low (high) that started
+  the shift breaks.
+  Only a close through it counts; a wick is not.
 
 **Fields**: `m3.lastBreak.last` and `m3.lastBreak.previous`; the same
 under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
 a 5m lane's briefing has it in its `bar` part.
   Each: `kind` (`BOS` or
 `CHoCH`), `direction` (`up` or `down`), `level`, `barsAgo` (that
-timeframe's candles).
+timeframe's candles); the 3m ones also `protected` (`level`, `brokenAt`).
   The 4h has swings only (`h1.h4.swingPattern`).
 
 **By timeframe.** No one timeframe is the signal; read them top-down.

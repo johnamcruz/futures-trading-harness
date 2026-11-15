@@ -112,8 +112,12 @@ test('context quiz: every layer asked, ids unique, the bar the whole quiz at K 5
   // reversal); q122 (mid-range churn, the same shape as q119 under the state table) and q116 (chop without edges; q117 keeps
   // chop is not range) retired before any run; q128 (the 3m pair the 15m confirms) and q129 (the 15m CHoCH back as the turn)
   // added, q115 (transitional, the table's not-aligned row) and q117 (the clean range day, q121's shape) retired, so the
-  // quiz stays at 108 where the gate's bounds hold.
+  // quiz stays at 108 where the gate's bounds hold. Round 15 (PREREG addendum 15): the BOS/CHoCH invalidation items q130-
+  // q133 added, q54 folded into the wick case (the same close-only lesson) and q127 into the CHoCH-holds case; q112 (q94's
+  // not-aligned row), q113 (the chop shape q119 and q128 test), q121 (q95's ranging-aligned row) and q59 (the pause inside
+  // the trend, q95's row) retired: at 114 the gate's Monte Carlo misses its flaky bound under maxSlips 10.
   assert.strictEqual(QUIZ.questions.length, 100);
+  assert.ok(!QUIZ.questions.some(x => ['q59', 'q112', 'q113', 'q121'].includes(x.id)), 'q59, q112, q113 and q121 retired');
   assert.ok(!QUIZ.questions.some(x => ['q115', 'q116', 'q117', 'q122'].includes(x.id)), 'q115, q116, q117 and q122 retired');
   assert.ok(!QUIZ.questions.some(x => x.id === 'q120'), 'q120 dropped');
   for (const id of ['q71', 'q72', 'q73', 'q74', 'q75', 'q76', 'q77', 'q78']) assert.ok(!QUIZ.questions.some(x => x.id === id), id);
@@ -200,7 +204,7 @@ test('context quiz: the pullback questions (q87-q112) are asked against the prom
     // A strict-side guard (main's text): one of the 4h and 1h ranging is chop or unclear to the head trader, whatever the 3m.
     // Re-anchored to the Market state table (PREREG addendum 14): the class rule's sentence is replaced by it.
     ['q94', 'head', undefined, /\| trend or ranging \| not aligned \| `unclear` \| no trend trade \|/g],
-    ['q112', 'head', undefined, /\| trend or ranging \| not aligned \| `unclear` \| no trend trade \|/g],
+    // q112 retired (PREREG addendum 15): q94 holds the not-aligned row.
     ['q95', 'head', undefined, /\| ranging \| aligned \| the side's trend class/g],
     ['q96', 'lookup', PB, /watch for the BOS or CISD; not the entry\./g],
     ['q97', 'lookup', PB, /No BOS or CISD after it: no setup, pass\./g],
@@ -250,27 +254,30 @@ test('context quiz: the pullback questions (q87-q112) are asked against the prom
 });
 
 // The chop read (feat/chop-read, owner-approved 2026-11-14): chop is the quality of movement, range its geometry.
-test('context quiz: the chop-read questions (q113-q129, less q115, q116, q117, q120 and q122) are asked against the prompt holding the sentence each anchors to, go missing without it, on the code writers\' lines', () => {
+test('context quiz: the chop-read questions (q114-q133, less q115, q116, q117, q120, q121 and q122) are asked against the prompt holding the sentence each anchors to, go missing without it, on the code writers\' lines', () => {
   const prompts = Q.buildPrompts(ROOT, QUIZ);
   const flat = t => t.replace(/\s+/g, ' ');
   const cut = re => Object.fromEntries(Object.entries(prompts).map(([k, v]) => [k, flat(v).replace(re, '')]));
-  const TR = ['trend-vs-range'];
   const want = [
-    ['q113', 'lookup', TR, 'chop: structure broken both ways, no continuation; sit out', /Structure broken both ways with no continuation is chop, not a run of reversals\./g],
     ['q114', 'head', undefined, 'wait: a reversal attempt; class trend-up, not chop; no short', /wait for the 15m turn \(a live strong 15m CISD, a 15m BOS, a 15m CHoCH back or a 15m reaction at the level\)/g],
     ['q118', 'head', undefined, 'F4', /\| a pullback their way \(trend or ranging\) \| aligned \| that trend class/g],
     ['q119', 'head', undefined, 'F2', /\| chop \| any \| `chop` \| sit out \(a 3m CHoCH then CHoCH back, a failed reversal/g],
     ['q123', 'head', undefined, 'F3', /enter on the first 3m BOS or CISD the side's way near value/g],
-    ['q121', 'head', undefined, 'enter long: the turn at the low edge the side\'s way, 3m BOS near value', /setups at the range edge or on a breakout, the side's way/g],
     // How chop ends (owner, 2026-11-14): the table's chop row.
     ['q124', 'head', undefined, 'F2', /chop ends: a CHoCH then a BOS or CISD the same way/g],
     ['q125', 'head', undefined, 'F2', /or a close beyond the range \(the IB; before 10:30 only a BOS or CISD ends it\)/g],
     // The owner: "BOS is same-trend continuation, while CHoCH is a potential reversal" (bos-vs-choch, a lookup).
-    ['q127', 'lookup', ['bos-vs-choch'], 'a potential reversal, unconfirmed: watch for the next BOS either way', /A potential reversal: CHoCH then BOS: confirmed/g],
+    ['q127', 'lookup', ['bos-vs-choch'], 'a potential reversal up that still holds (above its origin 21462.50): unconfirmed until a BOS up', /a CHoCH holds until the low \(high\) that started the shift breaks/g],
+    // The owner's invalidation rule (round 15, bos-vs-choch): each break's protected swing; a close through it, not a wick.
+    ['q54', 'lookup', ['bos-vs-choch'], 'not invalidated: only a close below 21480.25 counts; the trend holds', /Only a close through it counts; a wick is not\./g],
+    ['q130', 'lookup', ['bos-vs-choch'], 'the trend holds: no close below the protected HL 21480.25', /a BOS holds until the leg's higher low \(lower high\) breaks/g],
+    ['q131', 'lookup', ['bos-vs-choch'], 'invalidated: the close below the protected HL ended the up trend (a potential reversal, unconfirmed)', /a BOS holds until the leg's higher low \(lower high\) breaks/g],
+    ['q132', 'lookup', ['bos-vs-choch'], 'failed: the potential reversal up is invalidated', /a CHoCH holds until the low \(high\) that started the shift breaks/g],
+    ['q133', 'lookup', ['bos-vs-choch'], 'a confirmed transition up: the CHoCH up was followed by a BOS up', /A potential reversal: CHoCH then BOS: confirmed/g],
     // Top-down: the 3m CHoCH pair the 15m BOS confirms is the 15m continuation (owner, 2026-11-15).
-    ['q128', 'head', undefined, "trend-up: the 3m CHoCH pair is the 15m BOS up (continuation); long setups the side's way", /the 15m breaking or trending its way: the 15m continuation, a trend/g],
+    ['q128', 'head', undefined, "trend-up: the 3m CHoCH pair is the 15m BOS up (continuation); long setups the side's way", /a current 15m BOS its way: the 15m continuation, a trend/g],
     // The 15m CHoCH back the side's way is a 15m turn (owner-approved 2026-11-15).
-    ['q129', 'head', undefined, 'enter long: the 15m CHoCH up is the turn; the 3m BOS up near value is the entry', /a live 15m CISD, a 15m BOS, a 15m CHoCH back or a 15m reaction at the level, the side's way/g],
+    ['q129', 'head', undefined, 'enter long: the 15m CHoCH up is the turn; the 3m BOS up near value is the entry', /a live strong 15m CISD, a 15m BOS, a 15m CHoCH back or a 15m reaction at the level, the side's way/g],
     // The owner: "15min up trend, 3min down trend could mean pullback".
     ['q126', 'head', undefined, 'a pullback in the 15m trend: class trend-up; watch for the 15m turn, then a 3m BOS or CISD up', /a 3m trend against inside it is the pullback, not a new trend/g],
   ];
@@ -284,8 +291,14 @@ test('context quiz: the chop-read questions (q113-q129, less q115, q116, q117, q
   }
   // q99 carries only briefing facts (construct validity, feat/chop-read): no quiz-only framing sentence.
   assert.doesNotMatch(QUIZ.questions.find(x => x.id === 'q99').text, /No exact touch|no named reversal candle/);
-  // q112 prints the Market state line under its Bias line, as the briefing does (market-state.js): ranging, not aligned.
-  assert.ok(QUIZ.questions.find(x => x.id === 'q112').text.includes('\n- Bias: long only (4h range, 1h up; short refused).\n- Market state (3m): ranging: no 3m break printed; 4h range, 1h up (not aligned).\n'));
+  // q94 prints the Market state line under its Bias line, as the briefing does (market-state.js): not aligned.
+  assert.match(QUIZ.questions.find(x => x.id === 'q94').text, /\n- Bias: [^\n]*\n- Market state \(3m\): [^\n]*\(not aligned\)\.\n/);
+  // The invalidation items print the protected swing the way the state reads it (holding, broken, failed).
+  const tq = id => QUIZ.questions.find(x => x.id === id).text;
+  assert.match(tq('q130'), /Market state \(3m\): trend up: [^\n]*; protected HL 21480\.25 holding; 4h\+1h up/);
+  assert.match(tq('q131'), /Market state \(3m\): ranging: [^\n]*; protected HL 21480\.25 broken by a close \(the trend ended\); 4h\+1h up/);
+  assert.match(tq('q132'), /Market state \(3m\): ranging: [^\n]*; failed: a close below its origin 21462\.5; 4h\+1h up/);
+  assert.match(tq('q127'), /Market state \(3m\): ranging: [^\n]*; holds above 21462\.5 \(origin\); 4h\+1h up/);
   // The chop-end items show the facts the state ended the chop on, and the line says so.
   const tx = id => QUIZ.questions.find(x => x.id === id).text;
   assert.match(tx('q124'), /\n- CISD \(completed candles; a read, not a signal\): 3m bullish at [\d.]+ \(closed 10:45, strong\)/);
@@ -312,8 +325,8 @@ test('context quiz: the chop-read questions (q113-q129, less q115, q116, q117, q
   }
   // Repeated CHoCH both ways (the printed chop fact) where the answer is chop; never on the pullback, pause or edge items.
   const both = id => /m3\.lastBreak: last CHoCH \w+ at [\d.]+ \(barsAgo \d+\), previous CHoCH/.test(text(id));
-  for (const id of ['q113', 'q119', 'q124', 'q125', 'q128']) assert.ok(both(id), `${id}: breaks both ways`);
-  for (const id of ['q114', 'q118', 'q121']) assert.ok(!both(id), `${id}: one CHoCH at most`);
+  for (const id of ['q119', 'q124', 'q125', 'q128']) assert.ok(both(id), `${id}: breaks both ways`);
+  for (const id of ['q114', 'q118']) assert.ok(!both(id), `${id}: one CHoCH at most`);
   // The SETUP15 hard case: the pair and rotational with many crosses, inside an open Pullback: the trend class, not chop.
   assert.ok(both('q123') && /\n- Pullback \(15m, long leg/.test(text('q123')) && /rotational: .*RTH VWAP crosses [5-9]/.test(text('q123')), 'q123: the full chop facts inside a Pullback');
 });

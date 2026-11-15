@@ -913,7 +913,8 @@ test('the Setups line on the bar that closed the setup states the record\'s wind
 test('render: the Market state line follows the Bias line, from market-state.js; no Class side line; no data field', () => {
   const { biasLine } = require('../../scripts/lib/trading/bias-line');
   const M = require('../../scripts/lib/trading/market-state');
-  const TH = { crossesChop: require('../../scripts/lib/tunables').analysis().regime.rangeCrosses };
+  const AN = require('../../scripts/lib/tunables').analysis();
+  const TH = { crossesChop: AN.regime.rangeCrosses, maxPullbackDepth: AN.pullbackRead.maxStateDepth };
   const b = build(1300);
   const text = B.renderBriefing(b, { now: new Date(b.closedAt) });
   const line = M.marketStateLine(M.stateOf(b, TH));

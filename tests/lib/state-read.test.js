@@ -511,7 +511,7 @@ test('state line: the decision follows the model\'s own STATE read (taught, no c
     "| a pullback their way (trend or ranging) | aligned | that trend class (a 3m trend against inside it is the pullback, not a new trend) | wait for the 15m turn (a live strong 15m CISD, a 15m BOS, a 15m CHoCH back or a 15m reaction at the level); enter on the first 3m BOS or CISD the side's way near value (`pullback-vs-reversal` steps 4-7) |",
     "| trend against them | aligned | `unclear` | no trade, never counter |",
     "| trend or ranging | not aligned | `unclear` | no trend trade |",
-    "| chop | any | `chop` | sit out (a 3m CHoCH then CHoCH back, a failed reversal; inside a pullback read it is the watch; the 15m breaking or trending its way: the 15m continuation, a trend); chop ends: a CHoCH then a BOS or CISD the same way, or a close beyond the range (the IB; before 10:30 only a BOS or CISD ends it) |",
+    "| chop | any | `chop` | sit out (a 3m CHoCH then CHoCH back, a failed reversal; inside a pullback read it is the watch; a current 15m BOS its way: the 15m continuation, a trend); chop ends: a CHoCH then a BOS or CISD the same way, or a close beyond the range (the IB; before 10:30 only a BOS or CISD ends it) |",
     // The owner's definitions, verbatim with trend-vs-range (a test there keeps the two equal).
     "Trending: consistent BOS, directional displacement, follow-through. Chop: alternating BOS/CHoCH, overlapping candles, failed continuation (`trend-vs-range`).",
     // A take agrees with the read: the class and the 4h and 1h on the setup's side (the never-counter-HTF rule, in its own words).

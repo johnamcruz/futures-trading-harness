@@ -139,3 +139,50 @@ test('swingLevels: the last confirmed swings with the first close through each',
   const hi = swingLevels(bars, 2, 3).find(x => x.type === 'high');
   assert.deepStrictEqual([hi.price, hi.brokenAt], [14, bars[6].t]);
 });
+
+// The owner's invalidation rule (round 15): each break has a protected swing, the origin of the leg that made it: the
+// lowest low (highest high) from the broken swing to the break. A BOS up holds until a close below its protected higher
+// low; a CHoCH up holds until a close below the low that started the shift; the mirrors down. protectedOf(bars, brk)
+// gives { side, level, at, brokenAt } (brokenAt: the first close beyond it after the break, null while it holds), or
+// null without a break. Causal: only the bars given (closed by the last one).
+test('protectedOf: the origin of the leg that made the break, and the first close beyond it since the break', () => {
+  const { protectedOf } = require('../../scripts/lib/trading/structure-events');
+  // swing high 24 (i 4), pullback low 17 (i 6), BOS up at i 8 (close 25 > 24).
+  const rows = [[10, 8, 9], [11, 9, 10], [14, 10, 13], [12, 9, 11], [11, 7, 8], [12, 9, 10], [16, 10, 15], [17, 12, 16]];
+  const up = mk([[9, 7, 8], [8, 6, 7], ...rows.map(([h, l, c]) => [h + 10, l + 10, c + 10])]);
+  const last = breaksOf(up, 2).pop();
+  assert.deepStrictEqual([last.kind, last.direction, last.level], ['BOS', 'up', 24], JSON.stringify(last));
+  assert.deepStrictEqual(protectedOf(up, last), { side: 'low', level: 17, at: up[6].t, brokenAt: null });
+  const broken = [...up, { t: new Date(Date.UTC(2026, 5, 1, 14, up.length)).toISOString(), o: 20, h: 21, l: 16, c: 16.5, v: 1 }];
+  assert.strictEqual(protectedOf(broken, last).brokenAt, broken[broken.length - 1].t, 'a close below the protected low');
+  const down = { kind: 'CHoCH', direction: 'down', level: 17, swingAt: up[6].t, at: broken[broken.length - 1].t };
+  assert.deepStrictEqual(protectedOf(broken, down), { side: 'high', level: 27, at: up[9].t, brokenAt: null }, 'a CHoCH down: the high that started the shift');
+  assert.strictEqual(protectedOf(up, null), null);
+  assert.strictEqual(protectedOf(up, { ...last, at: new Date(Date.UTC(2027, 0, 1)).toISOString() }), null, 'a break past the bars: none (causal)');
+});
+
+test('protectedOf on real bars: the protected level of every printed 3m break is the extreme from its broken swing to the break; brokenAt the first close beyond it', () => {
+  const path = require('path');
+  const { protectedOf } = require('../../scripts/lib/trading/structure-events');
+  const { readBarsArg } = require('../../scripts/lib/backtest/data');
+  const bars = readBarsArg(path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv'));
+  const seen = { BOS: 0, CHoCH: 0 };
+  for (let n = 200; n < bars.length; n += 7) {
+    const xs = bars.slice(0, n);
+    for (const lb of Object.values(lastBreaks(xs, 2))) {
+      if (!lb) continue;
+      seen[lb.kind] += 1;
+      const p = protectedOf(xs, lb);
+      const span = xs.filter(x => Date.parse(x.t) >= Date.parse(lb.swingAt) && Date.parse(x.t) <= Date.parse(lb.at));
+      const want = lb.direction === 'up' ? Math.min(...span.map(x => x.l)) : Math.max(...span.map(x => x.h));
+      assert.strictEqual(p.level, want);
+      assert.ok(Date.parse(p.at) >= Date.parse(lb.swingAt) && Date.parse(p.at) <= Date.parse(lb.at), 'between the broken swing and the break');
+      const first = xs.find(x => Date.parse(x.t) > Date.parse(lb.at) && (lb.direction === 'up' ? x.c < want : x.c > want));
+      assert.strictEqual(p.brokenAt, first ? first.t : null);
+      // Causal: the same answer from the bars cut at the break's own bar.
+      const cut = xs.filter(x => Date.parse(x.t) <= Date.parse(lb.at));
+      assert.strictEqual(protectedOf(cut, lb).level, p.level);
+    }
+  }
+  assert.ok(seen.BOS > 20 && seen.CHoCH > 20, JSON.stringify(seen));
+});

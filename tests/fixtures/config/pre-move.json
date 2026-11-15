@@ -325,8 +325,8 @@
    "from": "new in feat/chop-read (owner-approved 2026-11-14, improves context: the owner's chop definition and his trending and chop definitions, its printed facts weighed together, the Market state line named, chop is not range, a range day catchable at the edge the side's way; at the measured need)"
   },
   "skillCaps.perSkill.bos-vs-choch": {
-   "value": 3762,
-   "from": "new in feat/chop-read (owner-approved 2026-11-14, improves context: no single BOS or CHoCH classifies the market; the owner's structure-sequence reading: a confirmed transition, a failed reversal, conflicting structure; at the measured need)"
+   "value": 4042,
+   "from": "4042 since feat/chop-read round 15 (owner-requested: each break's protected swing, close only, its `protected` field; the current 15m BOS; at the measured need); new in feat/chop-read (owner-approved 2026-11-14, improves context: no single BOS or CHoCH classifies the market; the owner's structure-sequence reading: a confirmed transition, a failed reversal, conflicting structure; at the measured need)"
   },
   "compose.maxExpects": {
    "value": 300,
@@ -1454,8 +1454,8 @@
    "from": "new in feat/stable-first-prompt (the hour lifetime, for a 15m or 1h analyst whose next run comes after 5 minutes; its cache writes cost more, its reads the same)"
   },
   "prompt.situationalSkillBytes": {
-   "value": 76692,
-   "from": "76692 since feat/chop-read (the Market state redesign: bos-vs-choch's labelling rule; 76367 before; the same rule: the measured need of every trigger at once with pullback-vs-reversal's pause-vs-chop and close-to-the-level lines, bos-vs-choch's core rule); 75534 since feat/pullback-concept (owner rule: raise a cap when it improves context; the measured need of every trigger at once with pullback-vs-reversal's pullback read, so nothing is pushed to the Also relevant line); new in feat/ppc-setup-rates (owner: every skill as context when its situation applies, \"All of the skills should be loaded. It should not be skipped.\"; UTF-8 bytes of embedded skill text a cycle: over 231 recorded briefings the most any cycle needed was 65053, a listed setup in a prop attempt, p90 58543; with about 10% headroom, so none is named past it; the line stays the fail-safe for an outlier; the whole prompt is held under prompt.maxPromptBytes, the budget shrinking first)"
+   "value": 76969,
+   "from": "76969 since feat/chop-read round 15 (bos-vs-choch's protected swings and the current 15m BOS, pullback-vs-reversal's strong 15m CISD; the measured need of every trigger at once); 76692 since feat/chop-read (the Market state redesign: bos-vs-choch's labelling rule; 76367 before; the same rule: the measured need of every trigger at once with pullback-vs-reversal's pause-vs-chop and close-to-the-level lines, bos-vs-choch's core rule); 75534 since feat/pullback-concept (owner rule: raise a cap when it improves context; the measured need of every trigger at once with pullback-vs-reversal's pullback read, so nothing is pushed to the Also relevant line); new in feat/ppc-setup-rates (owner: every skill as context when its situation applies, \"All of the skills should be loaded. It should not be skipped.\"; UTF-8 bytes of embedded skill text a cycle: over 231 recorded briefings the most any cycle needed was 65053, a listed setup in a prop attempt, p90 58543; with about 10% headroom, so none is named past it; the line stays the fail-safe for an outlier; the whole prompt is held under prompt.maxPromptBytes, the budget shrinking first)"
   },
   "limits.probeOutputBytes": {
    "value": 67108864,
@@ -1909,6 +1909,10 @@
   "pullbackRead.minLegAtr": {
    "value": 1,
    "from": "new in feat/pullback-read (the briefing's Pullback line): a leg under this many ATR(14) shows no depth (the leg is too small to measure a pullback against); a floor, not a tuned value"
+  },
+  "pullbackRead.maxStateDepth": {
+   "value": 0.62,
+   "from": "new in feat/chop-read round 15 (the Market state): a pullback deeper than this share of its leg is no pullback for the state (the guard against chop, the class-keeping rule); pullback-vs-reversal's Depth row (up to about 50-62%); the printed Pullback line is unchanged; a hypothesis, not a tuned value"
   },
   "readAudit.forwardBars": {
    "value": 20,

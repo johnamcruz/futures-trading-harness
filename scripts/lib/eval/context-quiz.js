@@ -206,11 +206,18 @@ function briefingOfText(text) {
     const small = new RegExp(`leg ${NUM}x ATR\\(14\\), under the`).exec(pb[5]);
     const depth = /depth (\d+)% of the leg/.exec(pb[5]);
     m3.pullback = { frame: pb[1], side: pb[2], leg: { origin: +pb[3], extreme: +pb[4], ...(small ? { atr: +small[1] } : {}) },
-      depth: depth ? +depth[1] / 100 : null, pastOrigin: /given back past its origin/.test(pb[5]) };
+      depth: depth ? +depth[1] / 100 : null, pastOrigin: /given back past its origin/.test(pb[5]),
+      // The leg's structure-frame swing as printed (holds / broken by a close): a broken one invalidates the leg.
+      swing: Object.fromEntries([...pb[5].matchAll(new RegExp(`(\\w+) ${NUM} (holds|broken by a close)`, 'g'))].map(m => [m[1], { price: +m[2], holds: m[3] === 'holds' }])) };
   }
   const brk = (kind, dir, level, ago) => ({ kind, direction: dir, level: +level, barsAgo: +ago, ...(now !== null ? { at: isoAt(now - 3 * (+ago + 1)) } : {}) });
-  const lb = new RegExp(`\\n- m3\\.lastBreak: last (BOS|CHoCH) (up|down) at ${NUM} \\(barsAgo (\\d+)\\)(?:, previous (BOS|CHoCH) (up|down) at ${NUM} \\(barsAgo (\\d+)\\))?`).exec(t);
-  if (lb) m3.lastBreak = { last: brk(lb[1], lb[2], lb[3], lb[4]), previous: lb[5] ? brk(lb[5], lb[6], lb[7], lb[8]) : null };
+  // The last break's protected swing in the quiz's prose (`; protected low 21480.25[, broken at 10:39]`; the live briefing
+  // prints m3.lastBreak.last.protected as JSON): its level and the first close through it.
+  const lb = new RegExp(`\\n- m3\\.lastBreak: last (BOS|CHoCH) (up|down) at ${NUM} \\(barsAgo (\\d+)(?:; protected (low|high) ${NUM}(?:, broken at (\\d{1,2}:\\d{2}))?)?\\)(?:, previous (BOS|CHoCH) (up|down) at ${NUM} \\(barsAgo (\\d+)\\))?`).exec(t);
+  if (lb) {
+    const prot = lb[5] ? { protected: { side: lb[5], level: +lb[6], at: null, brokenAt: lb[7] ? isoAt(minOf(lb[7])) : null } } : {};
+    m3.lastBreak = { last: { ...brk(lb[1], lb[2], lb[3], lb[4]), ...prot }, previous: lb[8] ? brk(lb[8], lb[9], lb[10], lb[11]) : null };
+  }
   const day = /\n- Day so far \([^\n]*?\): (rotational|mixed|directional|too early)[^\n]*?RTH VWAP crosses (\d+)/.exec(t);
   const today = {};
   if (day) today.soFar = day[1] === 'too early' ? { status: 'too early', vwapCrosses: +day[2] } : { status: 'read', read: day[1], vwapCrosses: +day[2] };
@@ -233,7 +240,7 @@ function briefingOfText(text) {
     minutes: 3,
     // The clock as the close only where the item prints both 3m breaks (the RTH pair reads them); an item that leaves the
     // line or the previous break out shows less, never "not enough RTH structure".
-    ...(now !== null && lb && lb[5] ? { closedAt: isoAt(now) } : {}),
+    ...(now !== null && lb && lb[8] ? { closedAt: isoAt(now) } : {}),
     sections: { h1: { data: h1Data }, m3: { data: m3 }, ...(Object.keys(m15).length ? { m15: { data: m15 } } : {}) },
   };
 }
@@ -243,7 +250,8 @@ function marketStateOfText(text) {
   const b = briefingOfText(text);
   if (!b) return null;
   const M = require('../trading/market-state');
-  return M.marketStateLine(M.stateOf(b, { crossesChop: require('../tunables').analysis().regime.rangeCrosses }));
+  const an = require('../tunables').analysis();
+  return M.marketStateLine(M.stateOf(b, { crossesChop: an.regime.rangeCrosses, maxPullbackDepth: an.pullbackRead.maxStateDepth }));
 }
 
 function excerptOf(excerpt) {

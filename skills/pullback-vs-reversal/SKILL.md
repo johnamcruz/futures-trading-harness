@@ -58,7 +58,7 @@ never the composed setup read (`compose_check` takes a live strong one):
    between; the `engulfing` label and the CISD's `engulfing` compare only
    the prior candle. Printed proxies: the printed `inside the <time> candle <low>-<high>`
    (the impulse candle's), the `Pullback` depth.
-4. **The setup**: the 15m turn: a live 15m CISD, a 15m BOS, a 15m CHoCH
+4. **The setup**: the 15m turn: a live strong 15m CISD, a 15m BOS, a 15m CHoCH
    back or a 15m reaction at the level, the side's way → the pullback ended
    on the 15m; no 15m BOS to wait for after a strong CISD, a CHoCH back or a
    reaction; a 15m CHoCH back: the first 15m break back after the
@@ -105,7 +105,7 @@ never the composed setup read (`compose_check` takes a live strong one):
 checklist: depth, the pause's shape, how near the level it stopped, the
 candle type and the distance to value weigh in the count
 (`confluence-counting`); a stop short of the level inside the zone, or no
-named candle, is no reason to wait (a live strong 15m CISD or a 15m BOS is the read then). Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
+named candle, is no reason to wait (a strong 15m CISD or a 15m BOS is the read). Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
 or CISD against → wait; the entry needs a 3m BOS or CISD the side's way
 and a true 15m setup read the side's way (`compose_check` requires the
 15m read; the 3m timing and the wait lines are yours).

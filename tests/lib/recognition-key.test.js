@@ -7,7 +7,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const K = require('../../scripts/lib/learning/recognition/key');
 
-const TH = { crossesChop: 5, crossesTrendMax: 3 };
+const TH = { crossesChop: 5, crossesTrendMax: 3, maxPullbackDepth: 0.62 };
 const f = o => ({
   frames: { '4h': 'up', '1h': 'up', '15m': 'up' }, regime: 'trend-up', sessionCrosses: 1, vwapSide: 'above', dayType: null, openVs: null,
   windowEntries: 'allowed', bias: 'Bias: long only (4h up, 1h up; short refused).', biasSides: { long: true, short: false },
