@@ -164,8 +164,8 @@ printed first; else its state word):
   with down, or "15m up: a pullback in the 15m trend", down the mirror):
   wait for the 15m turn (a live strong 15m CISD, a 15m BOS, a 15m CHoCH
   back or a 15m reaction at the level); enter on the first 3m BOS or CISD
-  the side's way near value (a 3m CISD is the entry as a 3m BOS is, after
-  a 3m CHoCH against too; `pullback-vs-reversal` steps 4-7). Small
+  the side's way near value (a 3m CISD is the entry as a 3m BOS is, even
+  after a 3m CHoCH against; `pullback-vs-reversal` steps 4-7). Small
   overlapping candles inside a printed pullback are a pause, not chop; the
   class stays the line's.
 - `forming`: no setup yet: wait for the first RTH 3m break.

@@ -431,8 +431,8 @@ const OLD_AGENTS_MD = 24466;
 // in the read chain and the setup sentence (+138, the measured need of the worst path).
 // Round 19 (PREREG addendum 25, same rule): the 15m frame read feeds the setup, not the class (q118), the 3m CISD is the
 // pullback entry as a 3m BOS is and the read chain's worked entry shows it (q102), and setup-judgment's regime is a read,
-// not the class (+145, the measured need of the worst path).
-const RAISED = 154 + 130 + 1625 + 336 + 382 + 939 + 843 + 1621 + 138 + 145;
+// not the class (+146, the measured need of the worst path).
+const RAISED = 154 + 130 + 1625 + 336 + 382 + 939 + 843 + 1621 + 138 + 146;
 const EVERY_CYCLE = ['multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'trader-process', 'htf-to-ltf', 'autonomous-trading'];
 const PATHS = {
   'full cycle, no candidate': ['role-round', 'setup-judgment', 'day-context'],

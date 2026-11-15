@@ -133,6 +133,10 @@ const CLASS_MAP = [
   /\b(?:marks?|marked|marking|labels?|labell?ed|tags?|tagged|classif(?:y|ies|ied)|classed)\s+(?:[\w`+-]+\s+){0,4}?(?:as\s+)?(?:a\s+|the\s+)?(?:class\s+)?`?(?:chop|unclear|trend-up|trend-down)`?(?![\w-])/i,
   // A frame word, then "so / thus / hence / therefore" and a class word ("15m transition, so `unclear`").
   /\b(?:range|ranging|transition|transitional|mixed)`?,?\s+(?:so|thus|hence|therefore)\s+(?:the\s+class\s+(?:is\s+)?)?`?(?:chop|unclear|trend-up|trend-down)`?(?![\w-])/i,
+  // Review round 19: more verbs that assign ("write", "sets / puts / turns the class (to / at)", "treats as", "yields",
+  // "qualifies as", "i.e.", "should be written as"), and "class <word>" after a colon.
+  /\b(?:writes?|written as|sets?|puts?|turns?|treat(?:s|ed)? as|yields?|qualif(?:y|ies) as|i\.e\.,?)\s+(?:the\s+class\s+)?(?:to\s+|at\s+|as\s+)?`?(?:chop|unclear|trend-up|trend-down)`?(?![\w-])/i,
+  /:\s*(?:no trend class;\s*write\s+|class\s+)`?(?:chop|unclear|trend-up|trend-down)`?(?![\w-])/i,
 ];
 const ALLOWED = [
   // The table: the one authority (trade-session step 3). Round 19: the table alone, and each kept bullet sentence exactly
@@ -167,11 +171,13 @@ function teachingHomes() {
   return [...out, 'README.md'];
 }
 
+// A sentence ends at . ; ! or ? and a space, never inside "i.e." or "e.g." (review round 19).
+const SENTENCE = /(?<=[.;!?])(?<!\b(?:i\.e|e\.g)\.)\s+/;
 // The scan of one text: every sentence, and every table row whole (a row's cells read together, never cut at a pipe).
 function scanText(text) {
   const out = [];
   for (const line of text.split('\n')) {
-    const pieces = /^\s*\|/.test(line) ? [line.trim()] : flat(line).split(/(?<=[.;!?])\s+/);
+    const pieces = /^\s*\|/.test(line) ? [line.trim()] : flat(line).split(SENTENCE);
     for (const piece of pieces) if (CLASS_MAP.some(re => re.test(piece))) out.push(piece.slice(0, 160));
   }
   return out;
@@ -209,7 +215,11 @@ test('market state authority: the scan catches a competing row or sentence (it f
   // Round 19: the model's own q118 sentence (k1, verbatim) and its kin: a frame read labelled with a class word.
   for (const s of ['With 4h and 1h both down and the 3m printing a CHoCH up, the 15m is in transition, which the trend-class rules mark `unclear`: no trend trade, never counter.',
     'A 15m transition marks it `unclear`.', 'The rules mark a 15m range unclear.', 'A 15m range is marked unclear.', 'Overlapping candles are marked as chop.', 'The rule marks the class `chop`.',
-    'The class rules label a 15m transition `unclear`.', 'A 15m range is tagged unclear.', 'It classifies a transition as unclear.', 'The 15m is in transition, so `unclear`.', 'A 15m range, so the class is unclear.'])
+    'The class rules label a 15m transition `unclear`.', 'A 15m range is tagged unclear.', 'It classifies a transition as unclear.', 'The 15m is in transition, so `unclear`.', 'A 15m range, so the class is unclear.',
+    // Review round 19's misses.
+    'A 15m transition: class `unclear`.', 'The 15m in transition: write `unclear`.', 'Write `unclear` when the 15m is in transition.', 'the 15m transition sets the class to `unclear`.',
+    'A 15m range puts the class at `unclear`.', 'A 15m range turns the class `unclear`.', '...which the trend-class rules treat as `unclear`.', 'A 15m transition yields `unclear`.',
+    'A 15m range qualifies as unclear.', 'A 15m transition, i.e. `unclear`.', 'A 15m range should be written as `unclear`.', 'A 15m transition: no trend class; write `unclear`.'])
     assert.ok(scanText(s).length > 0, s);
   for (const s of ['Mark the level on the chart.', 'The marked swing holds.', 'It labels the leg by its origin.', 'A 15m transition is a frame read; it feeds the setup.', 'The range, so far, holds.'])
     assert.deepStrictEqual(scanText(s), [], s);
@@ -237,13 +247,19 @@ test('bos-vs-choch: a BOS stays labelled BOS after its protected swing breaks; t
 
 // Round 19 (q102: "a CISD is not a BOS: ... the entry needs a 3m BOS up near value"): the owner's chain (the first 3m BOS
 // or CISD the side's way near value) has one entry trigger with two forms. No taught sentence requires a 3m BOS alone for
-// the entry, and the head core says a 3m CISD is the entry as a 3m BOS is, a 3m CHoCH against before it too.
+// the entry, and the head core says a 3m CISD is the entry as a 3m BOS is, even after a 3m CHoCH against.
+const NOT_OR_CISD = '(?!\\s+or\\s+(?:a\\s+|the\\s+)?(?:3m\\s+)?CISD|\\/CISD)';
 const BOS_ONLY = [
-  /\b(?:needs?|requires?|wait(?:s|ing)? for|until)\s+(?:the\s+|a\s+)?(?:first\s+)?3m\s+BOS(?:\s+(?:up|down))?\b(?!\s+or\s+(?:a\s+)?(?:3m\s+)?CISD|\/CISD)/i,
-  /\bno (?:3m )?BOS\b(?! or (?:a )?(?:3m )?CISD)[^.;]{0,30}(?:->|→|:)\s*(?:watch|wait|pass)\b/i,
+  new RegExp(`\\b(?:needs?|requires?|wait(?:s|ing)? for|until)\\s+(?:the\\s+|a\\s+)?(?:first\\s+)?3m\\s+BOS(?:\\s+(?:up|down))?\\b${NOT_OR_CISD}`, 'i'),
+  /\bno (?:3m )?BOS\b(?! or (?:a |the )?(?:3m )?CISD)[^.;]{0,30}(?:->|→|:|,\s*so)\s*(?:watch|wait|pass|hold|no entry|no setup)\b/i,
   /\ba CISD is not a BOS\b/i,
+  // Review round 19: the entry named as a 3m BOS alone, a 3m CISD denied as the entry, a BOS "on the 3m".
+  new RegExp(`\\b(?:enter(?:s|ed|ing)?\\s+(?:on|at)|entry(?:\\s+trigger)?(?:\\s+is|:)|the trigger is|only)\\s+(?:the\\s+|a\\s+)?(?:first\\s+|only\\s+)?3m\\s+BOS(?:\\s+(?:up|down))?\\b${NOT_OR_CISD}`, 'i'),
+  /\bthe 3m BOS is the (?:trigger|entry)\b/i,
+  /\ba 3m CISD is (?:no|not the|not an) entry\b/i,
+  /\b(?:needs?|requires?|wait(?:s|ing)? for)\s+a BOS on the 3m\b/i,
 ];
-const bosOnly = text => flat(text).split(/(?<=[.;!?])\s+/).filter(p => BOS_ONLY.some(re => re.test(p)));
+const bosOnly = text => flat(text).split(SENTENCE).filter(p => BOS_ONLY.some(re => re.test(p)));
 
 test('entry trigger: no taught sentence requires a 3m BOS alone; the head core names the 3m CISD beside it', () => {
   const homes = [...teachingHomes(), ...fs.readdirSync(path.join(ROOT, 'strategies')).map(d => path.join('strategies', d, 'STRATEGY.md')).filter(f => fs.existsSync(path.join(ROOT, f)))];
@@ -252,16 +268,20 @@ test('entry trigger: no taught sentence requires a 3m BOS alone; the head core n
   assert.deepStrictEqual(found, []);
   const H = require('../../scripts/lib/head-prompt');
   const head = flat(H.headPrompt(H.headPlan(ROOT, 'index')));
-  assert.strictEqual(head.split("enter on the first 3m BOS or CISD the side's way near value (a 3m CISD is the entry as a 3m BOS is, after a 3m CHoCH against too;").length, 2);
+  assert.strictEqual(head.split("enter on the first 3m BOS or CISD the side's way near value (a 3m CISD is the entry as a 3m BOS is, even after a 3m CHoCH against;").length, 2);
   // The one worked entry in the core's read chain shows the CISD form.
   assert.ok(head.includes('15m turn: rejected the RTH VWAP up, long-wick; 3m: CISD up, near value; strong setup: enter'));
 });
 
 test('entry trigger: the BOS-only scan catches the model\'s q102 words and their kin, and passes the chain', () => {
   for (const s of ['The 15m pullback is ended by a strong 15m CISD up, but the entry needs a 3m BOS up near value.', 'a CISD is not a BOS: wait for the 3m BOS up', 'Wait for the first 3m BOS.',
-    'The entry requires a 3m BOS down.', '3m: CHoCH up, no BOS -> watch.', 'No 3m BOS yet: wait.', 'A CISD is not a BOS.'])
+    'The entry requires a 3m BOS down.', '3m: CHoCH up, no BOS -> watch.', 'No 3m BOS yet: wait.', 'A CISD is not a BOS.',
+    // Review round 19's misses.
+    'The entry is the first 3m BOS the side\'s way near value.', 'Enter on the first 3m BOS near value.', 'Enter at the 3m BOS.', 'The entry trigger is a 3m BOS.', 'the 3m BOS is the trigger',
+    'Only a 3m BOS enters.', 'a 3m CISD is no entry', 'A 3m CISD is not the entry; the 3m BOS is.', 'no 3m BOS yet: no entry.', 'No 3m BOS yet, so hold.', 'The entry needs a BOS on the 3m.'])
     assert.strictEqual(bosOnly(s).length, 1, s);
   for (const s of ['enter on the first 3m BOS or CISD the side\'s way near value.', 'the entry needs a 3m BOS or CISD the side\'s way.', '3m: CHoCH up, no BOS or CISD -> watch.',
-    'no 3m BOS or CISD yet: watch.', 'Entry: the first 3m BOS/CISD near value.', 'a 3m BOS up, close 21527.25: the entry, a limit.'])
+    'no 3m BOS or CISD yet: watch.', 'Entry: the first 3m BOS/CISD near value.', 'a 3m BOS up, close 21527.25: the entry, a limit.', 'wait for the first 3m BOS or the CISD.',
+    'Enter on the first 3m BOS or CISD near value.'])
     assert.deepStrictEqual(bosOnly(s), [], s);
 });
