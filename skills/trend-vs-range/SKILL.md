@@ -64,7 +64,7 @@ line names which were met. The class word is the Market state line's
 (`trade-session`), never this definition's. One CHoCH warns. Structure
 broken both ways with no continuation is chop, not a run of reversals.
 Chop ends on displacement: a displaced 3m break or CISD, a displaced
-close beyond the IB, or a transition.
+close beyond the IB, or the protected level broken with displacement.
 
 **Chop is not range.** Chop needs no edges; a range can rotate cleanly.
 A range travels edge to edge with displacement and clean rejections at
