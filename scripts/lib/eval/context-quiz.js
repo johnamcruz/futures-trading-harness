@@ -106,7 +106,10 @@ function questionErrors(q, { part = 'questions', at = 'question', ids = new Set(
   if (q.prompt === 'situational' && !(isObj(q.state) && Array.isArray(q.state.positions))) out.push(`${at}.state: the account state its situational skills are chosen for ({ positions, workingOrders, ... })`);
   if (q.prompt === 'lookup' && !(Array.isArray(q.lookup) && q.lookup.length && q.lookup.every(s => typeof s === 'string' && /^[a-z0-9-]+$/.test(s)))) out.push(`${at}.lookup: the skills the head trader looks up for it (skill names)`);
   for (const k of ['text', 'rule']) if (!str(q[k])) out.push(`${at}.${k}: given`);
-  if ('layers' in q && !(isObj(q.layers) && isObj(q.layers.structure))) out.push(`${at}.layers: the layer facts its text states ({ rthBars, structure: { side, level, ... }, behavior, chop, ... })`);
+  if ('layers' in q) {
+    if (!(isObj(q.layers) && isObj(q.layers.structure))) out.push(`${at}.layers: the layer facts its text states ({ rthBars, structure: { side, level, ... }, behavior, chop, ... })`);
+    else out.push(...layersErrors(q.layers).map(e => `${at}.${e}`));
+  }
   if (part === 'questions' && !str(q.anchor)) out.push(`${at}.anchor: the phrase of the prompt that states the rule`);
   const caseOk = x => isObj(x) && isObj(x.bias) && ['tf', 'rel', 'dir', 'level', 'reaction'].every(k => str(x[k]));
   if (part === 'partB' && !(isObj(q.excerpt) && (isObj(q.excerpt.bias) || (isObj(q.excerpt.size) && isObj(q.excerpt.size.facts)) || (Array.isArray(q.excerpt.cases) && q.excerpt.cases.length && q.excerpt.cases.every(caseOk))))) out.push(`${at}.excerpt: { bias: { h4, h1, t15, declared } }, { size: { facts, riskUsd, minContracts, stretchUsd, capUsd } } or { cases: [{ bias, tf, rel, dir, level, reaction }] }`);
@@ -200,12 +203,30 @@ const minOf = hhmm => { const [h, m] = hhmm.split(':').map(Number); return h * 6
 const MIDNIGHT_ET = Date.parse('2026-01-06T05:00:00.000Z');
 const isoAt = min => new Date(MIDNIGHT_ET + min * 60000).toISOString();
 // An item without bar data states its layer facts (round 20b, quiz realism): what its text describes (no leg holds,
-// overlap high, efficiency low, a failed continuation, the side's HL broken), as market-layers.js's m3.layers shape; every
+// overlap high, efficiency low, a failed continuation, a broken protected level), as market-layers.js's m3.layers shape; every
 // fact not stated is absent (false, null), so the line is built by the same code (market-state.js) as the live one.
 const NO_FACTS = { ov: false, ef: false, fl: false, nd: false };
 const NO_EVIDENCE = { bothWays: false, flip: false, failed: false };
+// The facts that need another fact the line prints (a broken leg its flip, a behavior its words, a chop fact its number, a
+// stale leg its bars): refused, never a crash or an "undefined" in the line.
+function layersErrors(spec) {
+  const out = [];
+  const P = spec.structure;
+  if (!(['up', 'down'].includes(P.side) && Number.isFinite(P.level))) out.push('layers.structure: side up or down and a level');
+  const f = P.flip;
+  if ((P.status === 'broken' || spec.transition) && !(isObj(f) && ['up', 'down'].includes(f.oldSide) && Number.isFinite(f.oldLevel))) out.push('layers.structure.flip: a broken leg or a transition states its flip ({ oldSide, oldLevel, barsAgo })');
+  const b = spec.behavior;
+  if (b !== undefined && b !== null && !(isObj(b) && str(b.word) && str(b.word15))) out.push('layers.behavior: its word and word15');
+  const facts = isObj(spec.chop) && isObj(spec.chop.facts) ? spec.chop.facts : {};
+  if ((facts.ov && !(isObj(b) && Number.isFinite(b.overlap))) || (facts.ef && !(isObj(b) && Number.isFinite(b.eff)))) out.push('layers.chop.facts: overlap and efficiency need the behavior\'s numbers');
+  if (spec.stale && !Number.isInteger(P.sinceProgress)) out.push('layers.stale: needs the structure\'s sinceProgress (bars)');
+  return out;
+}
+
 function layersOf(spec) {
   if (!isObj(spec) || !isObj(spec.structure)) throw new Error('context-quiz: layers needs its structure ({ side, level, ... })');
+  const errs = layersErrors(spec);
+  if (errs.length) throw new Error(`context-quiz: ${errs.join('; ')}`);
   const P = spec.structure;
   const c = isObj(spec.chop) ? spec.chop : {};
   const flip = isObj(P.flip) ? { barsAgo: 0, strong: false, disp: false, held: true, byRule: 'close', ...P.flip } : null;

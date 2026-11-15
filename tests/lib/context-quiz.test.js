@@ -833,6 +833,18 @@ test('marketStateOfText with an item\'s layer facts: the layered line, the same 
   const one = QUIZ0.questions.find(x => x.id === 'q119');
   assert.deepStrictEqual(Q.questionErrors({ ...one, layers: 'chop' }, { part: 'questions', at: 'q', gate: QUIZ0.gate }), ['q.layers: the layer facts its text states ({ rthBars, structure: { side, level, ... }, behavior, chop, ... })']);
   assert.deepStrictEqual(Q.questionErrors({ ...one, layers: { behavior: {} } }, { part: 'questions', at: 'q', gate: QUIZ0.gate }), ['q.layers: the layer facts its text states ({ rthBars, structure: { side, level, ... }, behavior, chop, ... })']);
+  // Facts that need another fact the line prints are refused, never a crash or an "undefined" in the line (20b review).
+  const err = layers => Q.questionErrors({ ...one, layers }, { part: 'questions', at: 'q', gate: QUIZ0.gate });
+  const S0 = { side: 'down', level: 21526.5 };
+  assert.deepStrictEqual(err(chop), []);
+  assert.deepStrictEqual(err({ structure: { level: 1 } }), ['q.layers.structure: side up or down and a level']);
+  assert.deepStrictEqual(err({ structure: { ...S0, status: 'broken' } }), ['q.layers.structure.flip: a broken leg or a transition states its flip ({ oldSide, oldLevel, barsAgo })']);
+  assert.deepStrictEqual(err({ structure: S0, transition: true }), ['q.layers.structure.flip: a broken leg or a transition states its flip ({ oldSide, oldLevel, barsAgo })']);
+  assert.deepStrictEqual(err({ structure: { ...S0, status: 'broken', flip: 'x' } }), ['q.layers.structure.flip: a broken leg or a transition states its flip ({ oldSide, oldLevel, barsAgo })']);
+  assert.deepStrictEqual(err({ structure: S0, behavior: { word: 'mixed', overlap: 0.5, eff: 0.4 } }), ['q.layers.behavior: its word and word15']);
+  assert.deepStrictEqual(err({ structure: S0, chop: { inChop: true, facts: { ov: true } } }), ['q.layers.chop.facts: overlap and efficiency need the behavior\'s numbers']);
+  assert.deepStrictEqual(err({ structure: S0, stale: true }), ['q.layers.stale: needs the structure\'s sinceProgress (bars)']);
+  assert.throws(() => Q.layersOf({ structure: { ...S0, status: 'broken' } }), /flip/, 'layersOf refuses what questionErrors refuses');
 });
 
 test('marketStateOfText: the Market state line from an item\'s printed lines', () => {

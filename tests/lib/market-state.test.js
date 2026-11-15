@@ -141,6 +141,13 @@ test('the line: one exact string per state, structure then momentum then behavio
   assert.match(line({ layers: sameLevelOtherBar }), /: HL 21380\.5 holds, tested the HL \(a tie\);/, 'the resume was at another bar: this break is a tie');
   const heldFlip = lay({ structure: leg({ resumed: true, flip: { ...oldResume, oldLevel: 21380.5, barsAgo: 2, held: true }, lastWay: null, lastInternal: { direction: 'down', level: 21380.5, barsAgo: 2 } }), behavior: { ...lay().behavior, word: 'mixed' } });
   assert.match(line({ layers: heldFlip }), /tested the HL \(a tie\);/, 'a held flip never printed as closed back');
+  // Each clause of closedBack decides on its own (20b review: a mutation dropping any one fails here).
+  const atBar = { ...oldResume, oldLevel: 21380.5, barsAgo: 2 };
+  const tieWith = (P, msg) => assert.match(line({ layers: lay({ structure: leg({ lastWay: null, lastInternal: { direction: 'down', level: 21380.5, barsAgo: 2 }, ...P }), behavior: { ...lay().behavior, word: 'mixed' } }) }), /: HL 21380\.5 holds, tested the HL \(a tie\);/, msg);
+  assert.match(line({ layers: lay({ structure: leg({ resumed: true, flip: atBar, lastWay: null, lastInternal: { direction: 'down', level: 21380.5, barsAgo: 2 } }), behavior: { ...lay().behavior, word: 'mixed' } }) }), /: HL 21380\.5 holds, through the HL, closed back;/, 'every clause true: closed back');
+  tieWith({ resumed: true, flip: { ...atBar, oldLevel: 21390 } }, 'the flip at another level, same bar: a tie');
+  tieWith({ resumed: true, flip: { ...atBar, byRule: 'choch-bos' } }, 'a CHoCH-then-BOS flip: a tie');
+  tieWith({ resumed: false, flip: atBar }, 'not resumed: a tie');
   const brokenRange = lay({ structure: leg({ status: 'broken', legOK: false, side: 'down', level: 21437.5, flip: { barsAgo: 2, strong: false, disp: false, held: true, oldSide: 'up', oldLevel: 21380.5, byRule: 'close' } }), behavior: { ...lay().behavior, word: 'mixed' } });
   assert.deepStrictEqual([st({ layers: brokenRange }), word({ layers: brokenRange })], ['range', 'trend-up'], 'an undisplaced protected break: range (no transition), the alignment default');
   assert.match(line({ layers: brokenRange }), /^Market state \(3m\): range: no leg holds, HL 21380\.5 broken 6 min ago, edges/, 'the broken protected level printed (finding 2)');

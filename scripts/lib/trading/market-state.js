@@ -36,7 +36,8 @@
  *
  *   readState(b, th)    { state, way, align, frames, m15, pullback, early, layers, last, previous, context, tf, ... } on
  *                       any briefing (no lane guard); th { crossesChop, maxPullbackDepth }, both required; th.lineBytes (optional)
- *                       the line's byte budget: over it the behavior numbers drop
+ *                       the line's byte budget: over it the behavior numbers drop, then the chop's "Day so far rotational"
+ *   stateThresholds(an) the briefing's and the quiz's th from the analysis config
  *   stateOf(b, th)      readState, or null off the chain's entry frame or with no 1h part (as the Bias line)
  *   classWordOf(s)      chop -> chop; rotation, weakening -> unclear; not aligned -> unclear; a pullback of a leg the
  *                       4h + 1h way, or the early read -> that trend class; forming, range -> the 4h + 1h trend class
