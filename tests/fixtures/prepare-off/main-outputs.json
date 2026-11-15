@@ -1,5 +1,5 @@
 {
- "commit": "65940b41614b566df81dab4d096c3a7b3884ce5c",
+ "commit": "b5fd03bfe4c3ee548230bde1cfc847483c967829",
  "days": {
   "no-fill": {
    "passes": [
@@ -565,7 +565,7 @@
        },
        "cachedLookups": {}
       },
-      "transcript": "sha256:d2f5205ec3be6b64d50e76d6c9a1e0bdaa6b7f5ba0f8dd98aa5e113281636db7 (23422 chars)",
+      "transcript": "sha256:40e3c6582aac98cba81fb9a42c00c6ccebc68da16b1c61ceafd1074b3a9522ba (23440 chars)",
       "argv": [
        "claude",
        "-p",
@@ -940,7 +940,7 @@
        },
        "cachedLookups": {}
       },
-      "transcript": "sha256:0fdc19ec57abd2322ce06643df9f1d49e2340c88b26e22847c1e29af7fe567ef (25217 chars)",
+      "transcript": "sha256:b97669fe96714748f942ce387f6ba8216b9739a805b31c264aae5b62e5e43609 (25235 chars)",
       "argv": [
        "claude",
        "-p",
@@ -1306,7 +1306,7 @@
        },
        "cachedLookups": {}
       },
-      "transcript": "sha256:7a3d1b1c37fc54c9ce7431185110e17c8c81d00a673f16ecb19e6f58e09aab58 (23855 chars)",
+      "transcript": "sha256:bbc442799106e83ad3d45203d6fc7e3b89d0835cfb0723dde7fbe8ba098b005b (23873 chars)",
       "argv": [
        "claude",
        "-p",
@@ -1649,7 +1649,7 @@
     ],
     [
      "briefing/MNQ.json",
-     "sha256:f8e72cb5f5a6f75942eb504112103019455eb4f2dca90619bfdda640b5cefbd8 (18362 chars)"
+     "sha256:84f353d73511db5dfdd6ab9069a878d033ac758b347e7b742a424d08c0974691 (18378 chars)"
     ],
     [
      "brokers.json",
@@ -2389,7 +2389,7 @@
        },
        "cachedLookups": {}
       },
-      "transcript": "sha256:d2f5205ec3be6b64d50e76d6c9a1e0bdaa6b7f5ba0f8dd98aa5e113281636db7 (23422 chars)",
+      "transcript": "sha256:40e3c6582aac98cba81fb9a42c00c6ccebc68da16b1c61ceafd1074b3a9522ba (23440 chars)",
       "argv": [
        "claude",
        "-p",
@@ -2764,7 +2764,7 @@
        },
        "cachedLookups": {}
       },
-      "transcript": "sha256:0fdc19ec57abd2322ce06643df9f1d49e2340c88b26e22847c1e29af7fe567ef (25217 chars)",
+      "transcript": "sha256:b97669fe96714748f942ce387f6ba8216b9739a805b31c264aae5b62e5e43609 (25235 chars)",
       "argv": [
        "claude",
        "-p",
@@ -3418,7 +3418,7 @@
     ],
     [
      "briefing/MNQ.json",
-     "sha256:f8e72cb5f5a6f75942eb504112103019455eb4f2dca90619bfdda640b5cefbd8 (18362 chars)"
+     "sha256:84f353d73511db5dfdd6ab9069a878d033ac758b347e7b742a424d08c0974691 (18378 chars)"
     ],
     [
      "brokers.json",
@@ -4070,7 +4070,7 @@
        },
        "cachedLookups": {}
       },
-      "transcript": "sha256:d2f5205ec3be6b64d50e76d6c9a1e0bdaa6b7f5ba0f8dd98aa5e113281636db7 (23422 chars)",
+      "transcript": "sha256:40e3c6582aac98cba81fb9a42c00c6ccebc68da16b1c61ceafd1074b3a9522ba (23440 chars)",
       "argv": [
        "claude",
        "-p",
@@ -4578,7 +4578,7 @@
     ],
     [
      "briefing/MNQ.json",
-     "sha256:9e7e11f238ddab80a6e48a8fbadac7ef6fc5423794733a01523b36f221890c29 (18399 chars)"
+     "sha256:fefa8e2b1a1aff7807781db09dbb344d07568da9d7ece3414795f1b6591e0b60 (18415 chars)"
     ],
     [
      "brokers.json",
@@ -5301,7 +5301,7 @@
        },
        "cachedLookups": {}
       },
-      "transcript": "sha256:d2f5205ec3be6b64d50e76d6c9a1e0bdaa6b7f5ba0f8dd98aa5e113281636db7 (23422 chars)",
+      "transcript": "sha256:40e3c6582aac98cba81fb9a42c00c6ccebc68da16b1c61ceafd1074b3a9522ba (23440 chars)",
       "argv": [
        "claude",
        "-p",
@@ -5733,7 +5733,7 @@
        },
        "cachedLookups": {}
       },
-      "transcript": "sha256:65022976771ccb711ce3559c5e2c91446b5f2e953357e542d4148b1ae31dc93a (29526 chars)",
+      "transcript": "sha256:9bc93feedd51645b3959c184ba8dfa0e29d372ce23044ef0140409f556196d53 (29544 chars)",
       "argv": [
        "claude",
        "-p",
@@ -6423,7 +6423,7 @@
     ],
     [
      "briefing/MNQ.json",
-     "sha256:f8e72cb5f5a6f75942eb504112103019455eb4f2dca90619bfdda640b5cefbd8 (18362 chars)"
+     "sha256:84f353d73511db5dfdd6ab9069a878d033ac758b347e7b742a424d08c0974691 (18378 chars)"
     ],
     [
      "brokers.json",
