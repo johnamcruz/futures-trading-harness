@@ -44,6 +44,7 @@ test('readTimeframe: up, down, and range trends from the three votes; too few ca
   assert.deepStrictEqual([down.trend, down.bias, down.votes.structure], ['down', -1, 'LH/LL']);
   const flat = readTimeframe(candles(path3m(et(9, 0, 1), 6000, () => 20000), 60).filter(c => c.complete));
   assert.strictEqual(flat.bias, 0);
+  assert.strictEqual(flat.votes.structure, 'few-swings', 'fewer than two confirmed swings: few-swings (round 20), never the class word unclear');
   assert.strictEqual(readTimeframe([]).trend, 'unknown');
   const short = readTimeframe(candles(path3m(et(9, 0), 200, zigzag(0.2)), 60).filter(c => c.complete));
   assert.strictEqual(short.emaSlow, null);

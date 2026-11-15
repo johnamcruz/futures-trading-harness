@@ -43,7 +43,7 @@ Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
 - **Against a trending 4h or 1h**: the trend rule refuses it (never counter), whatever
   break (`bos-vs-choch`).
 - **Avoid** (hypothesis): `m3.regime.primary` `transition` (the
-  measured filter), or `m15.frame.swingPattern` `mixed` or `unclear`,
+  measured filter), or `m15.frame.swingPattern` `mixed` or `few-swings`,
   small overlapping bars. The class word: the Market state line.
 
 **CISD vs CHoCH.** A CHoCH rests on swing points (`m3.lastBreak`). The

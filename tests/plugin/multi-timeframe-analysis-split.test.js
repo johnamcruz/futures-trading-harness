@@ -85,6 +85,9 @@ const ALLOWED = [
 // home to its edited text, and a late edit that matches nothing fails.
 const { withLate } = require('./skill-split-late');
 const LATE = [
+  { from: "Swing structure: higher highs and higher lows (HH/HL), lower highs and lower lows (LH/LL), mixed, or unclear (fewer than two confirmed swing highs or lows: no structure vote).",
+    to: "Swing structure: higher highs and higher lows (HH/HL), lower highs and lower lows (LH/LL), mixed, or few-swings (fewer than two confirmed swing highs or lows: no structure vote).",
+    reason: "round 20 (feat/chop-read): the swing-structure vote `unclear` is renamed `few-swings` (mtf.js), so the class word `unclear` has one meaning" },
   { from: "the runner's bars file (at least 2000 bars), or `bars_fetch` with `{\"symbol\": \"<SYMBOL>\", \"timeframe\": 3, \"record\": true}` (the runner's default, 5000 3-minute bars, to `<FTH_HOME>/bars-scratch/<SYMBOL>-3m.json`, and the read recorded for the gate)",
     to: "the runner's bars file (at least 2000 bars), or `bars_fetch` with `{\"symbol\": \"<SYMBOL>\", \"timeframe\": 3, \"record\": true}` (the runner's default count, to `<FTH_HOME>/bars-scratch/<SYMBOL>-3m.json`, and the read recorded for the gate)",
     reason: "feat/htf-history: the runner's bar count follows the read's window (config/analysis.json mtf.historyHours), so the skills name no count (its one home is the config)" },

@@ -134,7 +134,7 @@ function structure(cs, k) {
   const [l1, l2] = lows.slice(-2);
   const hh = h2 !== undefined ? h2 > h1 : null;
   const hl = l2 !== undefined ? l2 > l1 : null;
-  let kind = 'unclear';
+  let kind = 'few-swings'; // fewer than two confirmed swing highs or lows (round 20: not the class word)
   if (hh === true && hl === true) kind = 'HH/HL';
   else if (hh === false && hl === false) kind = 'LH/LL';
   else if (hh !== null && hl !== null) kind = 'mixed';

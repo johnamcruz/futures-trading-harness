@@ -34,7 +34,7 @@ Each timeframe's trend has three votes:
 2. EMA 20 against EMA 50 (no vote with fewer than 50 candles, and the line
    says so).
 3. Swing structure: higher highs and higher lows (HH/HL), lower highs and
-   lower lows (LH/LL), mixed, or unclear (fewer than two confirmed swing
+   lower lows (LH/LL), mixed, or few-swings (fewer than two confirmed swing
    highs or lows: no structure vote).
 
 Two votes the same way, and none against, set the trend (UP or DOWN);
