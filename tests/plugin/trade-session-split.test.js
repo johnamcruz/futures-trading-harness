@@ -587,9 +587,12 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // Then round 20 (the owner's three layers in bos-vs-choch, his chop checklist, behavioral list and classes in
 // trend-vs-range, one home each), at the measured need: the market-structure analyst 107925 -> 110333 full, 46864 -> 47963
 // index; the trend-momentum analyst 66501 -> 68877 full, 43021 -> 44094 index; every other role falls or stays.
+// Then the follow-up to #340 (round 20c: a CHoCH then BOS confirms a transition, a reversal only through the protected
+// level, in bos-vs-choch and trend-vs-range), at the measured need: the market-structure analyst 110333 -> 110727 full,
+// 47963 -> 48138 index; the trend-momentum analyst 68877 -> 69271 full, 44094 -> 44269 index; every other role falls or stays.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 110333, 'news-calendar-analyst': 10868, 'risk-manager': 95294, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9400, 'trend-momentum-analyst': 68877, 'volume-liquidity-analyst': 50521 },
-  index: { 'market-structure-analyst': 47963, 'news-calendar-analyst': 10868, 'risk-manager': 81182, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9400, 'trend-momentum-analyst': 44094, 'volume-liquidity-analyst': 35153 },
+  full: { 'market-structure-analyst': 110727, 'news-calendar-analyst': 10868, 'risk-manager': 95294, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9400, 'trend-momentum-analyst': 69271, 'volume-liquidity-analyst': 50521 },
+  index: { 'market-structure-analyst': 48138, 'news-calendar-analyst': 10868, 'risk-manager': 81182, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9400, 'trend-momentum-analyst': 44269, 'volume-liquidity-analyst': 35153 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

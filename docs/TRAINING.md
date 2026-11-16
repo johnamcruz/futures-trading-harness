@@ -1825,8 +1825,8 @@ Frozen definitions:
   `trending`); `leg` (an established leg otherwise, printed `in the up
   leg`); else `range` (no established leg). Chop takes structural AND
   behavioral evidence: S, no established leg (its last break failed, or its
-  level broken) with breaks both ways, a protected break or a failed break
-  since the last end event; and B, no clean displaced break and at least
+  level broken) with breaks both ways, a protected break (or a CHoCH then
+  BOS flip) or a failed break since the last end event; and B, no clean displaced break and at least
   `marketState.chopMinFacts` of overlap, low efficiency, failed
   continuation and no displacement, over at least `daySoFar.minBars` RTH
   bars. A CHoCH pair alone is not chop, and chop needs no pair. It lasts

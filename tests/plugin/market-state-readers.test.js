@@ -62,17 +62,25 @@ const STATE_FIELDS = [
   ['pbRotation', /\bpbRotation\b/],
   ['classWordOf', /\bclassWordOf\b/],
   ['; class', /; class\b/],
-  ['lastBreak...protected', /lastBreak\b[\w.[\]'"]*\.protected\b|\.protected\.(?:brokenAt|level)\b/],
+  ['lastBreak...protected', /lastBreak\b[\w.[\]'"]*\.protected\b|\.protected\.(?:brokenAt|level)\b|\.(?:last|previous)\.protected\b/],
+  // The review's bypasses: destructuring or bracket access, and the class word matched in the printed text.
+  ['layers (any access: destructured, bracketed, a variable)', /\blayers\b/],
+  ['{ protected } =', /\{[^{}]*\bprotected\b[^{}]*\}\s*=/],
+  ['class <word>', /\bclass \(?`?(?:chop|unclear|trend-(?:up|down))\b/],
 ];
-const FIELD_READERS = ['scripts/lib/trading/market-state.js', 'scripts/lib/trading/market-layers.js', 'scripts/lib/trading/briefing.js',
+// Comments name the fields freely (a reader is code): block and line comments are dropped before the scan.
+const code = t => t.replace(/\/\*[^]*?\*\//g, ' ').replace(/(^|[^:\\])\/\/[^\n]*/g, '$1');
+const FIELD_READERS = ['scripts/lib/trading/market-state.js', 'scripts/lib/trading/market-layers.js', 'scripts/lib/trading/structure-layers.js', 'scripts/lib/trading/briefing.js',
   'scripts/lib/learning/recognition/key.js', 'scripts/lib/eval/context-quiz.js'];
 const DECIDES = /(^hooks\/|^scripts\/hooks\/|gate|gateway|compose|entry-rule|order-plan|decision|verdict|phase2|autotrader|runner)/;
-const fieldsIn = text => STATE_FIELDS.filter(([, re]) => re.test(text)).map(([name]) => name);
+const fieldsIn = text => STATE_FIELDS.filter(([, re]) => re.test(code(text))).map(([name]) => name);
 
 test('round 20c: no script or hook outside the allow-list names the state\'s fields (layers, inChop, pbRotation, classWordOf, "; class", the protected swing)', () => {
   const named = ALL.map(f => [f, fieldsIn(fs.readFileSync(path.join(ROOT, f), 'utf8'))]).filter(([f, xs]) => xs.length && !FIELD_READERS.includes(f));
   assert.deepStrictEqual(named, []);
   for (const f of FIELD_READERS) assert.doesNotMatch(f, DECIDES, f);
+  // The allow-list never outlives its reason: each file on it still names a field.
+  for (const f of FIELD_READERS) assert.ok(fieldsIn(fs.readFileSync(path.join(ROOT, f), 'utf8')).length > 0, `${f}: on the allow-list, names no field`);
 });
 
 test('round 20c: the gate, the gateway, compose, the entry rule and the runner name none of the state\'s fields', () => {
@@ -85,9 +93,11 @@ test('round 20c: the field scan catches a reader that never requires market-stat
   const planted = [
     "const inChopOf = b => Boolean(b && b.sections && b.sections.m3 && b.sections.m3.data.layers && b.sections.m3.data.layers.chop.inChop);",
     "const classOf = s => (/; class (\\S+)\\./.exec(String(s)) || [])[1];",
+    'const { layers } = b.sections.m3.data;', 'const x = m3["layers"];', 'const { chop } = layers; if (chop.now) refuse();', 'if (/class (chop|unclear)$/.exec(summary)) refuse();',
+    'if (line.endsWith("class chop")) refuse();', 'const pr = lb.last.protected; if (pr.brokenAt) refuse();', 'const { protected: pr } = lb.last;',
     'const r = m3.layers.pbRotation;', 'const c = MS.classWordOf(s);', "const lvl = b.sections.m3.data.lastBreak.last.protected.level;", 'if (last.protected.brokenAt) refuse();',
   ];
   for (const s of planted) assert.ok(fieldsIn(s).length > 0, s);
-  for (const s of ['const classes = {}; classes[k] = 1;', 'const { lastBreaks, protectedOf } = require("./structure-events");', 'player.layer = 1;'])
+  for (const s of ['// the gate never reads m3.layers or "; class chop"', '/* layers.inChop is the briefing\'s */ const a = 1;', 'const classes = {}; classes[k] = 1;', 'const { lastBreaks, protectedOf } = require("./structure-events");', 'player.layer = 1;'])
     assert.deepStrictEqual(fieldsIn(s), [], s);
 });

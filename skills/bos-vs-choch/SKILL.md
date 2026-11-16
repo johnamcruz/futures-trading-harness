@@ -34,7 +34,8 @@ A wick through a swing that closes back inside is a sweep, not a break
   continuation.
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
-  CHoCH then BOS the same way: a confirmed transition, not yet a reversal.
+  CHoCH then BOS the same way: a confirmed transition; a reversal once a
+  close goes through the protected level.
 
 **Three layers** (owner): "1. Internal structure: Small swings inside the
 larger market structure. These can change without invalidating the main

@@ -96,6 +96,9 @@ test('the machine (round 20c, item 4): a CHoCH-then-BOS flip keeps the old prote
   const tie = setup([...CHOCH_BOS, 105, 102.9]);
   assert.ok(0.1 < P.equalAtr * tie.atr[42], `the tie tolerance ${P.equalAtr * tie.atr[42]} covers a 0.1 close under 103`);
   assert.strictEqual(tie.series[42].flip.oldBroken, false, 'a close 0.1 under 103, within the tie (decision 8): not broken');
+  // The BOS bar itself closing through the old level (the review's case, 2022-08-11 11:03 on real bars): broken at once.
+  const through = setup([...CHOCH_BOS.slice(0, 23), 101]).series[39];
+  assert.deepStrictEqual([through.flip.byRule, through.flip.barsAgo, through.flip.oldBroken], ['choch-bos', 0, true], 'the BOS bar closes at 101, under 103');
   const close = setup(BREAK).series[31];
   assert.deepStrictEqual([close.flip.byRule, close.flip.oldBroken], ['close', true], 'a close-through flip: broken by definition');
 });

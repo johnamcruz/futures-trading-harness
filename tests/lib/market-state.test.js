@@ -264,10 +264,10 @@ test('round 20c: chop and range print "no leg holds" only when no protected leve
   const cbFlip = line({ layers: lay({ chop: { ...CHOP, evidence: { bothWays: true, flip: true, failed: true } }, structure: leg({ legOK: false, flip: { ...back, held: true, byRule: 'choch-bos', oldSide: 'down', oldLevel: 21450 } }) }) });
   assert.match(cbFlip, /holds \(breaks both ways, CHoCH then BOS, a failed break\); /, `a CHoCH then BOS breaks no protected level: ${cbFlip}`);
   // The chop memory on a re-established leg that has not made a new extreme yet (item 1 ends it only at a fresh extreme):
-  // its last break held, so "failed" would be false too.
+  // a break of its held (legOK: one not failed), so "failed" would be false too.
   const held = lay({ chop: { ...CHOP, now: false, S: false }, structure: leg({ side: 'down', level: 21440.25, legOK: true, sinceProgress: 2 }) });
   const t = line({ layers: held });
-  assert.match(t, /: chop: the down leg's last break held, no new low since, LH 21440\.25 holds \(/, t);
+  assert.match(t, /: chop: a down break held, no new low since, LH 21440\.25 holds \(/, t);
   assert.doesNotMatch(t, /no leg holds|break failed/, t);
 });
 

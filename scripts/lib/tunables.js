@@ -83,8 +83,8 @@ const TRAINING = {
   // keys, so no other skill can be given more room here. Round 20 (feat/chop-read, the owner's three layers, his chop checklist,
   // behavioral list and five classes quoted, one home each; skill cap raises owner-approved when they improve context):
   // trend-vs-range 5426, bos-vs-choch 5233, at the measured need. The follow-up to #340 (round 20c: a CHoCH then BOS confirms
-  // a transition, a reversal only through the protected level; the chop example's true leg clause): trend-vs-range 5578,
-  // bos-vs-choch 5368, at the measured need.
+  // a transition, a reversal only through the protected level; the chop example's true leg clause): trend-vs-range 5645,
+  // bos-vs-choch 5408, at the measured need.
   skillCaps: { skillBytes: int(1), setupSkillBytes: int(1), perSkill: { 'candle-reading': int(1), 'pullback-vs-reversal': int(1), 'trend-vs-range': int(1), 'bos-vs-choch': int(1) } },
   compose: { maxExpects: int(1), maxWhy: int(1) },
   lessons: { maxLines: int(1), maxChars: int(1), refusedChars: int(1) },
@@ -250,6 +250,8 @@ const ANALYSIS = {
   // The 3m Market state's three layers (structure-layers.js, market-behavior.js, market-layers.js): windows in 3m bars, the
   // tie tolerance and the displacement-free facts in ATR(14) units or shares, the chop rule's fact count, the early-warning
   // windows (pressure, loss of control, rotation, the opening drive) and the behavior word's net move in ATR(14).
+  // lineBytes 250 -> 280 (the follow-up to #340): the chop's true leg clause ("the down leg's last break failed, LH x
+  // holds" for "no leg holds") adds about 39 bytes; on the 35 goal-fixture sessions 280 leaves all but one line uncut.
   marketState: {
     behaviorBars: int(2), edgeBars: int(3), structBars: int(1), followBars: int(1), dispBars: int(0), m15Bars: int(2), equalAtr: nonneg(), interior: frac(),
     overlapHigh: frac(), effLow: frac(), rejectMin: int(1), chopMinFacts: int(1, 4), pressBars: int(1), lossStale: int(1), rotStale: int(1), rotCross: int(1),
@@ -275,7 +277,7 @@ const PINS = deepFreeze({
     'screen.gainAlpha': 0.1, 'screen.harmAlpha': 0.2, 'screen.minDiscordant': 4, 'screen.minPairs': 10, 'screen.minEffect': 0.1, 'exitScreen.epsR': 0.05, 'exitScreen.runnerMfeR': 3,
     'loop.limits.maxIterations.max': 100, 'loop.limits.maxModelCalls.max': 100000, 'loop.limits.maxWallMinutes.max': 10080,
     'proposal.maxEdits': 3, 'proposal.maxText': 2000, 'proposal.maxChanged': 3000, 'looks.maxArms': 3,
-    'skillCaps.skillBytes': 3459, 'skillCaps.setupSkillBytes': 4000, 'skillCaps.perSkill.candle-reading': 7637, 'skillCaps.perSkill.pullback-vs-reversal': 10354, 'skillCaps.perSkill.trend-vs-range': 5578, 'skillCaps.perSkill.bos-vs-choch': 5368,
+    'skillCaps.skillBytes': 3459, 'skillCaps.setupSkillBytes': 4000, 'skillCaps.perSkill.candle-reading': 7637, 'skillCaps.perSkill.pullback-vs-reversal': 10354, 'skillCaps.perSkill.trend-vs-range': 5645, 'skillCaps.perSkill.bos-vs-choch': 5408,
     'goalRegression.tolerance.passRate': 0.005, 'goalRegression.tolerance.meanR': 0.005, 'goalRegression.tolerance.rCaught': 0,
     'goalRegression.tier2.tolerance.trades': 0, 'goalRegression.tier2.tolerance.totalR': 0.05, 'goalRegression.tier2.tolerance.fills': 0, 'goalRegression.tier2.tolerance.moveShare': 0, 'goalRegression.tier2.maxLossR': 1.25,
     'goalRegression.seed': 1, 'goalRegression.split': '2022-11-23', 'goalRegression.blocksPerHalf': 3, 'goalRegression.blockSessions': 5, 'goalRegression.trendPerHalf': 8,

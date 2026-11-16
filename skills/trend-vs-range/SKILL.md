@@ -83,8 +83,9 @@ the geometry.
 | Chop (`chop`) | overlap and repeated failed continuation | avoid trend entries |
 | Reversal (`reversal confirmed`) | meaningful structural shift confirmed | evaluate the new direction |
 
-`CHoCH then BOS: transition confirmed`: the new leg, its old protected
-level unbroken; a reversal once a close goes through that level. A
+`CHoCH then BOS: transition confirmed` prints under `trend` or `in the
+leg`, never the `transition` state: the new leg, its old protected level
+unbroken; a reversal once a close goes through that level. A
 reversal against the 4h + 1h side is never traded. Frames:
 transitional (old trend weakening, new one unconfirmed) is the frame
 `transition` in your STATE. The class word: the Market state line.

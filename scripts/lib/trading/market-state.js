@@ -234,11 +234,12 @@ function behaviorText(L, state, early = false) {
 
 // The leg clause of a chop or a range (round 20c, finding 2): "no leg holds" only when no protected level holds (none, or
 // broken); an intact level whose leg's breaks all failed prints that, and the level, as it is. A chop remembered on a leg
-// whose last break held (legOK) has made no new extreme by close since that break (a fresh one ends the chop).
+// with a break that held (legOK: one of its breaks not failed) has made no new extreme by close since (a fresh one ends
+// the chop).
 function legText(P) {
   if (!(P && P.status === 'intact' && Number.isFinite(P.level))) return 'no leg holds';
   const lvl = `${swingName(P.side)} ${P.level} holds`;
-  return P.legOK ? `the ${P.side} leg's last break held, no new ${P.side === 'up' ? 'high' : 'low'} since, ${lvl}` : `the ${P.side} leg's last break failed, ${lvl}`;
+  return P.legOK ? `a ${P.side} break held, no new ${P.side === 'up' ? 'high' : 'low'} since, ${lvl}` : `the ${P.side} leg's last break failed, ${lvl}`;
 }
 
 /** The chop's evidence, structural then behavioral (the owner's checklist answered by what was yes). */
