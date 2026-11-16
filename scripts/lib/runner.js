@@ -49,6 +49,7 @@
  */
 
 const { openTrades, describeOpenTrade, tradeReadText } = require('./trading/open-trades');
+const { parseStopLine } = require('./trading/stop-line');
 const { workingEntryLines } = require('./trading/working-entries');
 const { zonedParts } = require('./trading/clock');
 const { decide, recordRun, prompts, signalDecision, dayKey, endOfDayAt, historyShownLines, cycleLoaded } = require('./autotrader');
@@ -889,6 +890,17 @@ function createRunner(deps) {
     emit('stop_moved', { symbol: item.symbol, contractId: cid, setup: t.setup, from: resting, to: final, peakR, barsHeld });
     save({ ...trails[item.contractId], stop: final });
     log(`${item.symbol}: trail: stop ${resting} -> ${final} (peak ${peakR.toFixed(2)}R)`);
+  }
+
+  /** The managed cycle's STOP line (trading/stop-line.js) against each open trade's working stop: logged and emitted. */
+  function recordStopLine(r, trades) {
+    const line = parseStopLine(r.transcript || r.result || '');
+    for (const t of trades) {
+      const tighter = line.stated && !line.hold && Number.isFinite(t.stop) ? t.sign * (line.stop - t.stop) > 0 : null;
+      emit('stop_line', { contractId: t.contractId, side: t.side, working: t.stop, stated: line.stated, ...(line.stated ? { stop: line.stop, hold: line.hold, reason: line.reason, text: line.text, tighter } : { why: line.why }) });
+      if (!line.stated) log(`${t.contractId}: process failure: ${line.why} on a managed cycle; read as hold (the stop stays ${t.stop ?? 'unknown'})`, 'error');
+      else log(`${t.contractId}: STOP ${line.hold ? 'hold' : line.stop}: ${line.text} (${line.reason}; working ${t.stop ?? 'unknown'}${tighter === false ? '; not tighter: no modify' : ''})`);
+    }
   }
 
   /** The working stop order `id`'s price on a fresh account read (null: unreadable, or the order is gone). */
@@ -2360,6 +2372,10 @@ function createRunner(deps) {
               RR.removeRoleRuns(rolesFile);
             }
           }
+          // A cycle that started with a trade open: the model's STOP line, recorded every cycle (manage-position: the
+          // reason logged each time, the stop moved only by its own gated modify_order); none, or unreadable, is a
+          // process failure read as hold, never a blocked cycle.
+          if (r && tradeObjs.length) attempt('recording the STOP line', () => recordStopLine(r, tradeObjs), null);
           // The reports this cycle's roles returned, for the next cycles while what they rest on holds.
           // Only a trade cycle's roles (a manage-only or paper cycle's risk-manager isn't phase 1), from the stdout the gate reads.
           if (reportCache && r && !manageOnly && !cfg.paper) attempt('recording the report cache', () => reportCache.record({ symbols: cacheSymbols, account: acct, now: cycleNow, output: r.transcript || '', served: cached ? cached.roles : [], fresh: deskReports, runs: ranRuns, lookups: Array.isArray(r.lookups) ? r.lookups : [], laneBars: multi ? laneBarsOf(run) : {}, phase1: fromCache ? fromCache.phase1 : null, phase1Refused: Boolean(r.phase1Refused) }), null);

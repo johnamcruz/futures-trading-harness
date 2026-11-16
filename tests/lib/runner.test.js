@@ -677,6 +677,19 @@ test('the runner records the broker-confirmed resting stop for the hook ([modify
   assert.ok(over.logs.some(l => /the stop reads 21495 after the move to 21500\.5; sending 21500\.5 again/.test(l)));
 });
 
+test('a managed cycle\'s STOP line is recorded every cycle (stated, reason, tighter or not); none is a process failure read as hold, never a blocked cycle', async () => {
+  const said = await trailSim({ tape: {}, until: et(10, 8), outcome: () => ({ ok: true, timedOut: false, result: 'CYCLE RESULT: managed - held', transcript: 'reads...\nSTOP 21495: protected-swing 15m BOS up\nCYCLE RESULT: managed - held' }) });
+  const ev = said.events.filter(e => e.kind === 'stop_line');
+  assert.ok(ev.length >= 1, said.logs.join('\n'));
+  assert.deepStrictEqual([ev[0].stated, ev[0].stop, ev[0].reason, ev[0].tighter, ev[0].working], [true, 21495, 'protected-swing', true, 21490]);
+  assert.deepStrictEqual(said.modified, [], 'the line moves nothing by itself');
+  const none = await trailSim({ tape: {}, until: et(10, 8) });
+  const ne = none.events.filter(e => e.kind === 'stop_line');
+  assert.ok(ne.length >= 1 && ne.every(e => e.stated === false && e.why === 'no STOP line'));
+  assert.ok(none.logs.some(l => /ERROR MNQ: process failure: no STOP line on a managed cycle; read as hold \(the stop stays 21490\)/.test(l)), none.logs.join('\n'));
+  assert.ok(none.cycles.filter(c => c === 'trade').length >= 1, 'the cycles still run');
+});
+
 test('exit mode target_then_trail, live: the ratchet moves the resting stop to the best R less the giveback, as exit-trail.js steps the same bars', async () => {
   // The 2026-10-24 replay's MNQ short: from 14530.5, 1R = 98 ticks (24.5 points), its own target (the bracket, 196 ticks)
   // at 14481.5 = 2R. Giveback 1.5R, a loose 3R trail, so the ratchet is the stop past the target.
@@ -1263,7 +1276,7 @@ test('every run\'s prompt states the account, read just before it; an unreadable
   assert.match(r.prompts.find(x => /trade-session/.test(x)), /Account 7 at .*: balance \$50,100; 1 open position \(below\); 2 working orders\. Open trade MNQ long 1 @ 21500 since 10:00 ET, 7 bars closed since \(setup unknown[^)]*\): risk 10 points = 40 ticks, measured to the working stop \(the initial stop is unknown\); working stop 21490 \(-1R\), target 21600 \(\+10R\); now \+0R at 21500/);
   // A managed cycle's open trade carries its read facts (trade-read.js), measured from its entry: the pullback-vs-reversal
   // read of an open trade, in the same line.
-  assert.match(r.prompts.find(x => /trade-session/.test(x)), /Open trade MNQ long 1 @ 21500 [^\n]*\. Trade read \(closed bars since entry; pullback-vs-reversal\): best [\d.]+; [^;]+; [^;]+; pullback [^;]+; close vs RTH VWAP [^;]+; structure against since entry: 3m [^;]+, 15m [^;]+; 15m displacement against: [^;]+; compression against: [^;]+; HTF bias at entry [^,]+, now [^(]+\([^)]+\)\. Weakening signs: \d of 5[^;]*, 2 needed; reversal: [^;]+; tighten at most to [^.]+\./);
+  assert.match(r.prompts.find(x => /trade-session/.test(x)), /Open trade MNQ long 1 @ 21500 [^\n]*\. Trade read \(closed bars since entry; pullback-vs-reversal\): best [\d.]+; [^;]+; [^;]+; pullback [^;]+; close vs RTH VWAP [^;]+; structure against since entry: 3m [^;]+, 15m [^;]+; 15m displacement against: [^;]+; compression against: [^;]+; HTF bias at entry [^,]+, now [^(]+\([^)]+\)\. Weakening signs: \d of 5[^;]*, 2 needed; reversal: [^;]+; the code floor's trail: [^.]+\. Manage read \(answer every cycle with one line "STOP <price\|hold>: <reason>"; modify_order only when tighter\): working stop 21490 \(-1R\); best 21501 \(\+0\.1R\)/);
   const bad = await trailSim({ tape: {}, until: et(10, 8), balanceFails: true });
   assert.match(bad.prompts.find(x => /trade-session/.test(x)), /Account 7: state unavailable \(HTTP 503\); read get_account_snapshot before deciding anything/);
 });
