@@ -78,8 +78,9 @@ const FIELD_READERS = ['scripts/lib/trading/market-state.js', 'scripts/lib/tradi
 const DECIDES = /(^hooks\/|^scripts\/hooks\/|gate|gateway|compose|entry-rule|order-plan|decision|verdict|phase2|autotrader|runner)/;
 // The one exception (feat/entry-exit, DECISIONS M4, PENDING THE OWNER'S YES): compose's trigger stop
 // (composed-reads.js triggerStopPrices) verifies the price a `stop <tf> bos <price>` read names against the BOS's
-// protected swing level, and refuses one broken by a close. It reads no class, chop, layer or behavior field and decides
-// no side, entry or size: a stop price check as `stop swing low` is. That function's body alone is blanked before the
+// protected swing level, and turns that stop read FALSE (so the record is refused) when the trigger is stale, broken,
+// a CHoCH or the other way. It reads no class, chop, layer or behavior field; it is opt-in by the stop form the model
+// chooses (the other forms stand), a stop price check as `stop swing low` is. That function's body alone is blanked before the
 // scan; the rest of composed-reads.js names no field, and the function must exist (the exception never outlives it).
 const STOP_PRICE_EXCEPTION = { file: 'scripts/lib/trading/composed-reads.js', fn: 'triggerStopPrices' };
 const withoutException = (f, text) => {

@@ -872,9 +872,10 @@ function createRunner(deps) {
       await reconcileAfterRefusedMove(item, err);
       throw err;
     }
-    // Confirmed from a fresh read: a model's tighter modify that landed between the gateway's check and this one (two
-    // gateway processes, check-then-act) may have been overwritten by this looser target, or may stand past it. The
-    // tighter of the two is what stays: a working stop looser than the target is sent the target once more.
+    // Confirmed from a fresh read: a stale move landing after this one may leave the stop looser than the target (sent
+    // the target once more), or a model's modify may stand past it (kept). A model's tighter stop this move overwrote in
+    // the check-then-act window between two gateway processes reads as the target here: it is not seen (the model's next
+    // STOP line restates it). What is logged, saved and recorded is the stop the broker reads, never the one intended.
     let confirmed = await workingStop(cid, sign, stopOrder.id);
     if (confirmed !== null && sign * (confirmed - target) < 0) {
       log(`${item.symbol}: trail: the stop reads ${confirmed} after the move to ${target}; sending ${target} again`, 'error');
@@ -885,9 +886,12 @@ function createRunner(deps) {
         log(`${item.symbol}: trail: re-sending ${target} failed (${err.message}); the next bar retries`, 'error');
       }
     }
-    const final = confirmed !== null && sign * (confirmed - target) > 0 ? confirmed : target;
+    // Unreadable after a successful reply: the target, said so; read looser still after the re-send: that, said so.
+    const final = confirmed !== null ? confirmed : target;
+    if (confirmed === null) log(`${item.symbol}: trail: the stop could not be read back after the move to ${target}; the next bar reads it`, 'error');
+    else if (sign * (confirmed - target) < 0) log(`${item.symbol}: trail: the stop still reads ${confirmed}, looser than ${target}; the next bar retries`, 'error');
     if (confirmed !== null) keepStop(cid, sign, stopOrder.id, confirmed);
-    emit('stop_moved', { symbol: item.symbol, contractId: cid, setup: t.setup, from: resting, to: final, peakR, barsHeld });
+    emit('stop_moved', { symbol: item.symbol, contractId: cid, setup: t.setup, from: resting, to: final, target, confirmed: confirmed !== null, peakR, barsHeld });
     save({ ...trails[item.contractId], stop: final });
     log(`${item.symbol}: trail: stop ${resting} -> ${final} (peak ${peakR.toFixed(2)}R)`);
   }

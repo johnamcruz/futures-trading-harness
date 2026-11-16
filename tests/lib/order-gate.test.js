@@ -4889,7 +4889,8 @@ test('[modify-stop]: a modify_order looser than the runner\'s confirmed resting 
   RS.recordStop(home, { contractId: 'MNQ', sign: -1, stopOrderId: 21, restingStop: 21600, at: '2026-10-07T14:30:00.000Z' });
   const all = new Set(require('../../scripts/lib/trading/config').GATE_CHECKS || []);
   const cfg = { ...config, home, skipChecks: new Set([...all, 'modify-stop', 'modify-protection']) };
-  const mod = input => evaluateModify({ input, config: cfg }).violations.map(v => v.check);
+  const NOW = new Date('2026-10-07T14:35:00.000Z');
+  const mod = input => evaluateModify({ input, config: cfg, now: NOW }).violations.map(v => v.check);
   assert.deepStrictEqual(mod({ orderId: 9, stopPrice: 21500.25, reason: '[protect] trail' }), ['modify-stop'], 'looser by a tick, [protect] or not, every check skipped');
   assert.deepStrictEqual(mod({ orderId: 9, stopPrice: 21490 }), ['modify-stop']);
   assert.deepStrictEqual(mod({ orderId: 9, stopPrice: 21500.5 }), [], 'equal: a no-op');
@@ -4897,7 +4898,8 @@ test('[modify-stop]: a modify_order looser than the runner\'s confirmed resting 
   assert.deepStrictEqual(mod({ orderId: 21, stopPrice: 21600.25 }), ['modify-stop'], 'a short raised');
   assert.deepStrictEqual(mod({ orderId: 21, stopPrice: 21580 }), []);
   assert.deepStrictEqual(mod({ orderId: 33, stopPrice: 1 }), [], 'no record: the gateway judges it');
-  assert.match(evaluateModify({ input: { orderId: 9, stopPrice: 21400 }, config: cfg }).violations[0].message, /looser than the resting stop 21500\.5/);
+  assert.match(evaluateModify({ input: { orderId: 9, stopPrice: 21400 }, config: cfg, now: NOW }).violations[0].message, /looser than the resting stop 21500\.5/);
+  assert.deepStrictEqual(evaluateModify({ input: { orderId: 9, stopPrice: 21400 }, config: cfg, now: new Date('2026-10-09T14:35:00.000Z') }).violations, [], 'an earlier day\'s record: the gateway judges it');
   // The check reads the record, not the request: a home without the file passes it to the gateway.
   assert.deepStrictEqual(evaluateModify({ input: { orderId: 9, stopPrice: 1 }, config: { ...config, home: require('../helpers').tmpDir() } }).violations, []);
 });

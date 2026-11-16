@@ -56,8 +56,9 @@ description: Use when a position is open - its stop, the plan's management, the 
   `displacement`, `bos-vs-choch`, `pullback-vs-reversal`):
   - 15m BOS the trade's way → a tick beyond its protected swing (that is
     the room): protected-swing.
-  - 15m CHoCH against → `warning_giveback_r` behind the best (the Manage
-    read's warning giveback), not an exit: choch-against.
+  - 15m CHoCH against (the Trade read's `reversal: 15m CHoCH`) →
+    `warning_giveback_r` behind the best (the Manage read's warning
+    giveback), the turned structure's level; not an exit: choch-against.
   - A displaced 15m candle against (the Break quality line's word, a read),
     or weakening (2+ signs; an HTF flip alone is one) → the same giveback:
     a warning, never an exit. Weakening and stalling at a key level or
@@ -65,8 +66,8 @@ description: Use when a position is open - its stop, the plan's management, the 
   - A 15m close through the protected swing (Manage read: BROKEN) → the
     reversal: `close_position`, then the full top-down flow decides anew.
   - Healthy pullback, a 3m swing or CHoCH, one candle against → hold.
-  - The level already past the price → `close_position`, never a stop
-    through the market.
+  - A level the Manage read says is past the price → hold (the floor
+    stands); never a stop through the market.
 - **An open trade** (the prompt's "Open trade" line) is managed before any
   new entry: its setup, initial stop and risk, the working stop and target in
   R, where it stands now, its best and worst so far, and bars held. "NO

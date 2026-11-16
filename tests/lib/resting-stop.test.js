@@ -37,7 +37,8 @@ test('modifyStopRefusal: a stop looser than the confirmed resting one is refused
   const home = tmpDir();
   RS.recordStop(home, rec());
   RS.recordStop(home, rec({ stopOrderId: 12, sign: -1, restingStop: 21600 }));
-  const why = input => RS.modifyStopRefusal({ home, input });
+  const NOW = new Date('2026-10-07T14:35:00.000Z');
+  const why = input => RS.modifyStopRefusal({ home, input, now: NOW });
   assert.match(why({ orderId: 9, stopPrice: 21500.25 }), /looser than the resting stop 21500\.5/);
   assert.strictEqual(why({ orderId: 9, stopPrice: 21500.5 }), null, 'equal: a no-op, allowed');
   assert.strictEqual(why({ orderId: 9, stopPrice: 21510 }), null, 'tighter');
@@ -49,5 +50,8 @@ test('modifyStopRefusal: a stop looser than the confirmed resting one is refused
   assert.strictEqual(why({ orderId: 77, stopPrice: 1 }), null, 'no record: the gateway judges it');
   assert.strictEqual(why({ orderId: 9 }), null, 'no stop price: nothing to judge');
   assert.strictEqual(why({ orderId: 9, limitPrice: 1 }), null, 'a limit price is not the stop');
-  assert.strictEqual(RS.modifyStopRefusal({ home: null, input: { orderId: 9, stopPrice: 1 } }), null);
+  assert.strictEqual(RS.modifyStopRefusal({ home: null, input: { orderId: 9, stopPrice: 1 }, now: NOW }), null);
+  // A record of an earlier trading day (an order id a restarted server may reuse) is no record: the gateway judges.
+  assert.strictEqual(RS.modifyStopRefusal({ home, input: { orderId: 9, stopPrice: 21400 }, now: new Date('2026-10-08T14:35:00.000Z') }), null);
+  assert.match(RS.modifyStopRefusal({ home, input: { orderId: 9, stopPrice: 21400 }, now: new Date('2026-10-07T21:00:00.000Z') }) || '', /looser/, 'the same trading day (after 18:00 ET is the next day)');
 });

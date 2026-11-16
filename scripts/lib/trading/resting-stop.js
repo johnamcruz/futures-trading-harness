@@ -10,9 +10,11 @@
  *   recordStop(home, { contractId, sign, stopOrderId, restingStop, at })   keep the newest record for that stop order
  *                                                (records of an earlier trading day than the new one's are dropped)
  *   readStop(home, orderId)                      that stop order's newest record, or null (none, or unreadable)
- *   modifyStopRefusal({ home, input })           the [modify-stop] message for a modify_order looser than the record, or
- *                                                null: equal (a no-op) and tighter pass, and with no record the hook
- *                                                passes it to the gateway (a risk-reducing modify never fails on a read)
+ *   modifyStopRefusal({ home, input, now })      the [modify-stop] message for a modify_order looser than the record, or
+ *                                                null: equal (a no-op) and tighter pass, and with no record (none, or one
+ *                                                of an earlier trading day than `now`: an order id a restarted server
+ *                                                may reuse) the hook passes it to the gateway (a risk-reducing modify
+ *                                                never fails on a read)
  */
 
 const path = require('path');
@@ -34,16 +36,18 @@ function recordStop(home, { contractId, sign, stopOrderId, restingStop, at }) {
   writeJsonAtomic(path.join(home, FILE), [...kept, { contractId, sign, stopOrderId: id, restingStop, at }]);
 }
 
-function readStop(home, orderId) {
+function readStop(home, orderId, now = null) {
   if (!home || orderId === undefined || orderId === null) return null;
   const hit = listOf(home).filter(x => String(x.stopOrderId) === String(orderId)).pop();
-  return hit && Number.isFinite(hit.restingStop) && [1, -1].includes(hit.sign) ? hit : null;
+  if (!hit || !Number.isFinite(hit.restingStop) || ![1, -1].includes(hit.sign)) return null;
+  if (now && (!Number.isFinite(Date.parse(hit.at)) || tradingDayKey(new Date(hit.at)) !== tradingDayKey(now))) return null;
+  return hit;
 }
 
-function modifyStopRefusal({ home, input = {} }) {
+function modifyStopRefusal({ home, input = {}, now = new Date() }) {
   const fields = STOP_FIELDS.filter(f => input[f] !== undefined && input[f] !== null);
   if (!fields.length) return null;
-  const r = readStop(home, input.orderId);
+  const r = readStop(home, input.orderId, now);
   if (!r) return null;
   for (const f of fields) {
     const level = Number(input[f]);

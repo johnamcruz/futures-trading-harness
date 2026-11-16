@@ -663,6 +663,7 @@ test('the runner records the broker-confirmed resting stop for the hook ([modify
   assert.ok(!tighter.logs.some(l => /ERROR .*failed/.test(l) && /21500\.5/.test(l)), 'no error raised for the benign refusal');
   assert.ok(tighter.events.some(e => e.kind === 'stop_already_tighter' && e.working === 21505));
   assert.strictEqual(recs[recs.length - 1].restingStop, 21505);
+  assert.strictEqual(tighter.saved.trails.MNQ.stop, 21505, 'the trail state keeps the broker\'s tighter stop');
   // A late reply: the move landed but its reply was an error: the stop reads at the target: kept, nothing thrown.
   const late = await trailSim({ tape, exit, record: { targetTicks: 80 }, until: et(10, 9), modifyHook: (price, s) => { s.set(price); throw new Error('timeout'); } });
   assert.ok(late.events.some(e => e.kind === 'stop_already_tighter' && e.working === 21500.5), late.logs.join('\n'));
@@ -675,6 +676,17 @@ test('the runner records the broker-confirmed resting stop for the hook ([modify
   const over = await trailSim({ tape, exit, record: { targetTicks: 80 }, until: et(10, 9), modifyHook: (price, s) => { n += 1; s.set(n === 1 ? 21495 : price); return true; } });
   assert.deepStrictEqual(over.modified, [21500.5, 21500.5], over.logs.join('\n'));
   assert.ok(over.logs.some(l => /the stop reads 21495 after the move to 21500\.5; sending 21500\.5 again/.test(l)));
+  // Read back past the target (the model's modify landed after): the broker's stop is what is reported, saved and recorded.
+  const recs2 = [];
+  const past = await trailSim({ tape, exit, record: { targetTicks: 80 }, until: et(10, 9), recordStop: x => recs2.push(x), modifyHook: (price, s) => { s.set(21502); return true; } });
+  const moved = past.events.find(e => e.kind === 'stop_moved');
+  assert.deepStrictEqual([moved.to, moved.target, moved.confirmed], [21502, 21500.5, true], past.logs.join('\n'));
+  assert.strictEqual(past.saved.trails.MNQ.stop, 21502);
+  assert.ok(recs2.some((x, i) => i > 0 && x.restingStop === 21502 && recs2[i - 1].restingStop === 21490), 'recorded from the confirmed read in the same pass');
+  // Still looser after the re-send: reported as read, with an error, never as the target.
+  const stuck = await trailSim({ tape, exit, record: { targetTicks: 80 }, until: et(10, 9), modifyHook: (price, s) => { s.set(21495); return true; } });
+  assert.strictEqual(stuck.events.find(e => e.kind === 'stop_moved').to, 21495);
+  assert.ok(stuck.logs.some(l => /ERROR .*the stop still reads 21495, looser than 21500\.5/.test(l)), stuck.logs.join('\n'));
 });
 
 test('a managed cycle\'s STOP line is recorded every cycle (stated, reason, tighter or not); none is a process failure read as hold, never a blocked cycle', async () => {

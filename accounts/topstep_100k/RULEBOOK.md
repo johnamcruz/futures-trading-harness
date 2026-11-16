@@ -164,12 +164,18 @@ each trade from its recorded path, prop/attempts.js exitAs):
   | the same bar closing at 21500.25 | +1.000R | 21500.50 | out at the close 21500.25: +1 tick, +$0.50 a micro |
   | high 21520.00 (the target) | +2.000R | 21505.00 (the target's R less `lock_giveback_r`) | +19 ticks, +$9.50 a micro |
 
-  Measured before it shipped (docs: the entry/exit study and its
-  independent review, 2026-11-15; post hoc, the lock value chosen after
-  both halves were read): on today's mechanical entries the trades that
-  reached +1R and closed red fell from 70 / 86 to 7 / 11 (tuning /
-  hold-out), the 30-session pass rate moved 11.9% / 9.0% -> 6.6% / 9.6%,
-  and trades of +4R or more 6.5% / 5.1% -> 5.5% / 3.5%. `warning_giveback_r`
+  Measured with the built code before it shipped (paired, the same entries
+  and fills; tuning / hold-out; the lock value was chosen post hoc on the
+  study, so this is not a confirmation): on today's mechanical entries the
+  trades that reached +1R and closed red fell from 71 / 93 to 7 / 11; the
+  30-session pass rate 11.9% / 9.0% -> 6.9% / 8.3% (paired -5.1 points,
+  90% {-10.2, -0.4}, and -1.2, {-5.8, +3.0}); trades of +4R or more
+  6.5% / 5.1% -> 5.5% / 3.8%. On the model's own entries of the arm-B run
+  (52, all tuning) the R fell from 45.2 to 23.9 (paired -0.41R a trade,
+  90% {-0.76, -0.10}): the lock scratched runners that came back to the
+  entry before running. At 3 ticks of stop slippage every lock exit is a
+  loss. The owner's call to keep it, with these numbers.
+  `warning_giveback_r`
   (0.5, taught, no code moves a stop by it) is the stop the model may
   tighten to on a warning (`manage-position`): that many R behind the best
   price; the open trade's manage read shows the level each cycle.

@@ -699,7 +699,7 @@ function evaluateModify({ input = {}, config, strategies = null, now = new Date(
   // Hard rule (never skippable): the position's resting stop moves toward the market only. The runner records the stop
   // order's id and the price it confirmed from the broker's read (resting-stop.js); a stop price looser than that is
   // refused here with local state only, whatever the reason says. No record: the gateway judges it (modify-protection).
-  const looser = modifyStopRefusal({ home: config && config.home, input });
+  const looser = modifyStopRefusal({ home: config && config.home, input, now });
   if (looser) violations.push({ check: 'modify-stop', message: looser });
   return { intent: 'modify', violations };
 }

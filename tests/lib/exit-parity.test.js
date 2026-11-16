@@ -78,7 +78,7 @@ function viaBracketExit({ bars, i, sign, entry, plan }) {
  * The live runner on a fake broker that publishes the bars as they close, fills the resting stop as the simulators do
  * (the first bar through it: at it, or a worse open, less a tick) and fills a market close at the last closed bar's close.
  */
-async function viaRunner({ bars, i, sign, entry }) {
+async function viaRunner({ bars, i, sign, entry, everyBars = 1 }) {
   const clockRef = { t: FILL_AT - 3000 };
   let stopPrice = entry - sign * STOP_TICKS * TICK;
   let flat = null; // { bar, price }
@@ -122,7 +122,8 @@ async function viaRunner({ bars, i, sign, entry }) {
     scanLog: () => {}, event: () => {}, log: () => {},
   });
   const until = bars[bars.length - 1].ms + STEP + 60000;
-  while (clockRef.t < until && !flat) { const ms = await runner.step(); clockRef.t += Math.max(1000, ms); }
+  // everyBars > 1: a pass that sees several closed bars at once (a slow cycle), as live can.
+  while (clockRef.t < until && !flat) { const ms = await runner.step(); clockRef.t += Math.max(1000, ms) + (everyBars - 1) * STEP; }
   settle();
   return { bar: flat ? flat.bar : null, price: flat ? flat.price : null, stops: modified };
 }
@@ -226,6 +227,17 @@ test('parity: seeded random paths with 15m swings and gaps, long and short: the 
   }
   // The paths exercise the rule, not only the original stop.
   assert.ok(locked >= 6 && armed >= 3, `locked ${locked}, armed ${armed}, structure stops ${structure}`);
+});
+
+test('a pass applying the lock bar and the next together (a slow cycle): the runner is never more optimistic than the simulators (its stop was not resting yet: out at market)', async () => {
+  const history = flatHistory(40);
+  const path = [{ o: 21500, h: 21503, l: 21496, c: 21501 }, { o: 21501, h: 21510, l: 21497, c: 21508 }, { o: 21508, h: 21509, l: 21495, c: 21496 }, { o: 21496, h: 21497, l: 21494, c: 21495 }];
+  const bars = barsOf(history, path);
+  const plan = exitPlan({ risk: { min_rr: 2 }, exit: EXIT });
+  const sim = viaSimBroker({ bars, i: 40, sign: 1, entry: 21500, plan, swings: swingSeries(bars, 15) });
+  const slow = await viaRunner({ bars, i: 40, sign: 1, entry: 21500, everyBars: 2 });
+  assert.strictEqual(sim.price, 21500.25, 'the simulators: the lock rested and filled');
+  assert.ok(slow.price !== null && slow.price <= sim.price, `the slow runner ${slow.price} vs the simulators ${sim.price}`);
 });
 
 test('parity guard: the four callers share the slippage the vectors assume', () => {

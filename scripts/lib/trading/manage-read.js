@@ -36,6 +36,9 @@ function manageRead({ side, entry, risk, stop, openedAt, bars, base, tick, exit 
   const best = s > 0 ? Math.max(...since.map(b => b.h)) : Math.min(...since.map(b => b.l));
   const working = Number.isFinite(stop) ? stop : null;
   const tighter = x => working === null || s * (x - working) > 0; // both on the tick grid: by a tick or more
+  // A level at or past the last close is no stop to rest: a modify there would fill at once (or be refused).
+  const lastClose = since[since.length - 1].c;
+  const past = x => s * (lastClose - x) <= 0;
   const bestR = R(best);
 
   const a = exit || {};
@@ -54,12 +57,12 @@ function manageRead({ side, entry, risk, stop, openedAt, bars, base, tick, exit 
     const p = protectedOf(cs, lastWay);
     if (p) {
       const at = snapStop(p.level - s * tick, s, tick);
-      bos = { level: p.level, broken: Boolean(p.brokenAt), stop: at, tighter: !p.brokenAt && tighter(at) };
+      bos = { level: p.level, broken: Boolean(p.brokenAt), stop: at, tighter: !p.brokenAt && tighter(at) && !past(at), past: past(at) };
     }
   }
   const choch = last && last.kind === 'CHoCH' && last.direction !== way ? { level: last.level, at: last.at } : null;
   const give = Number.isFinite(a.warningGivebackR) ? snapStop(best - s * a.warningGivebackR * risk, s, tick) : null;
-  const warning = give !== null ? { r: a.warningGivebackR, stop: give, tighter: tighter(give) } : null;
+  const warning = give !== null ? { r: a.warningGivebackR, stop: give, tighter: tighter(give) && !past(give), past: past(give) } : null;
   return { side, tf: label(FRAME), working, workingR: R(working), best, bestR, lock, bos, choch, warning, unavailable: c.unavailable ? `${label(FRAME)}: ${c.unavailable}` : null };
 }
 
@@ -67,11 +70,11 @@ const sR = x => (x === null ? '?' : `${x >= 0 ? '+' : ''}${x}R`);
 
 function manageReadLine(m, { level = r2 } = {}) {
   if (!m || (m.unavailable && m.best === undefined)) return `Manage read: unavailable (${m ? m.unavailable : 'not computed'}).`;
-  const t = x => (x ? 'tighter than the working stop' : 'not tighter');
+  const t = (x, past) => (past ? 'past the price: no stop to rest there, hold' : x ? 'tighter than the working stop' : 'not tighter');
   const lock = m.lock ? `code floor: from ${sR(m.lock.atR)} the runner holds the stop at ${level(m.lock.stop)} (${m.lock.reached ? 'reached' : 'not reached yet'})` : 'code floor: no early lock';
-  const bos = m.bos ? `${m.tf} BOS ${m.side === 'long' ? 'up' : 'down'} since entry: protected swing ${level(m.bos.level)} ${m.bos.broken ? 'BROKEN by a close' : `holds, stop beyond it ${level(m.bos.stop)} (${t(m.bos.tighter)})`}` : `${m.tf} BOS the trade's way since entry: none`;
+  const bos = m.bos ? `${m.tf} BOS ${m.side === 'long' ? 'up' : 'down'} since entry: protected swing ${level(m.bos.level)} ${m.bos.broken ? 'BROKEN by a close' : `holds, stop beyond it ${level(m.bos.stop)} (${t(m.bos.tighter, m.bos.past)})`}` : `${m.tf} BOS the trade's way since entry: none`;
   const choch = m.choch ? `${m.tf} CHoCH against since entry: through ${level(m.choch.level)}` : `${m.tf} CHoCH against since entry: none`;
-  const warn = m.warning ? `warning giveback (${m.warning.r}R behind the best): ${level(m.warning.stop)} (${t(m.warning.tighter)})` : 'warning giveback: none set';
+  const warn = m.warning ? `warning giveback (${m.warning.r}R behind the best): ${level(m.warning.stop)} (${t(m.warning.tighter, m.warning.past)})` : 'warning giveback: none set';
   return `Manage read (answer every cycle with one line "STOP <price|hold>: <reason>"; modify_order only when tighter): working stop ${m.working === null ? 'NONE' : `${level(m.working)} (${sR(m.workingR)})`}; best ${level(m.best)} (${sR(m.bestR)}); ${lock}; ${bos}; ${choch}; ${warn}${m.unavailable ? `; ${m.unavailable}` : ''}.`;
 }
 

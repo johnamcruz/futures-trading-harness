@@ -27,9 +27,9 @@ const opened = new Date(T0 + 3 * 15 * 60000).toISOString(); // filled at c3's op
 test('manageRead: a 15m BOS the trade\'s way since entry gives its protected swing and the stop a tick beyond; the lock and the warning giveback are levels', () => {
   const m = manageRead({ side: 'long', entry: 106, risk: 10, stop: 96, openedAt: opened, bars: bars15(UP), base: 3, tick: 0.25, exit: EXIT });
   assert.deepStrictEqual([m.best, m.bestR, m.workingR], [110, 0.4, -1]);
-  assert.deepStrictEqual(m.bos, { level: 100, broken: false, stop: 99.75, tighter: true });
+  assert.deepStrictEqual(m.bos, { level: 100, broken: false, stop: 99.75, tighter: true, past: false });
   assert.deepStrictEqual(m.lock, { atR: 1, stop: 106.5, reached: false });
-  assert.deepStrictEqual(m.warning, { r: 0.5, stop: 105, tighter: true });
+  assert.deepStrictEqual(m.warning, { r: 0.5, stop: 105, tighter: true, past: false });
   assert.strictEqual(m.choch, null);
   const line = manageReadLine(m);
   assert.match(line, /STOP <price\|hold>: <reason>/);
@@ -39,6 +39,10 @@ test('manageRead: a 15m BOS the trade\'s way since entry gives its protected swi
   // A working stop already past them: not tighter (by less than a tick counts as not).
   const past = manageRead({ side: 'long', entry: 106, risk: 10, stop: 105, openedAt: opened, bars: bars15(UP), base: 3, tick: 0.25, exit: EXIT });
   assert.deepStrictEqual([past.bos.tighter, past.warning.tighter], [false, false]);
+  // A level at or past the last close is no stop to rest: said so, never 'tighter' (the warning giveback after a deep pullback).
+  const deep = manageRead({ side: 'long', entry: 106, risk: 2, stop: 96, openedAt: opened, bars: bars15(UP), base: 3, tick: 0.25, exit: EXIT });
+  assert.deepStrictEqual([deep.warning.stop, deep.warning.past, deep.warning.tighter], [109, true, false], 'best 110 - 0.5 x 2 = 109, snapped 109; last close 109');
+  assert.match(manageReadLine(deep), /past the price: no stop to rest there, hold/);
   // Filled after the break: no BOS since entry.
   const late = manageRead({ side: 'long', entry: 109, risk: 10, stop: 99, openedAt: new Date(T0 + 7 * 15 * 60000).toISOString(), bars: bars15([...UP, [109, 111, 108, 110]]), base: 3, tick: 0.25, exit: EXIT });
   assert.strictEqual(late.bos, null);
@@ -51,7 +55,7 @@ test('manageRead: a 15m BOS the trade\'s way since entry gives its protected swi
 test('manageRead: the short mirror; a CHoCH against since entry is shown; unavailable inputs say why', () => {
   const f = x => 200 - x;
   const m = manageRead({ side: 'short', entry: 94, risk: 10, stop: 104, openedAt: opened, bars: bars15(UP, f), base: 3, tick: 0.25, exit: EXIT });
-  assert.deepStrictEqual(m.bos, { level: 100, broken: false, stop: 100.25, tighter: true });
+  assert.deepStrictEqual(m.bos, { level: 100, broken: false, stop: 100.25, tighter: true, past: false });
   assert.deepStrictEqual(m.warning.stop, 95);
   // Then a close back under the protected low (99): a CHoCH down against the long, the protected swing broken.
   const turned = [...UP, [109, 109, 101, 103], [103, 104, 98, 99]];
