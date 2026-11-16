@@ -18,15 +18,24 @@
  *     tools listed up front never makes that call; a step left with no text and no call is dropped;
  *   - the CLI's own message mid-turn (a hook's feedback: a user event marked isSynthetic, text blocks only) is a user
  *     message, its text byte for byte;
- *   - null: an event or block of a kind it doesn't know, any other user message that isn't only tool results, a call without its id, name or result, a repeated call id, a result for no open call, a result with
- *     another block (an image), a run that ended in an error result or without a result event, or a turn that doesn't
- *     end in text.
- * A resumed or forked session (`--resume`, `--continue`, `--fork-session` in the record's argv, or a SessionStart hook
- * of a resume or fork in its stream) continues a history the cycle record doesn't hold: no turn (resumedSession).
+ *   - null: an event, block or system subtype of a kind it doesn't know (SYSTEM_SUBTYPES: a compacted history is not
+ *     one), any other user message that isn't only tool results, a call without its id, name, object input or result,
+ *     a repeated call id, a result for no open call, a result with another block (an image), an assistant event the
+ *     CLI wrote itself (an API error: isApiErrorMessage, an error, a synthetic message) or one cut off (max_tokens), a
+ *     run that ended in an error result, without a result event or not at end_turn, an event after the result, or a
+ *     turn that doesn't end in text.
+ * A call's result is its text: an error result's text too (the chat format has no error flag; opencode's errors are
+ * read the same way), text blocks joined with a newline (transcript.js resultText, as opencode's are).
+ * A resumed or forked session (`--resume`, `--continue`, `--fork-session`, `--from-pr` in the record's argv, or a
+ * SessionStart hook of a resume or fork in its stream) continues a history the cycle record doesn't hold: no turn
+ * (resumedSession). The context the session's start hooks gave the model (sessionContext: each SessionStart hook's plain
+ * text output, the account and lessons briefing) is a user message before the cycle prompt; a hook that failed, or
+ * printed JSON (its context injected in a form not recorded), gives no turn.
  *
  *   isClaudeStream(events)                 a Claude Code stream-json run (its init event and session ids)
  *   resumedSession(doc, events)            why the turn continues a session the record doesn't hold, or null
  *   claudeHeadMessages(events)             { messages, omitted } of the head trader's turn after its prompt, or null
+ *   sessionContext(events)                 { texts } of its SessionStart hooks' output, in order, or { error }
  *   appendedSystemPrompt(doc, home)        { prompt } of the file the run appended to the system prompt
  *                                          (--append-system-prompt-file, read from <home>/<its folder>/<its name>,
  *                                          its content checked against the sha256 its name carries), { none: true }
@@ -39,7 +48,10 @@ const path = require('path');
 
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 const EVENT_TYPES = new Set(['system', 'assistant', 'user', 'result', 'rate_limit_event', 'stream_event']);
-const RESUME_FLAGS = new Set(['--resume', '-r', '--continue', '-c', '--fork-session']);
+const RESUME_FLAGS = new Set(['--resume', '-r', '--continue', '-c', '--fork-session', '--from-pr']);
+// The CLI's system events the turn may hold: the session's start, its hooks, progress and retries (none the model reads,
+// the start hooks' output read by sessionContext). Any other (a compacted history) gives no turn.
+const SYSTEM_SUBTYPES = new Set(['init', 'hook_started', 'hook_response', 'thinking_tokens', 'notification', 'task_started', 'task_progress', 'task_updated', 'task_notification', 'api_retry', 'permission_denied']);
 const RESUME_HOOK = /^SessionStart:(resume|fork)\b/;
 
 function isClaudeStream(events) {
@@ -50,7 +62,7 @@ function isClaudeStream(events) {
 
 function resumedSession(doc, events) {
   const argv = isObj(doc) && Array.isArray(doc.argv) ? doc.argv.map(String) : [];
-  const flag = argv.find(a => RESUME_FLAGS.has(a) || a.startsWith('--resume=') || a.startsWith('--session-id'));
+  const flag = argv.find(a => RESUME_FLAGS.has(a) || /^--(resume|from-pr)=/.test(a));
   if (flag) return `the run resumed a session (${flag}): its history is not in the record`;
   const hook = (events || []).find(e => isObj(e) && e.type === 'system' && typeof e.hook_name === 'string' && RESUME_HOOK.test(e.hook_name));
   return hook ? `the run's stream shows a ${hook.hook_name} hook: its history is not in the record` : null;
@@ -88,10 +100,11 @@ function claudeHeadMessages(events) {
   };
   for (const e of events) {
     if (!isObj(e) || e.parent_tool_use_id) continue;
-    if (e.type === 'system' || e.type === 'rate_limit_event' || e.type === 'stream_event') continue;
+    if (e.type === 'system') { if (!SYSTEM_SUBTYPES.has(e.subtype)) return null; continue; }
+    if (e.type === 'rate_limit_event' || e.type === 'stream_event') continue;
     if (ended) return null; // an event after the run's result
     if (e.type === 'result') {
-      if (e.is_error === true || (e.subtype && e.subtype !== 'success') || !flush()) return null;
+      if (e.is_error === true || e.subtype !== 'success' || e.stop_reason !== 'end_turn' || !flush()) return null;
       ended = true;
       continue;
     }
@@ -100,7 +113,8 @@ function claudeHeadMessages(events) {
     if (!isObj(message) || !Array.isArray(message.content)) return null;
     if (e.type === 'assistant') {
       const mid = typeof message.id === 'string' && message.id ? message.id : null;
-      if (!mid) return null;
+      // An event the CLI wrote itself (an API error shown as text) or a message cut off is not the model's turn.
+      if (!mid || e.error || e.isApiErrorMessage || message.model === '<synthetic>' || message.stop_reason === 'max_tokens') return null;
       if (cur && cur.mid !== mid && !flush()) return null;
       cur = cur || { mid, parts: [{ texts: [], calls: [] }] };
       for (const b of message.content) {
@@ -112,9 +126,9 @@ function claudeHeadMessages(events) {
           else part.texts.push(b.text);
         } else if (b.type === 'tool_use') {
           const id = typeof b.id === 'string' && b.id ? b.id : null;
-          if (!id || typeof b.name !== 'string' || !b.name || seen.has(id)) return null;
+          if (!id || typeof b.name !== 'string' || !b.name || !isObj(b.input) || seen.has(id)) return null;
           seen.add(id);
-          const c = { call: { id, type: 'function', function: { name: b.name, arguments: JSON.stringify(isObj(b.input) ? b.input : {}) } }, done: false };
+          const c = { call: { id, type: 'function', function: { name: b.name, arguments: JSON.stringify(b.input) } }, done: false };
           part.calls.push(c);
           open.set(id, c);
         } else return null;
@@ -145,11 +159,23 @@ function claudeHeadMessages(events) {
   return last && last.role === 'assistant' && !last.tool_calls && last.content ? { messages: msgs, omitted } : null;
 }
 
+function sessionContext(events) {
+  const texts = [];
+  for (const e of events || []) {
+    if (!isObj(e) || e.type !== 'system' || e.subtype !== 'hook_response' || e.hook_event !== 'SessionStart') continue;
+    if (e.exit_code !== 0 || e.outcome !== 'success' || typeof e.stdout !== 'string') return { error: `the ${e.hook_name} hook failed or printed nothing readable: the context it gave is unknown` };
+    if (/^\s*[{[]/.test(e.stdout)) return { error: `the ${e.hook_name} hook printed JSON: the context it injected is not recorded as text` };
+    if (e.stdout) texts.push(e.stdout);
+  }
+  return { texts };
+}
+
 const NAMED_SHA = /-([0-9a-f]{64})\.[a-z]+$/;
 function appendedSystemPrompt(doc, home) {
-  const argv = isObj(doc) && Array.isArray(doc.argv) ? doc.argv.map(String) : [];
+  if (!(isObj(doc) && Array.isArray(doc.argv) && doc.argv.length)) return { error: 'the record has no argv: its system prompt is unknown' };
+  const argv = doc.argv.map(String);
   const i = argv.indexOf('--append-system-prompt-file');
-  if (argv.includes('--append-system-prompt') || argv.includes('--system-prompt') || argv.includes('--system-prompt-file')) return { error: 'the run set its system prompt inline: not recorded whole' };
+  if (argv.some(a => /^--(append-system-prompt|system-prompt|system-prompt-file)(=|$)/.test(a) || a.startsWith('--append-system-prompt-file='))) return { error: 'the run set its system prompt another way: not recorded whole' };
   if (i < 0) return { none: true };
   const named = argv[i + 1] || '';
   // Read inside the run home, by the file's folder and name (the record's absolute path is the machine's at run time).
@@ -161,4 +187,4 @@ function appendedSystemPrompt(doc, home) {
   return { prompt: text };
 }
 
-module.exports = { isClaudeStream, resumedSession, claudeHeadMessages, appendedSystemPrompt, resultContent };
+module.exports = { SYSTEM_SUBTYPES, isClaudeStream, resumedSession, claudeHeadMessages, sessionContext, appendedSystemPrompt, resultContent };

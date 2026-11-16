@@ -265,7 +265,7 @@ test('roles: a subagent\'s turns only when named and its claims verified by code
   const src = sourceOf(trainRun(path.join(home, 'a')));
   const named = DS.buildDataset({ train: [src], spec: SPEC, rules: RULES, current: CURRENT, roles: ['fth-head-trader', 'risk-manager'] });
   const meta = lines(named.files['meta.jsonl']);
-  // Two risk-manager replies 'APPROVED' (07 and 10): only the 07 cycle's fact check verified its claims.
+  // Two risk-manager replies (07 and 10): only the 07 cycle's fact check verified its claims, and they are its own.
   assert.strictEqual(meta.filter(m => m.role === 'risk-manager' && m.subagent === true).length, 1);
   assert.ok(meta.filter(m => m.role === 'risk-manager').every(m => m.decision.key.startsWith('2022-03-07')), 'the unverified reply (no fact check) gives no example');
   assert.ok(lines(named.files['step1/train.jsonl']).some(x => x.messages[x.messages.length - 1].content === 'APPROVED'));
@@ -429,9 +429,10 @@ test('a Claude Code run: its head turns are examples (the same chat format, the 
   const built = DS.buildDataset({ train: [sourceOf(r)], spec: SPEC, rules: RULES, current: CURRENT });
   const train = lines(built.files['step1/train.jsonl']);
   assert.strictEqual(train.length, 2);
-  const take = train.find(x => x.messages[1].content === 'CLAUDE-PROMPT-A');
-  assert.deepStrictEqual(take.messages[0], { role: 'system', content: sys });
-  assert.deepStrictEqual(take.messages.slice(2).map(m => m.role), ['assistant', 'tool', 'tool', 'assistant']);
+  const take = train.find(x => x.messages[2].content === 'CLAUDE-PROMPT-A');
+  // The appended system prompt, the session start hook's context, the cycle prompt, then the turn.
+  assert.deepStrictEqual(take.messages.slice(0, 2), [{ role: 'system', content: sys }, { role: 'user', content: '## Trading harness briefing\n' }]);
+  assert.deepStrictEqual(take.messages.slice(3).map(m => m.role), ['assistant', 'tool', 'tool', 'assistant']);
   assert.ok(!built.files['step1/train.jsonl'].includes('CLAUDE-RESUMED'), 'a resumed session: its history is not in the record');
   // The coverage report: per skill, kind and role, the GAPS under the spec's floor.
   const cov = built.dataset.coverage.train;

@@ -29,7 +29,8 @@
  *                     read), when that file holds one; never rebuilt from today's documents
  * A Claude Code run (its stream-json transcript, claude-turns.js) gives the same head turn: its system prompt the file the
  * run appended (--append-system-prompt-file, from the run home, checked against the sha256 its name carries), a deferred
- * tool's schema load left out and counted (`omitted`), a resumed or forked session none (its history isn't recorded);
+ * tool's schema load left out and counted (`omitted`), its SessionStart hooks' context a user message before the
+ * prompt, a resumed or forked session none (its history isn't recorded), a stream with a line that doesn't parse none;
  * the subagents it launched are never faithful (no example).
  * A subagent turn is an example only when `verified` (verifySubagents: a risk-manager reply whose cycle fact check holds
  * one report, every claim true); an analyst's claims are checked by no code, so its turns are never examples.
@@ -134,12 +135,17 @@ function headMessages(events) {
  */
 function claudeRoleTurns(doc, events, home) {
   const CT = require('./claude-turns');
+  // Every line of the record parsed (documents() skips one that doesn't: a lost event is a lost text).
+  const lines = String(doc.transcript || '').split('\n').filter(l => l.trim()).length;
+  const whole = lines === events.length ? null : `${lines - events.length} line(s) of the stream don't parse`;
   const resumed = CT.resumedSession(doc, events);
   const sys = home ? CT.appendedSystemPrompt(doc, home) : { error: 'no run home' };
-  const head = resumed || sys.error ? null : CT.claudeHeadMessages(events);
+  const ctx = CT.sessionContext(events);
+  const why = whole || resumed || sys.error || ctx.error || null;
+  const head = why ? null : CT.claudeHeadMessages(events);
   const turns = [head
-    ? { role: HEAD_ROLE, messages: [...(sys.prompt !== undefined ? [{ role: 'system', content: sys.prompt }] : []), { role: 'user', content: doc.prompt }, ...head.messages], faithful: true, harness: 'claude', omitted: head.omitted }
-    : { role: HEAD_ROLE, messages: null, faithful: false, harness: 'claude', why: resumed || sys.error || 'the stream could not be read whole' }];
+    ? { role: HEAD_ROLE, messages: [...(sys.prompt !== undefined ? [{ role: 'system', content: sys.prompt }] : []), ...ctx.texts.map(t => ({ role: 'user', content: t })), { role: 'user', content: doc.prompt }, ...head.messages], faithful: true, harness: 'claude', omitted: head.omitted }
+    : { role: HEAD_ROLE, messages: null, faithful: false, harness: 'claude', why: why || 'the stream could not be read whole' }];
   for (const e of events) {
     if (e.parent_tool_use_id || e.type !== 'assistant' || !isObj(e.message) || !Array.isArray(e.message.content)) continue;
     for (const b of e.message.content) {
@@ -224,7 +230,7 @@ function statesOf(runDir) {
 /**
  * Marks each subagent turn `verified` only when the code checked its claims: a risk-manager reply, the cycle's one, whose
  * cycle fact check (cycle-log.js factCheck: the phase-2 report's FACTS against the briefing) holds exactly one report
- * with claims, every one checked true. No other role's claims are checked by code (an analyst's read): never verified,
+ * with claims, every one checked true, and that report is the reply's own (its verdict and every claim's text in it). No other role's claims are checked by code (an analyst's read): never verified,
  * so never an example (decision-dataset.js examplesOf).
  */
 const CHECKED_ROLES = Object.freeze(['risk-manager']);
@@ -233,10 +239,17 @@ function verifySubagents(turns, doc) {
   const reports = fc && Array.isArray(fc.reports) ? fc.reports : [];
   const allTrue = reports.length === 1 && isObj(reports[0]) && Array.isArray(reports[0].claims) && reports[0].claims.length > 0
     && reports[0].claims.every(c => isObj(c) && c.check === true) && !reports[0].unavailable && !reports[0].verdictProblem;
+  // The report checked must be this reply's own: its verdict and every claim's text stated in the reply.
+  const own = t => {
+    const reply = Array.isArray(t.messages) && t.messages.length ? t.messages[t.messages.length - 1].content : '';
+    const r = reports[0];
+    return typeof reply === 'string' && typeof r.verdict === 'string' && r.verdict && reply.includes(r.verdict)
+      && r.claims.every(c => typeof c.text === 'string' && c.text && reply.includes(c.text));
+  };
   return turns.map(t => {
     if (!t.subagent) return t;
     const one = turns.filter(x => x.subagent && x.role === t.role).length === 1;
-    return { ...t, verified: Boolean(t.faithful && CHECKED_ROLES.includes(t.role) && one && allTrue) };
+    return { ...t, verified: Boolean(t.faithful && CHECKED_ROLES.includes(t.role) && one && allTrue && own(t)) };
   });
 }
 

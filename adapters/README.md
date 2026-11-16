@@ -89,13 +89,25 @@ reason, and neither is ever trained on.
      - the system prompt is the file the run appended
        (`--append-system-prompt-file`), read from the run home and checked
        against the sha256 in its name;
+     - the session start hooks' context (the account and lessons briefing)
+       is a `user` message before the cycle prompt; a hook that failed or
+       printed JSON gives no example;
      - thinking blocks are left out, as opencode's reasoning is;
      - a deferred tool's schema load (a result of tool references only, no
        text) is left out with its call, and counted;
-     - a hook's message to the model mid-turn is a `user` message;
+     - a hook's message to the model mid-turn is a `user` message (its text
+       as the hook wrote it, local paths included: the dataset stays local);
+     - an error result is its text, with no error flag, as opencode's is;
      - a resumed or forked session (the confirm of prepare-ahead) gives no
        example: its history is in the CLI's session store, not the record;
+     - a stream with a line that doesn't parse, an event the CLI wrote
+       itself (an API error), a cut-off or compacted turn, or a record
+       without its argv gives no example;
      - a subagent it launched gives no example.
+
+     Neither reader holds the CLI's own base system prompt, its project
+     instruction files or the tool definitions: each example is the role's
+     prompt, the context the run recorded, and the turn.
 
      Only the head trader's turns are examples by default, its subagent
      calls and their results kept in its turn. A subagent's own turn (its
@@ -165,12 +177,14 @@ bar a run recorded a briefing for, there is one example per instruction:
     failed reversal), its direction, its invalidation level, and whether it
     is broken.
 - **The completion** is a model's answer only when it is one JSON object with
-  exactly the instruction's keys, every value exactly the truth's
+  exactly the instruction's keys, every value exactly the truth's, written
+  canonically (no repeated key, escape or other number form)
   (`source: model`). Otherwise it is the code-built answer (`source: code`;
   `--no-gold` writes verified answers only).
 - **The truth** is the briefing's own printed facts, the code's output for
-  that bar. It is never an outcome. A bar whose facts can't be read gives no
-  example of that instruction.
+  that bar. It is never an outcome. Only 3m briefings as of their cycle's bar
+  close are read. A bar whose facts can't be read gives no example of that
+  instruction.
 
 Answers come from any model, outside the harness:
 

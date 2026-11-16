@@ -72,7 +72,7 @@ test('claudeHeadMessages: a subagent\'s own events are not the head trader\'s tu
     { type: 'system', subtype: 'init', session_id: 's' },
     { type: 'assistant', message: { id: 'm1', content: [{ type: 'text', text: 'A' }, { type: 'tool_use', id: 't1', name: 'Read', input: { p: 1 } }, { type: 'text', text: 'B' }] }, session_id: 's' },
     { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'R', is_error: true }] }, session_id: 's' },
-    { type: 'result', subtype: 'success', is_error: false, session_id: 's' },
+    { type: 'result', subtype: 'success', is_error: false, stop_reason: 'end_turn', session_id: 's' },
   ];
   assert.deepStrictEqual(CT.claudeHeadMessages(mixed).messages, [
     { role: 'assistant', content: 'A', tool_calls: [{ id: 't1', type: 'function', function: { name: 'Read', arguments: '{"p":1}' } }] },
@@ -93,10 +93,44 @@ test('claudeHeadMessages: a hook\'s feedback mid-turn (isSynthetic, text only) i
   assert.strictEqual(CT.claudeHeadMessages([...evs.slice(0, at), plain, again, evs[at]]), null);
 });
 
+test('claudeHeadMessages: what the CLI wrote itself, a cut-off or compacted turn, an event after the result: null', () => {
+  const evs = events();
+  const at = evs.findIndex(e => e.type === 'result');
+  const finalIdx = evs.findIndex(e => e.type === 'assistant' && e.message.content[0].type === 'text');
+  const patchFinal = f => evs.map((e, i) => (i === finalIdx ? f(e) : e));
+  assert.strictEqual(CT.claudeHeadMessages(patchFinal(e => ({ ...e, isApiErrorMessage: true }))), null, 'an API error shown as text');
+  assert.strictEqual(CT.claudeHeadMessages(patchFinal(e => ({ ...e, message: { ...e.message, model: '<synthetic>' } }))), null, 'a synthetic message');
+  assert.strictEqual(CT.claudeHeadMessages(patchFinal(e => ({ ...e, message: { ...e.message, stop_reason: 'max_tokens' } }))), null, 'cut off');
+  assert.strictEqual(CT.claudeHeadMessages(evs.map(e => (e.type === 'result' ? { ...e, stop_reason: 'max_tokens' } : e))), null, 'the run not at end_turn');
+  assert.strictEqual(CT.claudeHeadMessages([...evs.slice(0, at), { type: 'system', subtype: 'compact_boundary', session_id: 's' }, ...evs.slice(at)]), null, 'a compacted history');
+  assert.ok(CT.claudeHeadMessages([...evs.slice(0, at), { type: 'system', subtype: 'api_retry', session_id: 's' }, ...evs.slice(at)]), 'a retry the model never saw');
+  assert.strictEqual(CT.claudeHeadMessages([...evs, evs[finalIdx]]), null, 'an event after the result');
+  const toolUse = evs.findIndex(e => e.type === 'assistant' && e.message.content[0].id === 'toolu_fx3');
+  assert.strictEqual(CT.claudeHeadMessages(evs.map((e, i) => (i === toolUse ? { ...e, message: { ...e.message, content: [{ ...e.message.content[0], input: 'not an object' }] } } : e))), null, 'a call\'s input not an object');
+  const res = evs.findIndex(e => e.type === 'user' && e.message.content[0].tool_use_id === 'toolu_fx3');
+  assert.strictEqual(CT.claudeHeadMessages(evs.map((e, i) => (i === res ? { ...e, message: { ...e.message, content: [{ ...e.message.content[0], tool_use_id: 'toolu_none' }] } } : e))), null, 'a result for no open call');
+  const load = evs.findIndex(e => e.type === 'user' && e.message.content[0].tool_use_id === 'toolu_fx2');
+  assert.strictEqual(CT.claudeHeadMessages(evs.map((e, i) => (i === load ? { ...e, message: { ...e.message, content: [{ ...e.message.content[0], content: [...e.message.content[0].content, { type: 'text', text: 'x' }] }] } } : e))), null, 'a schema load mixed with text');
+  const hook = { type: 'user', message: { role: 'user', content: [{ type: 'text', text: 'feedback' }] }, isSynthetic: true, session_id: 's' };
+  assert.strictEqual(CT.claudeHeadMessages([...evs.slice(0, res), hook, ...evs.slice(res)]), null, 'a hook message while a call is open');
+});
+
+test('sessionContext: the SessionStart hooks\' plain text output, in order; a failed or JSON hook is an error', () => {
+  assert.deepStrictEqual(CT.sessionContext(events()), { texts: ['## Trading harness briefing\n'] });
+  assert.deepStrictEqual(CT.sessionContext([]), { texts: [] });
+  const h = o => [{ type: 'system', subtype: 'hook_response', hook_event: 'SessionStart', hook_name: 'SessionStart:startup', exit_code: 0, outcome: 'success', stdout: 'ctx', ...o }];
+  assert.match(CT.sessionContext(h({ outcome: 'error' })).error, /failed/);
+  assert.match(CT.sessionContext(h({ stdout: ' [1]' })).error, /JSON/);
+  assert.deepStrictEqual(CT.sessionContext(h({ hook_event: 'Stop' })), { texts: [] }, 'another event\'s hook: not the session\'s start');
+});
+
 test('resumedSession: a resumed or forked session continues a history the record doesn\'t hold', () => {
   assert.strictEqual(CT.resumedSession({ argv: ['claude', '-p', 'x'] }, events()), null);
   assert.match(CT.resumedSession({ argv: ['claude', '--resume', 'abc', '--fork-session'] }, events()), /resumed a session \(--resume\)/);
   assert.match(CT.resumedSession({ argv: ['claude', '--continue'] }, []), /--continue/);
+  assert.match(CT.resumedSession({ argv: ['claude', '--resume=abc'] }, []), /--resume=abc/);
+  assert.match(CT.resumedSession({ argv: ['claude', '--from-pr', '12'] }, []), /--from-pr/);
+  assert.strictEqual(CT.resumedSession({ argv: ['claude', '--session-id', 'new'] }, []), null, 'a new session\'s id is not a resume');
   const fork = events().map(e => (e.hook_name ? { ...e, hook_name: 'SessionStart:fork' } : e));
   assert.match(CT.resumedSession({ argv: ['claude'] }, fork), /SessionStart:fork/);
 });
@@ -113,7 +147,10 @@ test('appendedSystemPrompt: the file the run appended, read in the run home and 
   assert.match(CT.appendedSystemPrompt(argv(`/x/head-prompt/claude-head-${'0'.repeat(64)}.md`), home).error, /not in the run home/);
   fs.writeFileSync(path.join(home, 'head-prompt', `claude-head-${sha}.md`), `${text}edited`);
   assert.match(CT.appendedSystemPrompt(argv(`/x/head-prompt/claude-head-${sha}.md`), home).error, /doesn't match/);
-  assert.match(CT.appendedSystemPrompt({ argv: ['claude', '--system-prompt', 'inline'] }, home).error, /inline/);
+  assert.match(CT.appendedSystemPrompt({ argv: ['claude', '--system-prompt', 'inline'] }, home).error, /another way/);
+  assert.match(CT.appendedSystemPrompt({ argv: ['claude', '--system-prompt=inline'] }, home).error, /another way/);
+  assert.match(CT.appendedSystemPrompt({ argv: ['claude', `--append-system-prompt-file=/x/head-prompt/claude-head-${sha}.md`] }, home).error, /another way/);
+  assert.match(CT.appendedSystemPrompt({}, home).error, /no argv/, 'no argv: the system prompt is unknown');
 });
 
 test('roleTurns on a Claude Code record: the head turn with the appended system prompt; resumed, unreadable or a launched subagent: no example', () => {
@@ -126,11 +163,18 @@ test('roleTurns on a Claude Code record: the head turn with the appended system 
   const doc = { prompt: 'CYCLE PROMPT  \r\n', argv, transcript: TEXT };
   const [head] = E.roleTurns(doc, { home });
   assert.strictEqual(head.faithful, true);
-  assert.deepStrictEqual(head.messages.slice(0, 2), [{ role: 'system', content: text }, { role: 'user', content: 'CYCLE PROMPT  \r\n' }]);
+  assert.deepStrictEqual(head.messages.slice(0, 3), [{ role: 'system', content: text }, { role: 'user', content: '## Trading harness briefing\n' }, { role: 'user', content: 'CYCLE PROMPT  \r\n' }]);
   assert.strictEqual(head.omitted, 1);
   assert.strictEqual(E.roleTurns({ ...doc, argv: [...argv, '--resume', 's', '--fork-session'] }, { home })[0].faithful, false, 'resumed');
   assert.strictEqual(E.roleTurns(doc, { home: tmpDir() })[0].faithful, false, 'its system prompt not in the run home');
   assert.strictEqual(E.roleTurns({ ...doc, argv: ['claude'] }, { home })[0].messages[0].role, 'user', 'none appended: no system message');
+  assert.strictEqual(E.roleTurns({ ...doc, argv: undefined }, { home })[0].faithful, false, 'no argv');
+  const lost = TEXT.split('\n').map((l, i) => (i === 12 ? `${l.slice(0, 20)}` : l)).join('\n');
+  assert.match(E.roleTurns({ ...doc, transcript: lost }, { home })[0].why, /don't parse/, 'a corrupt line: its event (maybe a text) lost');
+  const jsonHook = TEXT.split('\n').map(l => (l.includes('"hook_response"') ? JSON.stringify({ ...JSON.parse(l), stdout: '{"hookSpecificOutput":{}}' }) : l)).join('\n');
+  assert.match(E.roleTurns({ ...doc, transcript: jsonHook }, { home })[0].why, /printed JSON/);
+  const failedHook = TEXT.split('\n').map(l => (l.includes('"hook_response"') ? JSON.stringify({ ...JSON.parse(l), exit_code: 1 }) : l)).join('\n');
+  assert.match(E.roleTurns({ ...doc, transcript: failedHook }, { home })[0].why, /failed/);
   const evs = events();
   const at = evs.findIndex(e => e.type === 'result');
   const agent = { type: 'assistant', message: { id: 'msg_a', content: [{ type: 'tool_use', id: 'toolu_a', name: 'Agent', input: { subagent_type: 'risk-manager', prompt: 'check' } }] }, session_id: 's' };
@@ -143,7 +187,7 @@ test('roleTurns on a Claude Code record: the head turn with the appended system 
 });
 
 test('verifySubagents: only a risk-manager reply whose cycle fact check holds one report, every claim true', () => {
-  const sub = { role: 'risk-manager', faithful: true, subagent: true, messages: [] };
+  const sub = { role: 'risk-manager', faithful: true, subagent: true, messages: [{ role: 'user', content: 'check' }, { role: 'assistant', content: 'APPROVED' }] };
   const head = { role: 'fth-head-trader', faithful: true, messages: [] };
   const v = (turns, factCheck) => E.verifySubagents(turns, { factCheck }).filter(t => t.subagent).map(t => t.verified);
   assert.deepStrictEqual(v([head, sub], F.FACTS_TRUE), [true]);
@@ -155,4 +199,8 @@ test('verifySubagents: only a risk-manager reply whose cycle fact check holds on
   assert.deepStrictEqual(v([head, sub, sub], F.FACTS_TRUE), [false, false], 'two replies: which one the report checked is unknown');
   assert.deepStrictEqual(v([head, { ...sub, role: 'market-structure-analyst' }], F.FACTS_TRUE), [false], 'an analyst: no code checks its claims');
   assert.deepStrictEqual(v([head, { ...sub, faithful: false }], F.FACTS_TRUE), [false]);
+  // The report must be this reply's own: a reply that states neither its verdict nor its claims is not verified by it.
+  assert.deepStrictEqual(v([head, { ...sub, messages: [{ role: 'user', content: 'check' }, { role: 'assistant', content: 'phase 1 notes' }] }], F.FACTS_TRUE), [false]);
+  const otherClaim = { reports: [{ ...F.FACTS_TRUE.reports[0], claims: [{ text: 'trend long allowed', check: true }] }] };
+  assert.deepStrictEqual(v([head, sub], otherClaim), [false], 'a claim the reply doesn\'t state');
 });

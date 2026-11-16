@@ -108,3 +108,43 @@ test('goldAnswer: the code-built answer verifies against its own truth; promptOf
   assert.ok(SR.INSTRUCTIONS.structure.includes(`at or after ${SR.RTH_OPEN} ET`));
   assert.throws(() => SR.promptOf('no header', 'sequence'), /names its symbol/);
 });
+
+test('review fixes: only a 3m lane; a CISD displacement it can\'t read; the answer\'s text must be canonical; asOf', () => {
+  const oneMin = briefing().replace(/\nBar briefing MNQ 3m,/, '\nBar briefing MNQ 1m,');
+  assert.deepStrictEqual(SR.truthOf(oneMin), { structure: null, sequence: null, case: null, regime: null }, 'a 1m lane prints its own bars under [m3]');
+  assert.strictEqual(SR.truthOf(briefing({ cisd3: { dir: 'bullish', level: 1 } })).structure, null, 'no displacement printed: not guessed weak');
+  const truth = SR.truthOf(briefing()).sequence;
+  const ok = JSON.stringify(truth);
+  assert.strictEqual(SR.verifyAnswer(JSON.stringify(truth, null, 2), 'sequence', truth).ok, true, 'whitespace outside strings');
+  const dup = ok.replace('{', '{"seq":"continuation",');
+  assert.strictEqual(SR.verifyAnswer(dup, 'sequence', truth).ok, false, 'a repeated key (JSON.parse keeps the last)');
+  assert.strictEqual(SR.verifyAnswer(ok.replace('13990.25', '1.399025e4'), 'sequence', truth).ok, false, 'a number written another way');
+  assert.strictEqual(SR.verifyAnswer(ok.replace('13990.25', '13990.2500000000000001'), 'sequence', truth).ok, false);
+  assert.strictEqual(SR.verifyAnswer(ok.replace('"up"', '"\\u0075p"'), 'sequence', truth).ok, false, 'an escaped character');
+  assert.strictEqual(SR.verifyAnswer(`\uFEFF${ok}`, 'sequence', truth).ok, false, 'a BOM');
+  assert.strictEqual(SR.asOf(briefing({ t: '2022-03-07T15:00:00.000Z' })), '2022-03-07T15:00:00.000Z');
+  assert.strictEqual(SR.asOf('no header'), null);
+});
+
+test('truthOf reads the briefing code\'s own output (the golden 3m views): every field readable, values the instruction allows', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const views = fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'golden', 'views-MNQ-3m.txt'), 'utf8');
+  // The golden views print the briefing's body; the cycle's header and end lines wrap it as the runner's prompt does.
+  const bodies = views.split('\n--- bar_briefing ---\n').slice(1).map(b => b.split(/\n(?:=== |--- )/)[0]);
+  assert.ok(bodies.length >= 3);
+  const allowed = { b3_last: /^(BOS|CHoCH) (up|down)$|^none$/, cisd3: /^(bullish|bearish) (strong|weak)$|^none$/, pullback: /^(yes|no)$/, guard15: /^(yes|no)$/ };
+  let read = 0;
+  for (const body of bodies) {
+    const b = `--- bar_briefing {"symbol":"MNQ"} as of 2026-04-24T04:48:00.000Z ---\n${body}\n--- end of bar_briefing {"symbol":"MNQ"} (sha256 x) ---\n`;
+    const t = SR.truthOf(b);
+    assert.ok(t.sequence, 'the sequence truth');
+    if (!t.structure) continue;
+    read += 1;
+    for (const [f, re] of Object.entries(allowed)) assert.match(String(t.structure[f]), re, f);
+    assert.ok(typeof t.structure.prot_price === 'number' || t.structure.prot_price === 'none');
+  }
+  assert.ok(read >= 1, 'at least one golden briefing reads whole');
+  const oneMin = fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'golden', 'views-MNQ-1m.txt'), 'utf8').split('\n--- bar_briefing ---\n')[1].split(/\n(?:=== |--- )/)[0];
+  assert.strictEqual(SR.truthOf(`--- bar_briefing {"symbol":"MNQ"} as of x ---\n${oneMin}\n`).sequence, null, 'the 1m lane refused');
+});

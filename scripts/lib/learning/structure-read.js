@@ -14,7 +14,7 @@
  *   sequence   the owner's structure table: what the 3m last break with the one before it means (continuation, potential
  *              reversal, confirmed reversal, failed reversal), its direction, the price whose close invalidates it, and
  *              whether a close has
- * Every field is total: a briefing that doesn't print a fact has its stated "none" (a bar whose fact is printed but
+ * Only a 3m lane's briefing is read (its second line names 3m). Every field is total: a briefing that doesn't print a fact has its stated "none" (a bar whose fact is printed but
  * can't be read, such as a pullback without its depth, gives no example of that instruction). An answer verifies only
  * when it is one JSON object and nothing else, with exactly the instruction's keys, each value exactly the truth's
  * (a number as a JSON number, equal; a word as written in the instruction): what is trained on is its text, so a close
@@ -29,6 +29,7 @@
  *   truthOf(briefing)                     { structure, sequence, case, regime } (an instruction's truth null when a printed
  *                                         fact can't be read)
  *   symbolOf(briefing)                    the symbol its first line names, or null
+ *   asOf(briefing)                        the time its first line says it is as of (ISO), or null
  *   promptOf(briefing, kind)              the user prompt: the briefing, a blank line, the instruction (its symbol)
  *   verifyAnswer(text, kind, truth)       { ok, wrong: [field], why }
  *   goldAnswer(kind, truth)               the code-built answer's text (one JSON object, the fields in order)
@@ -110,7 +111,8 @@ function jsonLine(sec, key) {
 }
 const line = (text, re) => (text.match(re) || [])[0] || null;
 const brk = x => (isObj(x) && (x.kind === 'BOS' || x.kind === 'CHoCH') && (x.direction === 'up' || x.direction === 'down') ? `${x.kind} ${x.direction}` : 'none');
-const cis = x => (isObj(x) && (x.dir === 'bullish' || x.dir === 'bearish') ? `${x.dir} ${x.displacement === 'strong' ? 'strong' : 'weak'}` : 'none');
+// A CISD whose displacement is neither strong nor weak can't be read (null: no truth), never guessed weak.
+const cis = x => (isObj(x) && (x.dir === 'bullish' || x.dir === 'bearish') ? (['strong', 'weak'].includes(x.displacement) ? `${x.dir} ${x.displacement}` : null) : 'none');
 const today = k => typeof k === 'string' && /^\d\d:\d\d$/.test(k) && k >= RTH_OPEN;
 
 function sequenceOf(lb) {
@@ -128,6 +130,8 @@ function sequenceOf(lb) {
 
 function truthOf(briefing) {
   const t = typeof briefing === 'string' ? briefing : '';
+  // Only a 3m lane's briefing: another lane prints its own bars under the [m3] tag, and the instructions say 3-minute.
+  if (!/\nBar briefing \S+ 3m,/.test(t)) return { structure: null, sequence: null, case: null, regime: null };
   const m3 = section(t, 'm3');
   const m15 = section(t, 'm15');
   const lb = jsonLine(m3, 'lastBreak');
@@ -177,13 +181,37 @@ function promptOf(briefing, kind) {
   return `${briefing}\n\n${INSTRUCTIONS[kind].replace('a bar briefing for MNQ', `a bar briefing for ${symbol}`)}`;
 }
 
+/** A JSON text without the whitespace outside its strings. */
+function minified(text) {
+  let out = '';
+  let inStr = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (inStr) {
+      out += ch;
+      if (ch === '\\') { out += text[i + 1] || ''; i += 1; } else if (ch === '"') inStr = false;
+    } else if (ch === '"') { inStr = true; out += ch; } else if (!/\s/.test(ch)) out += ch;
+  }
+  return out;
+}
+
+/** The time the briefing is as of (its first line's), as ISO, or null. */
+function asOf(briefing) {
+  const m = String(briefing || '').match(/^--- bar_briefing [^\n]*? as of (\S+) ---/);
+  return m && Number.isFinite(Date.parse(m[1])) ? new Date(m[1]).toISOString() : null;
+}
+
 function verifyAnswer(text, kind, truth) {
   const fields = FIELDS[kind];
   if (!fields) throw new Error(`no structure-read instruction "${kind}"`);
   if (!isObj(truth)) return { ok: false, wrong: [], why: 'no truth for the bar' };
   let a;
-  try { a = JSON.parse(String(text).trim()); } catch (_err) { return { ok: false, wrong: [], why: 'not one JSON object and nothing else' }; }
+  const body = String(text).trim();
+  try { a = JSON.parse(body); } catch (_err) { return { ok: false, wrong: [], why: 'not one JSON object and nothing else' }; }
   if (!isObj(a)) return { ok: false, wrong: [], why: 'not one JSON object' };
+  // What is trained on is the text: it must be the object's own canonical text (whitespace aside), so a repeated key,
+  // an escaped character, a BOM or a number written another way (1.399025e4) is not kept.
+  if (/\uFEFF/.test(String(text)) || minified(body) !== JSON.stringify(a)) return { ok: false, wrong: [], why: 'not written canonically (a repeated key, an escape or a number written another way)' };
   const keys = Object.keys(a);
   if (keys.length !== fields.length || !fields.every(f => keys.includes(f))) return { ok: false, wrong: [], why: `its keys aren't exactly ${fields.join(', ')}` };
   const wrong = fields.filter(f => a[f] !== truth[f]);
@@ -195,4 +223,4 @@ function goldAnswer(kind, truth) {
   return JSON.stringify(Object.fromEntries(FIELDS[kind].map(f => [f, truth[f]])));
 }
 
-module.exports = { KINDS, INSTRUCTIONS, FIELDS, RTH_OPEN, briefingOf, symbolOf, truthOf, promptOf, verifyAnswer, goldAnswer, sequenceOf };
+module.exports = { KINDS, INSTRUCTIONS, FIELDS, RTH_OPEN, briefingOf, symbolOf, asOf, truthOf, promptOf, verifyAnswer, goldAnswer, sequenceOf };

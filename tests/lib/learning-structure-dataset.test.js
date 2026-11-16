@@ -175,3 +175,9 @@ test('promptLines and readAnswers: each bar\'s prompts with their ids; a bad ans
   assert.throws(() => SD.readAnswers(['{"id":"x","text":"y"}']), /\{ id/);
   assert.deepStrictEqual([...SD.readAnswers([`{"id":"${'a'.repeat(64)}","text":"y"}\n\n`]).entries()], [['a'.repeat(64), ['y']]]);
 });
+
+test('sourceFromRun: a cycle whose briefing is not as of its bar close is skipped (not that bar\'s read)', () => {
+  const home = tmpDir();
+  const { runDir, bars } = writeRun(home, { extra: [['zz-late.json', { timing: { barClose: '2022-03-07T18:00:00.000Z' }, prompt: briefing({ t: '2022-03-07T18:03:00.000Z' }) }]] });
+  assert.strictEqual(SD.sourceFromRun(runDir).bars.length, bars.length);
+});

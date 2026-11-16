@@ -66,7 +66,8 @@ function writeRun(home, { runId = 'r1', start, end, decisions, states = null, do
   return { runDir, records, score: () => records };
 }
 
-// The cycle's fact check of one phase-2 report, every claim true (decision-examples.js verifySubagents).
-const FACTS_TRUE = Object.freeze({ reports: [{ verdict: 'APPROVE', claims: [{ type: 'trend', text: 'trend long allowed', check: true }], unavailable: null, verdictProblem: null }], counts: { reports: 1, claims: 1, true: 1, false: 0, unchecked: 0 } });
+// The cycle's fact check of one phase-2 report, every claim true (decision-examples.js verifySubagents), stated in the
+// fixture's risk-manager reply 'APPROVED' (its verdict and its one claim's text), so the report is that reply's own.
+const FACTS_TRUE = Object.freeze({ reports: [{ verdict: 'APPROVE', claims: [{ type: 'verdict', text: 'APPROVED', check: true }], unavailable: null, verdictProblem: null }], counts: { reports: 1, claims: 1, true: 1, false: 0, unchecked: 0 } });
 
 module.exports = { SYSTEM, DOCS, CODE, EXIT, FACTS_TRUE, transcript, writeRun };

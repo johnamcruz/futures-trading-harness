@@ -26,6 +26,7 @@
  *
  *   FORMAT, DATA_FILES
  *   sourceFromRun(runDir)                         { runId, start, end, configHash, digest: { code }, bars: [{ t, day, symbol, briefing }] }
+ *                                                 (a cycle whose briefing isn't as of its bar close is skipped)
  *   promptLines(sources)                          [{ id, kind, runId, t, prompt }] (one per bar and instruction)
  *   readAnswers(texts)                            Map id -> [text] from answers JSONL texts (a bad line throws)
  *   buildStructureDataset({ train, validate, spec, current, include, answers, gold })   { files, dataset }
@@ -68,7 +69,8 @@ function sourceFromRun(runDir) {
     const t = isObj(doc) && isObj(doc.timing) && typeof doc.timing.barClose === 'string' ? doc.timing.barClose : null;
     const briefing = isObj(doc) ? SR.briefingOf(doc.prompt) : null;
     const symbol = briefing ? SR.symbolOf(briefing) : null;
-    if (!t || !briefing || !symbol || !Number.isFinite(Date.parse(t))) continue;
+    // The briefing must be the bar's: as of the cycle's bar close (a briefing of another bar is not this bar's read).
+    if (!t || !briefing || !symbol || !Number.isFinite(Date.parse(t)) || SR.asOf(briefing) !== new Date(t).toISOString()) continue;
     const key = `${new Date(t).toISOString()}|${symbol}`;
     if (seen.has(key)) continue;
     seen.add(key);
