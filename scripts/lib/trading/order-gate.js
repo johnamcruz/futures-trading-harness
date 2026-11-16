@@ -28,6 +28,7 @@ const { feePerSide } = require('./accounts');
 const { checkTrend } = require('./mtf-state');
 const { checkTrigger, retiredLaneRefusal, retiredLaneRefusalAny, signalMaxAgeMin } = require('./signal-state');
 const { readBriefing } = require('./briefing');
+const { modifyStopRefusal } = require('./resting-stop');
 const { checkSkillsLoaded, checkSkillsAtEntry, REQUIRED_FOR_ENTRY, REQUIRED_FOR_COMPOSED, SITUATIONAL, situationalSkills, headSituationalSkills, loadedSkills, claudeLookupsInTranscript, parseTrigger } = require('./skills-loaded');
 const { checkRolesRan, approvedPhase2, sizeRefusal, approvedSize } = require('./roles-ran');
 const { readHeadSkills } = require('./runner-roles');
@@ -695,6 +696,11 @@ function evaluateModify({ input = {}, config, strategies = null, now = new Date(
     const why = policyRuleRefusal({ home: config.home, root, side: { buy: 'long', sell: 'short' }[String(entry.side || '').toLowerCase()] || null, cycleBar: briefingBarOf(config, root), now, rule: entryRuleOf(named.entry), name: named.name });
     if (why) violations.push({ check: 'entry-rule', message: `order ${input.orderId} is a working ${why}` });
   }
+  // Hard rule (never skippable): the position's resting stop moves toward the market only. The runner records the stop
+  // order's id and the price it confirmed from the broker's read (resting-stop.js); a stop price looser than that is
+  // refused here with local state only, whatever the reason says. No record: the gateway judges it (modify-protection).
+  const looser = modifyStopRefusal({ home: config && config.home, input });
+  if (looser) violations.push({ check: 'modify-stop', message: looser });
   return { intent: 'modify', violations };
 }
 

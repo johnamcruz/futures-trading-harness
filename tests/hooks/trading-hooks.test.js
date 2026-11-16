@@ -4804,3 +4804,23 @@ test('MCP gateway wiring: an entry whose cycle was served phase 1 from the cache
   assert.doesNotMatch(await session([{ contractId: 'MNQ:2026-12', ...pos }], { broker: [{ contractId: 'MNQ:2026-12', ...pos }] }), /phase1-cache/);
   assert.match(await session([{ contractId: 'MNQ:2026-12', ...pos }], { broker: [{ contractId: 'BRK-77X', ...pos, size: 2 }] }), /\[phase1-cache\][^\n]*positions changed/);
 });
+
+test('order gate (hook): [modify-stop] refuses a modify_order looser than the runner\'s recorded resting stop (skip list or not); tighter and equal go; an [exit] and close_position still go with every local file missing', () => {
+  const RS = require('../../scripts/lib/trading/resting-stop');
+  const { env } = setup([]);
+  RS.recordStop(env.FTH_HOME, { contractId: entryOrder().contractId, sign: 1, stopOrderId: 9, restingStop: 21500.5, at: TEST_NOW });
+  const modify = input => ({ tool_name: 'mcp__broker__modify_order', tool_input: { accountId: 1, orderId: 9, ...input } });
+  const looser = gate(modify({ stopPrice: 21500.25, reason: '[protect] trail' }), { ...env, FTH_ORDER_GATE_SKIP: 'modify-stop,modify-protection' });
+  assert.strictEqual(looser.code, 2, looser.stderr);
+  assert.match(looser.stderr, /\[modify-stop\] stopPrice 21500\.25 is looser than the resting stop 21500\.5/);
+  for (const input of [{ stopPrice: 21500.5 }, { stopPrice: 21512.25, reason: 'STOP 21512.25: protected-swing' }, { orderId: 31, stopPrice: 21000 }]) {
+    const r = gate(modify(input), env);
+    assert.strictEqual(r.code, 0, `${JSON.stringify(input)}: ${r.stderr}`);
+  }
+  // Risk-reducing actions never depend on the local record: with the home emptied they still go.
+  fs.rmSync(env.FTH_HOME, { recursive: true, force: true });
+  for (const p of [orderPayload({ ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' }), { tool_name: 'mcp__broker__close_position', tool_input: { accountId: 1, contractId: entryOrder().contractId } }, modify({ stopPrice: 21510 })]) {
+    const r = gate(p, env);
+    assert.strictEqual(r.code, 0, `${p.tool_name}: ${r.stderr.slice(0, 300)}`);
+  }
+});

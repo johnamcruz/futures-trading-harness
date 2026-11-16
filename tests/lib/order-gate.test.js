@@ -4865,3 +4865,23 @@ test('BG, modify_order: a reprice of a working policy entry is held to BG on thi
     assert.deepStrictEqual(mod(home('down', 'down', 'down', null), input), [], JSON.stringify(input));
   }
 });
+
+test('[modify-stop]: a modify_order looser than the runner\'s confirmed resting stop is refused by the hook, whatever its reason; equal, tighter and unrecorded orders pass; never skippable', () => {
+  const RS = require('../../scripts/lib/trading/resting-stop');
+  const home = require('../helpers').tmpDir();
+  RS.recordStop(home, { contractId: 'MNQ', sign: 1, stopOrderId: 9, restingStop: 21500.5, at: '2026-10-07T14:30:00.000Z' });
+  RS.recordStop(home, { contractId: 'MNQ', sign: -1, stopOrderId: 21, restingStop: 21600, at: '2026-10-07T14:30:00.000Z' });
+  const all = new Set(require('../../scripts/lib/trading/config').GATE_CHECKS || []);
+  const cfg = { ...config, home, skipChecks: new Set([...all, 'modify-stop', 'modify-protection']) };
+  const mod = input => evaluateModify({ input, config: cfg }).violations.map(v => v.check);
+  assert.deepStrictEqual(mod({ orderId: 9, stopPrice: 21500.25, reason: '[protect] trail' }), ['modify-stop'], 'looser by a tick, [protect] or not, every check skipped');
+  assert.deepStrictEqual(mod({ orderId: 9, stopPrice: 21490 }), ['modify-stop']);
+  assert.deepStrictEqual(mod({ orderId: 9, stopPrice: 21500.5 }), [], 'equal: a no-op');
+  assert.deepStrictEqual(mod({ orderId: 9, stopPrice: 21512.25, reason: 'STOP 21512.25: protected-swing' }), [], 'tighter');
+  assert.deepStrictEqual(mod({ orderId: 21, stopPrice: 21600.25 }), ['modify-stop'], 'a short raised');
+  assert.deepStrictEqual(mod({ orderId: 21, stopPrice: 21580 }), []);
+  assert.deepStrictEqual(mod({ orderId: 33, stopPrice: 1 }), [], 'no record: the gateway judges it');
+  assert.match(evaluateModify({ input: { orderId: 9, stopPrice: 21400 }, config: cfg }).violations[0].message, /looser than the resting stop 21500\.5/);
+  // The check reads the record, not the request: a home without the file passes it to the gateway.
+  assert.deepStrictEqual(evaluateModify({ input: { orderId: 9, stopPrice: 1 }, config: { ...config, home: require('../helpers').tmpDir() } }).violations, []);
+});

@@ -169,6 +169,9 @@ function createRunner(deps) {
     // Record the latest price for the gate (trading/late-entry.js recordPrice): (symbol, { price, closedAt, minutes,
     // source }, { now, log }). null: none recorded during cycles.
     recordPrice = null,
+    // Record the position's resting stop as the broker's read confirms it (trading/resting-stop.js recordStop): ({
+    // contractId, sign, stopOrderId, restingStop, at }), for the hook's [modify-stop]. null: none recorded.
+    recordStop = null,
     // The top instincts from the journal's reviews (trading/instincts.js), for the prompt.
     lessons = () => [],
     // The last 10 reviewed trades' outcomes (trading/instincts.js recentTrades), for the prompt.
@@ -731,7 +734,7 @@ function createRunner(deps) {
       }
       save(t);
       if (ok) {
-        const how = [plan.trailActivateR !== null ? `activate ${plan.trailActivateR}R, give back ${plan.trailGivebackR}R` : '', plan.afterTarget ? `past the target ${t.target}: lock at its R less ${plan.afterTarget.lockGivebackR}R${plan.afterTarget.ratchet ? ' (ratchet on: from the best R reached)' : ''}, trail ${plan.afterTarget.trailBy === 'structure' ? `behind a ${plan.afterTarget.swingMinutes}m swing once one confirms beyond the lock (${plan.afterTarget.trailR}R only with no swing in the bars)` : `${plan.afterTarget.trailR}R`}` : '', plan.maxBars ? `time stop ${plan.maxBars} ${strategy.timeframe} bars = ${maxRunnerBars} ${cfg.timeframe}m bars` : ''].filter(Boolean).join('; ');
+        const how = [plan.trailActivateR !== null ? `activate ${plan.trailActivateR}R, give back ${plan.trailGivebackR}R` : '', plan.afterTarget ? `${Number.isFinite(plan.afterTarget.lockAtR) ? `from +${plan.afterTarget.lockAtR}R the stop to the entry plus ${plan.afterTarget.lockToTicks} ticks; ` : ''}past the target ${t.target}: lock at its R less ${plan.afterTarget.lockGivebackR}R${plan.afterTarget.ratchet ? ' (ratchet on: from the best R reached)' : ''}, trail ${plan.afterTarget.trailBy === 'structure' ? `behind a ${plan.afterTarget.swingMinutes}m swing once one confirms beyond the lock (${plan.afterTarget.trailR}R only with no swing in the bars)` : `${plan.afterTarget.trailR}R`}` : '', plan.maxBars ? `time stop ${plan.maxBars} ${strategy.timeframe} bars = ${maxRunnerBars} ${cfg.timeframe}m bars` : ''].filter(Boolean).join('; ');
         log(`${item.symbol}: managing ${rec.setup} ${sign > 0 ? 'long' : 'short'} from ${entry}, 1R = ${risk} (${how})`);
         emit('position_managed', { symbol: item.symbol, contractId: cid, setup: rec.setup, side: sign > 0 ? 'long' : 'short', size: Number(p.size), entry, risk, stop: entry - sign * risk, plan, maxRunnerBars });
       } else if (managed) log(`${item.symbol}: ${rec.setup} position not managed (no trail, no time stop): no usable initial stop (1R ${risk}, needs 4+ ticks)`, 'error');
@@ -766,6 +769,8 @@ function createRunner(deps) {
     // With no working stop nothing rests: the planned stop is a level the
     // price must not go through either.
     const resting = stopOrder ? Number(stopOrder.stopPrice) : protective.length ? t.stop : null;
+    // The resting stop the broker confirms, for the hook's tighten-only check on a model's modify_order ([modify-stop]).
+    if (stopOrder) keepStop(cid, sign, stopOrder.id, resting);
     let peakR = t.peakR;
     let troughR = t.troughR || 0;
     let barsHeld = t.barsHeld || 0;
@@ -851,14 +856,61 @@ function createRunner(deps) {
     try {
       await client.modifyStop(cfg.account, stopOrder.id, target);
     } catch (err) {
+      // Refused because the stop already stands at or past the target (the model's own modify_order tightened it since
+      // this pass read it: the gateway's tighten-only check): benign, the tighter stop is kept, nothing thrown.
+      const now = await workingStop(cid, sign, stopOrder.id);
+      if (now !== null && sign * (now - target) >= 0) {
+        keepStop(cid, sign, stopOrder.id, now);
+        log(`${item.symbol}: trail: the move to ${target} was refused (${err.message}); the stop already stands at ${now}, at or past it: kept`);
+        emit('stop_already_tighter', { symbol: item.symbol, contractId: cid, setup: t.setup, target, working: now });
+        save({ ...trails[item.contractId], stop: now });
+        return;
+      }
       // A refused move ("order not found" or the like) may mean the bracket's stop filled or was cancelled: read the
       // account again at once and, flat, cancel the leftovers now (never a dead order retried every bar).
       await reconcileAfterRefusedMove(item, err);
       throw err;
     }
-    emit('stop_moved', { symbol: item.symbol, contractId: cid, setup: t.setup, from: resting, to: target, peakR, barsHeld });
-    save({ ...trails[item.contractId], stop: target });
-    log(`${item.symbol}: trail: stop ${resting} -> ${target} (peak ${peakR.toFixed(2)}R)`);
+    // Confirmed from a fresh read: a model's tighter modify that landed between the gateway's check and this one (two
+    // gateway processes, check-then-act) may have been overwritten by this looser target, or may stand past it. The
+    // tighter of the two is what stays: a working stop looser than the target is sent the target once more.
+    let confirmed = await workingStop(cid, sign, stopOrder.id);
+    if (confirmed !== null && sign * (confirmed - target) < 0) {
+      log(`${item.symbol}: trail: the stop reads ${confirmed} after the move to ${target}; sending ${target} again`, 'error');
+      try {
+        await client.modifyStop(cfg.account, stopOrder.id, target);
+        confirmed = await workingStop(cid, sign, stopOrder.id);
+      } catch (err) {
+        log(`${item.symbol}: trail: re-sending ${target} failed (${err.message}); the next bar retries`, 'error');
+      }
+    }
+    const final = confirmed !== null && sign * (confirmed - target) > 0 ? confirmed : target;
+    if (confirmed !== null) keepStop(cid, sign, stopOrder.id, confirmed);
+    emit('stop_moved', { symbol: item.symbol, contractId: cid, setup: t.setup, from: resting, to: final, peakR, barsHeld });
+    save({ ...trails[item.contractId], stop: final });
+    log(`${item.symbol}: trail: stop ${resting} -> ${final} (peak ${peakR.toFixed(2)}R)`);
+  }
+
+  /** The working stop order `id`'s price on a fresh account read (null: unreadable, or the order is gone). */
+  async function workingStop(cid, sign, id) {
+    try {
+      const fresh = await client.accountState(cfg.account);
+      const o = (fresh.orders || []).find(x => String(x.id) === String(id) && x.contractId === cid);
+      const px = o ? Number(o.stopPrice) : NaN;
+      return Number.isFinite(px) ? px : null;
+    } catch (_err) {
+      return null;
+    }
+  }
+
+  /** Record the confirmed resting stop for the hook's [modify-stop]; a failed write is logged, never fatal. */
+  function keepStop(cid, sign, id, price) {
+    if (!recordStop || !Number.isFinite(price)) return;
+    try {
+      recordStop({ contractId: cid, sign, stopOrderId: id, restingStop: price, at: clock.now().toISOString() });
+    } catch (err) {
+      log(`resting stop record for ${cid}: ${err.message}`, 'error');
+    }
   }
 
   /**
