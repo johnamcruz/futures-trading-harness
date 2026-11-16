@@ -499,7 +499,7 @@ test('basics skills: examples name existing active strategies (or ones retired o
     const text = read(file(s));
     // As strategies: a briefing field named for the indicator (`m3.trend.supertrend`) is data.
     // A read in compose_check's form (`1h bos up`) is a structure break, not the retired strategy.
-    assert.doesNotMatch(text.replace(/bos-vs-choch/g, '').replace(/\b\d+[mh] (?:bos|choch) (?:up|down)\b/g, ''), /(?<![.\w])(?:bos|keltner|ema_cross|supertrend)\b/, s);
+    assert.doesNotMatch(text.replace(/bos-vs-choch/g, '').replace(/\b\d+[mh] (?:bos|choch) (?:up|down)\b/g, '').replace(/\bstop \d+[mh] (?:bos|cisd) /g, ''), /(?<![.\w])(?:bos|keltner|ema_cross|supertrend)\b/, s);
     for (const m of text.split('## Examples')[1].matchAll(/\b([a-z]+_[a-z0-9_]+|orb)\b (?:long|short)/g)) {
       assert.ok(namedStrategyOk(m[1]), `${s}: ${m[1]}`);
     }

@@ -77,10 +77,24 @@ const code = t => t.replace(/^[ \t]*\/\*[^]*?\*\//gm, ' ').replace(/^[ \t]*\/\/[
 const FIELD_READERS = ['scripts/lib/trading/market-state.js', 'scripts/lib/trading/market-layers.js', 'scripts/lib/trading/structure-layers.js', 'scripts/lib/trading/briefing.js',
   'scripts/lib/learning/recognition/key.js', 'scripts/lib/eval/context-quiz.js', 'scripts/lib/trading/displacement.js', 'scripts/lib/learning/structure-read.js'];
 const DECIDES = /(^hooks\/|^scripts\/hooks\/|gate|gateway|compose|entry-rule|order-plan|decision|verdict|phase2|autotrader|runner)/;
-const fieldsIn = text => STATE_FIELDS.filter(([, re]) => re.test(code(text))).map(([name]) => name);
+// The one exception (feat/entry-exit, DECISIONS M4; the owner, 2026-11-15: "I approve your change for trigger
+// invalidation"): compose's trigger stop
+// (composed-reads.js triggerStopPrices) verifies the price a `stop <tf> bos <price>` read names against the BOS's
+// protected swing level, and turns that stop read FALSE (so the record is refused) when the trigger is stale, broken,
+// a CHoCH or the other way. It reads no class, chop, layer or behavior field; it is opt-in by the stop form the model
+// chooses (the other forms stand), a stop price check as `stop swing low` is. That function's body alone is blanked before the
+// scan; the rest of composed-reads.js names no field, and the function must exist (the exception never outlives it).
+const STOP_PRICE_EXCEPTION = { file: 'scripts/lib/trading/composed-reads.js', fn: 'triggerStopPrices' };
+const withoutException = (f, text) => {
+  if (f !== STOP_PRICE_EXCEPTION.file) return text;
+  const at = text.indexOf(`function ${STOP_PRICE_EXCEPTION.fn}(`);
+  const end = at < 0 ? -1 : text.indexOf('\n}\n', at);
+  return at < 0 || end < 0 ? text : text.slice(0, at) + text.slice(end + 3);
+};
+const fieldsIn = (text, f = null) => STATE_FIELDS.filter(([, re]) => re.test(code(withoutException(f, text)))).map(([name]) => name);
 
 test('round 20c: no script or hook outside the allow-list names the state\'s fields (layers, inChop, pbRotation, classWordOf, "; class", the protected swing)', () => {
-  const named = ALL.map(f => [f, fieldsIn(fs.readFileSync(path.join(ROOT, f), 'utf8'))]).filter(([f, xs]) => xs.length && !FIELD_READERS.includes(f));
+  const named = ALL.map(f => [f, fieldsIn(fs.readFileSync(path.join(ROOT, f), 'utf8'), f)]).filter(([f, xs]) => xs.length && !FIELD_READERS.includes(f));
   assert.deepStrictEqual(named, []);
   for (const f of FIELD_READERS) assert.doesNotMatch(f, DECIDES, f);
   // The allow-list never outlives its reason: each file on it still names a field.
@@ -90,7 +104,15 @@ test('round 20c: no script or hook outside the allow-list names the state\'s fie
 test('round 20c: the gate, the gateway, compose, the entry rule and the runner name none of the state\'s fields', () => {
   const deciders = ALL.filter(f => DECIDES.test(f));
   for (const want of [/order-gate/, /mcp-gateway/, /compose/, /entry-rule/, /runner/]) assert.ok(deciders.some(f => want.test(f)), `${want} scanned`);
-  for (const f of deciders) assert.deepStrictEqual([f, fieldsIn(fs.readFileSync(path.join(ROOT, f), 'utf8'))], [f, []]);
+  for (const f of deciders) assert.deepStrictEqual([f, fieldsIn(fs.readFileSync(path.join(ROOT, f), 'utf8'), f)], [f, []]);
+  // The exception is the function alone: it exists, it names the protected swing, and nothing else in the file does.
+  const cr = fs.readFileSync(path.join(ROOT, STOP_PRICE_EXCEPTION.file), 'utf8');
+  assert.ok(cr.includes(`function ${STOP_PRICE_EXCEPTION.fn}(`), 'the exception\'s function exists');
+  assert.ok(fieldsIn(cr).length > 0, 'without the exception the file names the field (the exception is needed)');
+  assert.deepStrictEqual(fieldsIn(`${cr}\nconst lvl = b.sections.m3.data.lastBreak.last.protected.level;\n`, STOP_PRICE_EXCEPTION.file), ['lastBreak...protected'], 'a read outside the function is still caught');
+  // Any other reader, even the same function's text in another file, is still caught: the exception is by file and name.
+  const fn = cr.slice(cr.indexOf(`function ${STOP_PRICE_EXCEPTION.fn}(`), cr.indexOf('\n}\n', cr.indexOf(`function ${STOP_PRICE_EXCEPTION.fn}(`)) + 3);
+  assert.deepStrictEqual(fieldsIn(fn, 'scripts/lib/trading/order-gate.js'), ['lastBreak...protected'], 'the same reads in a gate file are caught');
 });
 
 test('round 20c: the field scan catches a reader that never requires market-state.js (the review\'s two mutations, and each field)', () => {

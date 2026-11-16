@@ -22,7 +22,7 @@ const book = (extra = {}) => ({ name: 'acct', description: 'a rulebook for a tes
 const errorsOf = (extra, body = BODY) => RB.validateRulebook(book(extra), body, 'acct');
 /** A complete policy entry: every sizing key and the trail stated. */
 const SIZING = { cushion_frac: 0.1, cap_usd: 500, clock_k: 'off', r_per_session: 0.3, min_size_guard: 1.5, drawdown_halve_usd: 'off', stop_slippage_ticks: 1, min_contracts: 3, floor_stretch_max_usd: 'off', near_target_usd: 'off', healthy_risk_usd: 'off' };
-const OFFS = { trail_activate_r: 'off', trail_giveback_r: 'off', lock_giveback_r: 'off', trail_by: 'off', trail_r: 'off', swing_tf: 'off', ratchet: 'off' };
+const OFFS = { trail_activate_r: 'off', trail_giveback_r: 'off', lock_giveback_r: 'off', trail_by: 'off', trail_r: 'off', swing_tf: 'off', ratchet: 'off', lock_at_r: 'off', lock_to_ticks: 'off', warning_giveback_r: 'off' };
 const ENTRY_OFF = { chain: '4h', bias_frames: 'off', bias_agree: 'off', regime_against: 'off', leg_turned: 'off' };
 const ENTRY = { sizing: SIZING, exit: { ...OFFS, mode: 'trail', trail_activate_r: 2, trail_giveback_r: 1 }, multipliers: [], entry: ENTRY_OFF };
 const TARGET = { ...OFFS, mode: 'target' };
@@ -129,6 +129,26 @@ test('validateRulebook: a policy entry states every sizing key, the trail and it
   }
   assert.strictEqual(RB.policyEntry({ policies: { prop_a: { ...ENTRY, exit: { ...AFTER, ratchet: 'on' } } } }, 'prop_a').exit.ratchet, 'on');
   assert.ok(!('ratchet' in RB.policyEntry({ policies: { prop_a: { ...ENTRY, exit: AFTER } } }, 'prop_a').exit));
+  // The early lock (target_then_trail only): lock_at_r and lock_to_ticks both off or both set; the offset covers the
+  // the offset is the rulebook's (its text: 2 ticks of slippage); warning_giveback_r R or off; each carried as the strategy loader reads it, off left out.
+  const LOCKED = { ...AFTER, lock_at_r: 1, lock_to_ticks: 2, warning_giveback_r: 0.5 };
+  assert.deepStrictEqual(errorsOf(p({ exit: LOCKED })), []);
+  assert.match(errorsOf(p({ exit: { ...LOCKED, lock_to_ticks: 'off' } })).join(), /exit: lock_at_r and lock_to_ticks are both off or both set/);
+  assert.match(errorsOf(p({ exit: { ...LOCKED, lock_at_r: 'off' } })).join(), /exit: lock_at_r and lock_to_ticks are both off or both set/);
+  for (const v of [0, -1, 1.5, '2', null]) assert.match(errorsOf(p({ exit: { ...LOCKED, lock_to_ticks: v } })).join(), /exit.lock_to_ticks: .* is not a whole number of ticks/, String(v));
+  for (const v of [0, -1, 51, 'x']) assert.match(errorsOf(p({ exit: { ...LOCKED, lock_at_r: v } })).join(), /exit.lock_at_r: .* is not R above 0/, String(v));
+  for (const v of [0, 51, 'x']) assert.match(errorsOf(p({ exit: { ...LOCKED, warning_giveback_r: v } })).join(), /exit.warning_giveback_r: .* is not R above 0/, String(v));
+  for (const k of ['lock_at_r', 'lock_to_ticks', 'warning_giveback_r']) {
+    const { [k]: _gone, ...rest } = LOCKED;
+    assert.match(errorsOf(p({ exit: rest })).join(), new RegExp(`exit.${k}: missing; state it`), k);
+    for (const mode of ['target', 'trail']) {
+      const base = mode === 'trail' ? ENTRY.exit : TARGET;
+      assert.match(errorsOf(p({ exit: { ...base, lock_at_r: 1, lock_to_ticks: 2, warning_giveback_r: 0.5 } })).join(), new RegExp(`exit.${k}: off in mode ${mode}`), `${k} ${mode}`);
+    }
+  }
+  const pe = RB.policyEntry({ policies: { prop_a: { ...ENTRY, exit: LOCKED } } }, 'prop_a').exit;
+  assert.deepStrictEqual([pe.lock_at_r, pe.lock_to_ticks, pe.warning_giveback_r], [1, 2, 0.5]);
+  assert.ok(!('lock_at_r' in RB.policyEntry({ policies: { prop_a: { ...ENTRY, exit: AFTER } } }, 'prop_a').exit), 'off: left out');
   // A limit is off only by `off`: 0 would turn the cap or the halving off unseen, so it is refused.
   for (const k of ['cap_usd', 'drawdown_halve_usd', 'clock_k']) {
     for (const v of [0, -5, '', 'none', null]) assert.match(errorsOf(p({ sizing: { ...SIZING, [k]: v } })).join(), new RegExp(`sizing.${k}: .* is not .*or off`), `${k} ${v}`);

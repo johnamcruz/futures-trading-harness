@@ -247,6 +247,23 @@ test('exitAs, target_then_trail: the stop holds to the trade\'s own target, then
   for (const bad of [ttt({ trail_by: 'atr' }), ttt({ lock_giveback_r: 0 }), ttt({ trail_by: 'structure', swing_tf: '4h' })]) { const x = pathed(run); assert.strictEqual(at.exitAs(x, bad, 1), x, JSON.stringify(bad)); }
 });
 
+test('exitAs, target_then_trail with the early lock: from +lock_at_r the stop is lock_to_ticks over the entry; the lock bar rests above its close, closes through it', () => {
+  const ttt = (over = {}) => ({ mode: 'target_then_trail', lock_giveback_r: 0.5, trail_by: 'r', trail_r: 1, lock_at_r: 1, lock_to_ticks: 2, ...over });
+  // 1R = 20 ticks. Bar 0 reaches 21 (1.05R) after trading at -5, closes at 15: the stop rests at +2; bar 1's low (1) fills
+  // it at 2 less a tick.
+  const rest = [[0, -5, 21, 15], [15, 1, 16, 4]];
+  assert.strictEqual(at.exitAs(pathed(rest), ttt(), 1).moveTicks, 1, 'no market close at the lock bar: the resting lock fills');
+  // The lock bar closing at 0 (through the +2 stop): out at that close.
+  assert.strictEqual(at.exitAs(pathed([[0, -5, 21, 0], [0, -10, 5, -8]]), ttt(), 1).moveTicks, 0);
+  // Lock off (keys left out or off): the original stop holds, out at the path's last close.
+  assert.strictEqual(at.exitAs(pathed(rest), ttt({ lock_at_r: undefined, lock_to_ticks: undefined }), 1).moveTicks, 4);
+  assert.strictEqual(at.exitAs(pathed(rest), ttt({ lock_at_r: 'off', lock_to_ticks: 'off' }), 1).moveTicks, 4);
+  // A gap through the lock fills at the open less a tick.
+  assert.strictEqual(at.exitAs(pathed([[0, -5, 21, 15], [-3, -6, 0, -4]]), ttt(), 1).moveTicks, -4);
+  // Malformed (one key, or a bad value): kept as recorded.
+  for (const bad of [ttt({ lock_to_ticks: undefined }), ttt({ lock_to_ticks: 1.5 }), ttt({ lock_to_ticks: 0 }), ttt({ lock_at_r: 0 })]) { const x = pathed(rest); assert.strictEqual(at.exitAs(x, bad, 1), x, JSON.stringify(bad)); }
+});
+
 test('exitAs, target_then_trail with the ratchet: on, the lock follows the best R less the giveback; off (or left out), as before; anything else kept as recorded', () => {
   const ttt = (over = {}) => ({ mode: 'target_then_trail', lock_giveback_r: 0.5, trail_by: 'r', trail_r: 1, ...over });
   // 1R = 20 ticks, its target 60 (3R). Bar 2 reaches 70 (3.5R): on, the lock is 3R (60), through the bar's low (52): out at its close, 65.

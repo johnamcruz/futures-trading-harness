@@ -54,7 +54,21 @@ function exitPlan(s) {
     maxBars: x.max_bars ?? null,
     ...(own ? { own: true } : {}),
     // Exit mode target_then_trail: past its own target the trade is trailed, not closed (trading/exit-trail.js).
-    ...(x.mode === 'target_then_trail' ? { afterTarget: { lockGivebackR: x.lock_giveback_r, trailBy: x.trail_by, trailR: x.trail_r, swingMinutes: x.trail_by === 'structure' ? SWING_TFS[x.swing_tf] : null, ...(x.ratchet === 'on' ? { ratchet: true } : {}) } } : {}),
+    ...(x.mode === 'target_then_trail' ? { afterTarget: afterTargetOf(x) } : {}),
+  };
+}
+
+/**
+ * A target_then_trail exit's afterTarget plan (trading/exit-trail.js): the ratchet carried only when on, the early lock
+ * (lockAtR, lockToTicks) and the warning giveback (warningGivebackR, taught: the manage read shows it, no step reads it)
+ * only when the rulebook sets them, so a plan without them, and its hash, is as before.
+ */
+function afterTargetOf(x) {
+  return {
+    lockGivebackR: x.lock_giveback_r, trailBy: x.trail_by, trailR: x.trail_r, swingMinutes: x.trail_by === 'structure' ? SWING_TFS[x.swing_tf] : null,
+    ...(x.ratchet === 'on' ? { ratchet: true } : {}),
+    ...(x.lock_at_r !== undefined && x.lock_to_ticks !== undefined ? { lockAtR: x.lock_at_r, lockToTicks: x.lock_to_ticks } : {}),
+    ...(x.warning_giveback_r !== undefined ? { warningGivebackR: x.warning_giveback_r } : {}),
   };
 }
 

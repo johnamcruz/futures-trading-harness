@@ -12,7 +12,7 @@ description: Use when a position is open - its stop, the plan's management, the 
 ## How It Works
 
 - **If a position is open, manage it and end the cycle**: confirm the protective stop is working (`list_open_orders`); an entry order on the position's side (one that would add to it) still working without a stop bracket (one the gate never checked, e.g. placed outside the harness; tell by its `order_placed` record, as for a flat account below) is cancelled first, and the cancel confirmed, since a fill would add size beyond the stop. The position's own stop and target (bracket legs, `[protect]` and `[exit]` orders, on the opposite side) are never cancelled here; apply
-  the plan's management (the trail behind turned structure, scale-out) through the
+  the plan's management (the STOP line below, scale-out) through the
   trade-executor role, and journal any change. No new entries while a position
   is open. Protective stops move toward the market only.
 - **Always a bracket, never an orphan**: the stop (and the target, where
@@ -43,27 +43,32 @@ description: Use when a position is open - its stop, the plan's management, the 
   trade-executor role, as all management does. The strategy bodies' "don't move the stop yourself"
   means: not while the runner trails it.
 - **A composed trade** (`setup:trade_lifecycle`, in an attempt
-  `setup:prop_portfolio`): its bracket holds the compose record's stop and
-  target; the policy's exit mode (`trade-plan`), in an attempt or not, is
-  the runner's: it moves the stop (past the target it holds at the target's R less
-  `lock_giveback_r` (+0.5R at the 2R mark, every prop entry) until a 15m
-  swing confirms beyond it, then trails behind it), and that trail is the edge: let it work.
-  Before or past its target, act only on the open trade's read
-  (`pullback-vs-reversal`, the prompt's "Trade read" line); never on one
-  candle or by feel; never loosen the stop.
-- **The read decides the action** (its definitions are there):
-  - Healthy pullback → hold; tightening here stops a winner before the
-    leg runs on.
-  - Weakening (2+ signs; an HTF bias flip alone is one sign) → tighten:
-    `modify_order` the bracket stop toward the market, at most to the
-    read's trail level (the last confirmed 15m swing, the runner's own),
-    never tighter. Price past that swing is the reversal read's question,
-    never an automatic exit. Weakening and stalling at a key level or
+  `setup:prop_portfolio`): the runner's code floor (`trade-plan`) moves the
+  stop; let it work. You tighten on top of it, never looser.
+- **Every managed cycle, one line** (before the CYCLE RESULT line): `STOP <price|hold>: <reason>`, the
+  reason's first word protected-swing, choch-against,
+  displacement-against, weakening or hold. Missing = hold, a logged
+  process failure. Tighter than the working stop → `modify_order` the
+  bracket stop that cycle (trade-executor); equal or looser → no call.
+  Levels: the prompt's "Manage read".
+- **The read decides** (displacement measures strength, structure
+  determines confirmation, the protected swing determines invalidation:
+  `displacement`, `bos-vs-choch`, `pullback-vs-reversal`):
+  - 15m BOS the trade's way → a tick beyond its protected swing (that is
+    the room): protected-swing.
+  - 15m CHoCH against (the Trade read's `reversal: 15m CHoCH`) →
+    `warning_giveback_r` behind the best (the Manage read's warning
+    giveback); not an exit: choch-against.
+  - A displaced 15m candle against (the Break quality line's word, a read),
+    or weakening (2+ signs; an HTF flip alone is one) → the same giveback:
+    a warning, never an exit. Weakening and stalling at a key level or
     opposing liquidity → take the base hit at market.
-  - Reversal (the read's) → exit at market (`close_position`), then let
-    the full top-down flow (HTF bias, location, setup, entry, stop, target)
-    decide any new direction.
-  - Never cancel a leg, and never add a stop, target or limit `[exit]`.
+  - A 15m close through the protected swing (Manage read: BROKEN; the
+    Trade read's `reversal: 15m BOS`) → the reversal: `close_position`,
+    then the full top-down flow decides anew.
+  - Healthy pullback, a 3m swing or CHoCH, one candle against → hold.
+  - A level the Manage read says is past the price → hold (the floor
+    stands); never a stop through the market.
 - **An open trade** (the prompt's "Open trade" line) is managed before any
   new entry: its setup, initial stop and risk, the working stop and target in
   R, where it stands now, its best and worst so far, and bars held. "NO
@@ -79,9 +84,13 @@ description: Use when a position is open - its stop, the plan's management, the 
 ## Examples
 
 ```text
-trade_lifecycle long +2.1R, past its target, stop trailed by the runner -> hold; journal
-trade_lifecycle short +2.6R, 3m CHoCH up, 15m still down -> hold (a pullback)
-trade_lifecycle short +3.1R, Trade read: 15m push FAILED, pushes fading -> weakening: modify_order the stop to the trail level 21418.25
-trade_lifecycle long +1.4R, HTF bias FLIPPED, no 15m break -> one sign: hold
-trade_lifecycle long +1.4R, reversal: 15m CHoCH down -> close_position; then the top-down flow decides anew
+trade_lifecycle long +2.1R, past its target, no new 15m structure -> STOP hold: hold
+trade_lifecycle short +2.6R, 3m CHoCH up, 15m still down -> STOP hold: hold (a pullback)
+trade_lifecycle long +3.0R, 15m BOS up, protected swing 21517.00, working 21505.00
+  -> STOP 21516.75: protected-swing; modify_order the stop to 21516.75
+trade_lifecycle long +1.6R, 15m CHoCH down, protected swing holds, warning giveback 21511.50
+  -> STOP 21511.50: choch-against; modify_order (not an exit)
+trade_lifecycle long +1.4R, Manage read: protected swing BROKEN by a close
+  -> STOP hold: hold (out at market); close_position
+trade_lifecycle long +1.2R, warning giveback 21499.75, working 21500.50 -> STOP hold: hold (not tighter)
 ```
