@@ -1,5 +1,5 @@
 {
- "commit": "d19328c09",
+ "commit": "61eaae6bc",
  "days": {
   "no-fill": {
    "passes": [
@@ -2009,7 +2009,7 @@
      "ran": [
       {
        "action": "trade",
-       "prompt": "sha256:0b6053da9865c90b13cc1a0b1c2dd1ef5a530195a7da057a843606890a1456c9 (32464 chars)",
+       "prompt": "sha256:81871a54afde02939b416033659d2ec9228be6df478e5bec018a8e1c9f444620 (32979 chars)",
        "result": "CYCLE RESULT: managed - the open long",
        "ok": true,
        "timedOut": false
@@ -2026,7 +2026,7 @@
       "FTH_CYCLE": "full",
       "FTH_CYCLE_BARS": "{\"MNQ\":\"2026-04-28T04:12:00.000Z\"}",
       "FTH_CYCLE_DESK": "market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager",
-      "FTH_CYCLE_SKILLS": "sha256:5561f06bccba142e619f658c426a4b0b54db2fd06e298900e608386e3b159489 (323 chars)",
+      "FTH_CYCLE_SKILLS": "sha256:ac25817bdfc01888fd938e506e47026db17fcdb0b74a299a588c83fd82ff8227 (323 chars)",
       "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript5>.jsonl",
       "FTH_EARLY_CLOSE_DATES": "2026-11-27,2026-12-24,2027-11-26",
       "FTH_ENTRY_HOURS": "",
@@ -2043,7 +2043,8 @@
      "logs": [
       "info MNQ: active contract MNQ",
       "info MNQ bar 2026-04-28T04:12:00.000Z close 27424.25: cycle (bar closed)",
-      "info trade: CYCLE RESULT: managed - the open long"
+      "info trade: CYCLE RESULT: managed - the open long",
+      "error MNQ: process failure: no STOP line on a managed cycle; read as hold (the stop stays 27417.5)"
      ],
      "events": [
       {
@@ -2099,6 +2100,15 @@
         "00:09 MNQ 3m no-trade @27412.25: nothing to take; since +48t",
         "00:12 MNQ 3m skipped fx_break long @27427.5: nothing to take; since -13t, neither +1R nor -1R yet"
        ]
+      },
+      {
+       "at": "2026-04-28T04:15:02.000Z",
+       "kind": "stop_line",
+       "contractId": "MNQ",
+       "side": "long",
+       "working": 27417.5,
+       "stated": false,
+       "why": "no STOP line"
       }
      ]
     }
@@ -2821,7 +2831,7 @@
          "bos-vs-choch"
         ],
         "sections": [],
-        "bytes": 28505,
+        "bytes": 28969,
         "over": []
        },
        "skillLookups": {
@@ -2867,7 +2877,7 @@
        "complete": false,
        "decided": true
       },
-      "prompt": "sha256:0b6053da9865c90b13cc1a0b1c2dd1ef5a530195a7da057a843606890a1456c9 (32464 chars)",
+      "prompt": "sha256:81871a54afde02939b416033659d2ec9228be6df478e5bec018a8e1c9f444620 (32979 chars)",
       "context": {
        "symbols": [
         {
@@ -2925,7 +2935,7 @@
         }
        ],
        "openTradeLines": [
-        "sha256:eebff881c1443e535dfd462078c39615e9877acee47a68a03b2ae47a9c2a9ee4 (350 chars)"
+        "sha256:443cdf910cf2f635e2532d2cbe222f1b1d2d0ec32fc07b3e5c068bfadea6b785 (411 chars)"
        ],
        "manageAlso": [],
        "recent": [
@@ -3090,7 +3100,7 @@
          "management",
          "bias"
         ],
-        "bytes": 28505
+        "bytes": 28969
        },
        "cachedLookups": {}
       },
@@ -3337,7 +3347,7 @@
        "bos-vs-choch"
       ],
       "sections": [],
-      "bytes": 28505,
+      "bytes": 28969,
       "over": []
      },
      "skillLookups": {
@@ -3445,8 +3455,8 @@
      "sha256:7b5628d6ec8c5889c25c9c47da8b20e0bdefce85c37e283ac04f0add937643db (56685 chars)"
     ],
     [
-     "head-prompt/cycle-skills-a2d550796245436d1fa777bdfacf06ae2d2e5e282a9383676fc81a01602a14f5.md",
-     "sha256:a2d550796245436d1fa777bdfacf06ae2d2e5e282a9383676fc81a01602a14f5 (28763 chars)"
+     "head-prompt/cycle-skills-e30e5c0d1c4e33f130177cfb55fc8cc01481cfeef5e95653a0ea4a0969ac816a.md",
+     "sha256:e30e5c0d1c4e33f130177cfb55fc8cc01481cfeef5e95653a0ea4a0969ac816a (29217 chars)"
     ],
     [
      "journal.jsonl",
@@ -3693,7 +3703,7 @@
      "ran": [
       {
        "action": "manage",
-       "prompt": "sha256:110118cddfc9d8ebefdc91bf376e9120a6ac45fff29570b4549052839ce2465e (32051 chars)",
+       "prompt": "sha256:e1f7f8031ce56c4d4da1787a6b9fe611781e93d1e53cbbe6802aa33d9e33cfa5 (32566 chars)",
        "result": "CYCLE RESULT: managed - the open long",
        "ok": true,
        "timedOut": false
@@ -3709,7 +3719,7 @@
       "FTH_CLOSED_DATES": "2026-01-01,2026-01-19,2026-02-16,2026-04-03,2026-05-25,2026-06-19,2026-07-03,2026-09-07,2026-11-26,2026-12-25,2027-01-01,2027-01-18,2027-02-15,2027-03-26,2027-05-31,2027-06-18,2027-07-05,2027-09-06,2027-11-25,2027-12-24",
       "FTH_CYCLE": "full",
       "FTH_CYCLE_BARS": "{\"MNQ\":\"2026-04-28T04:12:00.000Z\"}",
-      "FTH_CYCLE_SKILLS": "sha256:35b8ba14d56f4973f939d6d791586ac695c1a63503213998a6320fe76966fc07 (323 chars)",
+      "FTH_CYCLE_SKILLS": "sha256:bcd905bdb4b1067a460db71779b948df064e19767d94a6adfb7ff5e066a15328 (323 chars)",
       "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript3>.jsonl",
       "FTH_EARLY_CLOSE_DATES": "2026-11-27,2026-12-24,2027-11-26",
       "FTH_ENTRY_HOURS": "",
@@ -3726,7 +3736,8 @@
      "logs": [
       "info MNQ: active contract MNQ",
       "info MNQ bar 2026-04-28T04:12:00.000Z close 27424.25: cycle (manage only)",
-      "info manage: CYCLE RESULT: managed - the open long"
+      "info manage: CYCLE RESULT: managed - the open long",
+      "error MNQ: process failure: no STOP line on a managed cycle; read as hold (the stop stays 27417.5)"
      ],
      "events": [
       {
@@ -3780,6 +3791,15 @@
        "history": [
         "00:09 MNQ 3m no-trade @27412.25: nothing to take; since +48t"
        ]
+      },
+      {
+       "at": "2026-04-28T04:15:02.000Z",
+       "kind": "stop_line",
+       "contractId": "MNQ",
+       "side": "long",
+       "working": 27417.5,
+       "stated": false,
+       "why": "no STOP line"
       }
      ]
     }
@@ -4127,7 +4147,7 @@
          "bos-vs-choch"
         ],
         "sections": [],
-        "bytes": 28505,
+        "bytes": 28969,
         "over": []
        },
        "skillLookups": {
@@ -4156,7 +4176,7 @@
        "complete": true,
        "decided": true
       },
-      "prompt": "sha256:110118cddfc9d8ebefdc91bf376e9120a6ac45fff29570b4549052839ce2465e (32051 chars)",
+      "prompt": "sha256:e1f7f8031ce56c4d4da1787a6b9fe611781e93d1e53cbbe6802aa33d9e33cfa5 (32566 chars)",
       "context": {
        "symbols": [
         {
@@ -4214,7 +4234,7 @@
         }
        ],
        "openTradeLines": [
-        "sha256:eebff881c1443e535dfd462078c39615e9877acee47a68a03b2ae47a9c2a9ee4 (350 chars)"
+        "sha256:443cdf910cf2f635e2532d2cbe222f1b1d2d0ec32fc07b3e5c068bfadea6b785 (411 chars)"
        ],
        "manageAlso": [],
        "recent": [
@@ -4361,7 +4381,7 @@
          "management",
          "bias"
         ],
-        "bytes": 28505
+        "bytes": 28969
        },
        "cachedLookups": {}
       },
@@ -4517,7 +4537,7 @@
        "bos-vs-choch"
       ],
       "sections": [],
-      "bytes": 28505,
+      "bytes": 28969,
       "over": []
      },
      "skillLookups": {
@@ -4601,8 +4621,8 @@
      "sha256:8958c92cf593bd05692ee4d6acc6e57af3982754417c4bd8dba205b76d902c70 (134398 chars)"
     ],
     [
-     "head-prompt/cycle-skills-a2d550796245436d1fa777bdfacf06ae2d2e5e282a9383676fc81a01602a14f5.md",
-     "sha256:a2d550796245436d1fa777bdfacf06ae2d2e5e282a9383676fc81a01602a14f5 (28763 chars)"
+     "head-prompt/cycle-skills-e30e5c0d1c4e33f130177cfb55fc8cc01481cfeef5e95653a0ea4a0969ac816a.md",
+     "sha256:e30e5c0d1c4e33f130177cfb55fc8cc01481cfeef5e95653a0ea4a0969ac816a (29217 chars)"
     ],
     [
      "head-prompt/cycle-skills-e3ab5a67301fdda228c8d0ba28f80f542ea241870e0a5e4ae540145df161deb7.md",
@@ -4921,7 +4941,7 @@
      "ran": [
       {
        "action": "trade",
-       "prompt": "sha256:f959b237913b8b2bf63d07c44853689f01825cbaec5a8d0fbc9fcc964d6f57cd (32472 chars)",
+       "prompt": "sha256:4d48bd9d5b44d9d8bfa30c4f4811fd5e83f85ad26adf0bb121dcd35e94d254a3 (32987 chars)",
        "result": "CYCLE RESULT: managed - the open long",
        "ok": true,
        "timedOut": false
@@ -4938,7 +4958,7 @@
       "FTH_CYCLE": "full",
       "FTH_CYCLE_BARS": "{\"MNQ\":\"2026-04-28T04:12:00.000Z\"}",
       "FTH_CYCLE_DESK": "market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager",
-      "FTH_CYCLE_SKILLS": "sha256:5561f06bccba142e619f658c426a4b0b54db2fd06e298900e608386e3b159489 (323 chars)",
+      "FTH_CYCLE_SKILLS": "sha256:ac25817bdfc01888fd938e506e47026db17fcdb0b74a299a588c83fd82ff8227 (323 chars)",
       "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript5>.jsonl",
       "FTH_EARLY_CLOSE_DATES": "2026-11-27,2026-12-24,2027-11-26",
       "FTH_ENTRY_HOURS": "",
@@ -4955,7 +4975,8 @@
      "logs": [
       "info MNQ: active contract MNQ",
       "info MNQ bar 2026-04-28T04:12:00.000Z close 27424.25: cycle (bar closed)",
-      "info trade: CYCLE RESULT: managed - the open long"
+      "info trade: CYCLE RESULT: managed - the open long",
+      "error MNQ: process failure: no STOP line on a managed cycle; read as hold (the stop stays 27417.5)"
      ],
      "events": [
       {
@@ -5011,6 +5032,15 @@
         "00:09 MNQ 3m no-trade @27412.25: nothing to take; since +48t",
         "00:12 MNQ 3m entered @27427.5: fx_break long MNQ 1; since -13t, no order of its own seen: outcome unknown"
        ]
+      },
+      {
+       "at": "2026-04-28T04:15:02.000Z",
+       "kind": "stop_line",
+       "contractId": "MNQ",
+       "side": "long",
+       "working": 27417.5,
+       "stated": false,
+       "why": "no STOP line"
       }
      ]
     }
@@ -5790,7 +5820,7 @@
          "bos-vs-choch"
         ],
         "sections": [],
-        "bytes": 28505,
+        "bytes": 28969,
         "over": []
        },
        "skillLookups": {
@@ -5836,7 +5866,7 @@
        "complete": false,
        "decided": true
       },
-      "prompt": "sha256:f959b237913b8b2bf63d07c44853689f01825cbaec5a8d0fbc9fcc964d6f57cd (32472 chars)",
+      "prompt": "sha256:4d48bd9d5b44d9d8bfa30c4f4811fd5e83f85ad26adf0bb121dcd35e94d254a3 (32987 chars)",
       "context": {
        "symbols": [
         {
@@ -5894,7 +5924,7 @@
         }
        ],
        "openTradeLines": [
-        "sha256:eebff881c1443e535dfd462078c39615e9877acee47a68a03b2ae47a9c2a9ee4 (350 chars)"
+        "sha256:443cdf910cf2f635e2532d2cbe222f1b1d2d0ec32fc07b3e5c068bfadea6b785 (411 chars)"
        ],
        "manageAlso": [],
        "recent": [
@@ -6057,7 +6087,7 @@
          "management",
          "bias"
         ],
-        "bytes": 28505
+        "bytes": 28969
        },
        "cachedLookups": {}
       },
@@ -6333,7 +6363,7 @@
        "bos-vs-choch"
       ],
       "sections": [],
-      "bytes": 28505,
+      "bytes": 28969,
       "over": []
      },
      "skillLookups": {
@@ -6454,8 +6484,8 @@
      "sha256:7b5628d6ec8c5889c25c9c47da8b20e0bdefce85c37e283ac04f0add937643db (56685 chars)"
     ],
     [
-     "head-prompt/cycle-skills-a2d550796245436d1fa777bdfacf06ae2d2e5e282a9383676fc81a01602a14f5.md",
-     "sha256:a2d550796245436d1fa777bdfacf06ae2d2e5e282a9383676fc81a01602a14f5 (28763 chars)"
+     "head-prompt/cycle-skills-e30e5c0d1c4e33f130177cfb55fc8cc01481cfeef5e95653a0ea4a0969ac816a.md",
+     "sha256:e30e5c0d1c4e33f130177cfb55fc8cc01481cfeef5e95653a0ea4a0969ac816a (29217 chars)"
     ],
     [
      "journal.jsonl",
