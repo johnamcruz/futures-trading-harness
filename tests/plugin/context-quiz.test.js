@@ -120,8 +120,16 @@ test('context quiz: every layer asked, ids unique, the bar the whole quiz at K 5
   // 24): q118a (q118's briefing, the action) added; at 101 the gate's Monte Carlo misses its caught-broken bound (seed 1,
   // 536 of 600), so q94 (not aligned: unclear, 6/6 on every k=6; q112 asks the same row on the same printed class) retired.
   // 107 with q134-q140 (feat/displacement: the owner's two traps, a close back through the level, a weak BOS, a displaced
-  // CHoCH, a weak CISD and a weak close through the protected swing; closed choices, the skill looked up).
-  assert.strictEqual(QUIZ.questions.length, 107);
+  // CHoCH, a weak CISD and a weak close through the protected swing; closed choices, the skill looked up). 113 with
+  // q141-q146 (feat/position-line, layer manage: the Position line's fields read (giveback and what the stop rests on in
+  // one item, MAE), three recorded holds (a 3m pullback, a 67% giveback at the lock, a warning past the price) and one
+  // synthetic 15m CHoCH against with a placeable level -> STOP <level>: choch-against (review R2: no hold-only set); the
+  // managed situation's prompt; closed choices). The design's seventh (what the stop rests on) is folded into q141: at 114
+  // questions (122 with part B) no maxSlips holds the gate's Monte Carlo (10: flaky 8.3%; 11: a broken stable question
+  // caught 538 of 600 at seed 3; 12: 536), at 113 maxSlips 11 holds every bound.
+  assert.strictEqual(QUIZ.questions.length, 113);
+  assert.deepStrictEqual(QUIZ.questions.filter(x => x.layer === 'manage').map(x => x.id), ['q141', 'q142', 'q143', 'q144', 'q145', 'q146']);
+  assert.ok(QUIZ.questions.some(x => x.layer === 'manage' && /choch-against$/.test(x.answer)), 'one manage item\'s right answer is not hold');
   assert.ok(!QUIZ.questions.some(x => ['q55', 'q59', 'q94', 'q108', 'q113'].includes(x.id)), 'q55, q59, q94, q108 and q113 retired');
   assert.ok(QUIZ.questions.some(x => x.id === 'q118a'), 'q118a added');
   assert.ok(['q91', 'q112', 'q121'].every(id => QUIZ.questions.some(x => x.id === id)), 'q91, q112 and q121 kept');

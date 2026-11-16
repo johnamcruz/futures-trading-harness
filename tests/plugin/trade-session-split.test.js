@@ -315,6 +315,12 @@ const LATE = [
   { from: "Start from the computed regime (the briefing's `m3` `regime`, the same value market-snapshot and `strategies_scan` report): trend-up, trend-down, range, or transition, plus volatility.",
     to: "Start from the computed regime (the briefing's `m3` `regime`, the same value market-snapshot and `strategies_scan` report): trend-up, trend-down, range, or transition, plus volatility: a read, not the class (the `Market state` line's).",
     reason: "feat/chop-read round 19 (owner, PREREG addendum 25, q118): the regime's values share the class spelling; the class word is the Market state line's alone, the regime a read" },
+  { from: "**An open trade** (the prompt's \"Open trade\" line) is managed before any new entry: its setup, initial stop and risk, the working stop and target in R, where it stands now, its best and worst so far, and bars held.",
+    to: "**An open trade** (the prompt's Position line, then its \"Open trade\" line) is managed before any new entry: its setup, initial stop and risk, the working stop and target in R, where it stands now, its best and worst so far, and bars held.",
+    reason: "feat/position-line (owner-approved 2026-11-16, DESIGN 4.6): now, best and worst are the code-computed Position line's, which comes first" },
+  { from: "A trade that gave back most of a large best (e.g. best +2R, now +0.3R) or is past its time stop is the case to act on; say what you did and why in the cycle result.",
+    to: ["Giveback alone decides nothing (measured: a deep giveback recovers about as often as not): act on structure, the read above.", "A trade past its time stop is the case to act on; say what you did and why in the cycle result."], copies: 0,
+    reason: "feat/position-line (review T1, DESIGN 4.6 item 3): with the giveback share printed, the old sentence was the M80/M90 giveback cap, which lost on both halves (DESIGN section 3); the time stop clause kept" },
 ];
 const LATE_STALE = (() => {
   const r = withLate(ALLOWED, LATE, units(require('fs').readFileSync(require('path').join(__dirname, '..', '..', BEFORE), 'utf8')));

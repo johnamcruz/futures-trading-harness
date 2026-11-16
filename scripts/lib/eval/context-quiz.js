@@ -40,7 +40,7 @@ const fs = require('fs');
 const path = require('path');
 const { loadConfigFile } = require('../config-files');
 
-const LAYERS = Object.freeze(['bias', 'levels', 'setup', 'entry', 'stop', 'exit', 'size', 'approval']);
+const LAYERS = Object.freeze(['bias', 'levels', 'setup', 'entry', 'stop', 'exit', 'manage', 'size', 'approval']);
 const PROMPTS = Object.freeze(['head', 'head+risk', 'situational', 'lookup']);
 // The roles whose text the prompts carry (buildPrompts): the head trader's, and the risk manager's in head+risk.
 const PROMPT_ROLES = Object.freeze(['head-trader', 'risk-manager']);

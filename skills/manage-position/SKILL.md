@@ -45,12 +45,22 @@ description: Use when a position is open - its stop, the plan's management, the 
 - **A composed trade** (`setup:trade_lifecycle`, in an attempt
   `setup:prop_portfolio`): the runner's code floor (`trade-plan`) moves the
   stop; let it work. You tighten on top of it, never looser.
-- **Every managed cycle, one line** (before the CYCLE RESULT line): `STOP <price|hold>: <reason>`, the
+- **Every managed cycle, one line** (before the CYCLE RESULT line), on its
+  own line, never inside the PLAN's line 9: `STOP <price|hold>: <reason>`, the
   reason's first word protected-swing, choch-against,
   displacement-against, weakening or hold. Missing = hold, a logged
   process failure. Tighter than the working stop → `modify_order` the
   bracket stop that cycle (trade-executor); equal or looser → no call.
   Levels: the prompt's "Manage read".
+- **The Position line** (code facts: cite its numbers, never recompute, never
+  the broker snapshot's R): now = R at the last close; MFE = the best
+  closed-bar extreme, its price and bar; MAE = the worst, never above 0;
+  giveback = MFE less now, in R and as a share of MFE; working stop = its R and
+  what a fill there gives back; target reached and the lock; code floor = what
+  the stop rests on (the initial stop, a 15m swing, or the lock).
+  - Giveback in a 3m pullback, the 15m swing intact, no 15m CHoCH → hold.
+  - "The stop rests at the lock" → the exposure, never an exit signal.
+  - A large giveback share alone → hold; it is not a weakening sign.
 - **The read decides** (displacement measures strength, structure
   determines confirmation, the protected swing determines invalidation:
   `displacement`, `bos-vs-choch`, `pullback-vs-reversal`):
@@ -69,17 +79,19 @@ description: Use when a position is open - its stop, the plan's management, the 
   - Healthy pullback, a 3m swing or CHoCH, one candle against → hold.
   - A level the Manage read says is past the price → hold (the floor
     stands); never a stop through the market.
-- **An open trade** (the prompt's "Open trade" line) is managed before any
-  new entry: its setup, initial stop and risk, the working stop and target in
-  R, where it stands now, its best and worst so far, and bars held. "NO
+- **An open trade** (the prompt's Position line, then its "Open trade" line) is
+  managed before any new entry: its setup, initial stop and risk, the working
+  stop and target in R, where it stands now, its best and worst so far, and
+  bars held. "NO
   working stop" is the first thing to fix. A rules strategy's (none
   active): the line compares it with the strategy's backtested winners (how far they ran, how deep 80% of them
   dipped, how often +1R was given back): a trade already deeper than most
   winners went, or one that reached +1R in a strategy that often gives it
   back, is weaker than its R says. Manage it by its `exit` (trail, target,
-  time stop); never loosen the stop. A trade that gave back most of a large best (e.g. best +2R, now
-  +0.3R) or is past its time stop is the case to act on; say what you did and
-  why in the cycle result.
+  time stop); never loosen the stop. Giveback alone decides nothing
+  (measured: a deep giveback recovers about as often as not): act on
+  structure, the read above. A trade past its time stop is the case to act
+  on; say what you did and why in the cycle result.
 
 ## Examples
 
@@ -88,9 +100,13 @@ trade_lifecycle long +2.1R, past its target, no new 15m structure -> STOP hold: 
 trade_lifecycle short +2.6R, 3m CHoCH up, 15m still down -> STOP hold: hold (a pullback)
 trade_lifecycle long +3.0R, 15m BOS up, protected swing 21517.00, working 21505.00
   -> STOP 21516.75: protected-swing; modify_order the stop to 21516.75
-trade_lifecycle long +1.6R, 15m CHoCH down, protected swing holds, warning giveback 21511.50
+trade_lifecycle long, Position: 1R 10 pts, now +1.8R, MFE +2.15R, giveback 0.35R (16%), working stop
+  21485.00 (-1R); 15m CHoCH down, protected swing holds, warning giveback 21511.50 (tighter)
   -> STOP 21511.50: choch-against; modify_order (not an exit)
 trade_lifecycle long +1.4R, Manage read: protected swing BROKEN by a close
   -> STOP hold: hold (out at market); close_position
 trade_lifecycle long +1.2R, warning giveback 21499.75, working 21500.50 -> STOP hold: hold (not tighter)
+trade_lifecycle long, Position: now +3.34R, MFE +4.16R, giveback 0.82R (20%), the stop rests at the lock (+0.34R),
+  no 15m CHoCH, weakening 0 of 5 -> STOP hold: hold. (2021-09-01: this one came back and stopped at +0.33R. The hold
+  is still the read: the same facts came before 5R and 6R runs on other days, and no rule that exits here pays.)
 ```
