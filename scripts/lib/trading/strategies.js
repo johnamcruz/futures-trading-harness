@@ -179,9 +179,9 @@ function exitErrors(x) {
       req(x.trail_by !== 'structure' || Object.hasOwn(SWING_TFS, x.swing_tf), `exit.swing_tf: one of ${Object.keys(SWING_TFS).join(', ')} (a structure trail's swings)`);
       // The ratchet: opt in (the rulebook's `ratchet: on`); off, or left out (the rulebook's `off` is), is today's lock.
       req([undefined, 'off', 'on'].includes(x.ratchet), 'exit.ratchet: on or off (left out: off)');
-      // The early lock (the rulebook's lock_at_r, lock_to_ticks): both or neither; its ticks a whole number, not negative.
+      // The early lock (the rulebook's lock_at_r, lock_to_ticks): both or neither; its ticks a whole number above 0.
       req((x.lock_at_r === undefined) === (x.lock_to_ticks === undefined), 'exit: lock_at_r and lock_to_ticks go together');
-      if (x.lock_to_ticks !== undefined) req(Number.isInteger(x.lock_to_ticks) && x.lock_to_ticks === Math.abs(x.lock_to_ticks), 'exit.lock_to_ticks: a whole number of ticks, not negative');
+      if (x.lock_to_ticks !== undefined) req(Number.isInteger(x.lock_to_ticks) && x.lock_to_ticks > 0, 'exit.lock_to_ticks: a whole number of ticks above 0');
     } else if (after.length) errors.push(`exit.${after[0]}: only for exit mode target_then_trail`);
     req(x.target_r !== undefined || x.target !== undefined || x.trail_activate_r !== undefined || x.mode === 'target' || x.mode === 'target_then_trail', 'exit: needs target_r, target, or trail_activate_r and trail_giveback_r');
     if (x.target_r !== undefined && x.trail_activate_r !== undefined) {

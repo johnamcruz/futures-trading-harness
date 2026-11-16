@@ -94,7 +94,7 @@ test('a policy\'s exit mode: the shipped policy keeps each trade\'s own stop and
   const ttt = x => pol({ mode: 'target_then_trail', lock_giveback_r: 0.5, trail_by: 'r', trail_r: 1, ...x });
   assert.deepStrictEqual(ttt({ lock_at_r: 1, lock_to_ticks: 2, warning_giveback_r: 0.5 }), []);
   assert.ok(ttt({ lock_at_r: 1 }).some(e => /exit: lock_at_r and lock_to_ticks go together/.test(e)));
-  assert.ok(ttt({ lock_at_r: 1, lock_to_ticks: 1.5 }).some(e => /exit.lock_to_ticks: a whole number of ticks, not negative/.test(e)));
+  for (const v of [0, 1.5]) assert.ok(ttt({ lock_at_r: 1, lock_to_ticks: v }).some(e => /exit.lock_to_ticks: a whole number of ticks above 0/.test(e)));
   assert.ok(ttt({ lock_at_r: 0, lock_to_ticks: 2 }).some(e => /exit.lock_at_r: a number of R above 0/.test(e)));
   assert.ok(ttt({ warning_giveback_r: 0 }).some(e => /exit.warning_giveback_r: a number of R above 0/.test(e)));
   assert.ok(pol({ mode: 'target', lock_at_r: 1, lock_to_ticks: 2 }).some(e => /exit.lock_at_r: only for exit mode target_then_trail/.test(e)));

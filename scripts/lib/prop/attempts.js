@@ -268,7 +268,7 @@ function afterTargetExit(t, exit, slipTicks) {
   // the lock's ticks over the entry as it is live.
   const [lockAt, lockTo] = [exit.lock_at_r, exit.lock_to_ticks].map(v => (v === 'off' ? undefined : v));
   const lock = lockAt !== undefined || lockTo !== undefined;
-  if (lock && !(Number.isFinite(lockAt) && lockAt && lockAt === Math.abs(lockAt) && Number.isInteger(lockTo) && lockTo === Math.abs(lockTo))) return t;
+  if (lock && !(Number.isFinite(lockAt) && lockAt && lockAt === Math.abs(lockAt) && Number.isInteger(lockTo) && lockTo > 0)) return t;
   const plan = { afterTarget: { lockGivebackR: exit.lock_giveback_r, trailBy: exit.trail_by, trailR: exit.trail_r, swingMinutes: minutes, ...(exit.ratchet === 'on' ? { ratchet: true } : {}), ...(lock ? { lockAtR: lockAt, lockToTicks: lockTo } : {}) } };
   const swings = minutes && t.swingPath ? t.swingPath[exit.swing_tf] || [] : [];
   const trade = { sign: 1, entry: 0, risk: t.stopTicks, stop: -t.stopTicks, peakR: 0, armed: false, target: own.targetTicks > 0 ? own.targetTicks : null };

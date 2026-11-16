@@ -261,7 +261,7 @@ test('exitAs, target_then_trail with the early lock: from +lock_at_r the stop is
   // A gap through the lock fills at the open less a tick.
   assert.strictEqual(at.exitAs(pathed([[0, -5, 21, 15], [-3, -6, 0, -4]]), ttt(), 1).moveTicks, -4);
   // Malformed (one key, or a bad value): kept as recorded.
-  for (const bad of [ttt({ lock_to_ticks: undefined }), ttt({ lock_to_ticks: 1.5 }), ttt({ lock_at_r: 0 })]) { const x = pathed(rest); assert.strictEqual(at.exitAs(x, bad, 1), x, JSON.stringify(bad)); }
+  for (const bad of [ttt({ lock_to_ticks: undefined }), ttt({ lock_to_ticks: 1.5 }), ttt({ lock_to_ticks: 0 }), ttt({ lock_at_r: 0 })]) { const x = pathed(rest); assert.strictEqual(at.exitAs(x, bad, 1), x, JSON.stringify(bad)); }
 });
 
 test('exitAs, target_then_trail with the ratchet: on, the lock follows the best R less the giveback; off (or left out), as before; anything else kept as recorded', () => {

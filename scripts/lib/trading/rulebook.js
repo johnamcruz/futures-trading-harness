@@ -141,7 +141,7 @@ const EXIT_VALUE = {
   swing_tf: [x => x === OFF || Object.hasOwn(SWING_TFS, x), `one of ${Object.keys(SWING_TFS).join(', ')}, or ${OFF}`],
   ratchet: [x => x === OFF || x === 'on', `on, or ${OFF} (the lock stays at the target's R less lock_giveback_r)`],
   lock_at_r: EXIT_RULE,
-  lock_to_ticks: [x => x === OFF || (Number.isInteger(x) && x === Math.abs(x)), `a whole number of ticks over the entry, not negative, or ${OFF} (no early lock)`],
+  lock_to_ticks: [x => x === OFF || (Number.isInteger(x) && positive(x)), `a whole number of ticks over the entry, above 0, or ${OFF} (no early lock)`],
   warning_giveback_r: EXIT_RULE,
 };
 

@@ -135,10 +135,9 @@ test('validateRulebook: a policy entry states every sizing key, the trail and it
   assert.deepStrictEqual(errorsOf(p({ exit: LOCKED })), []);
   assert.match(errorsOf(p({ exit: { ...LOCKED, lock_to_ticks: 'off' } })).join(), /exit: lock_at_r and lock_to_ticks are both off or both set/);
   assert.match(errorsOf(p({ exit: { ...LOCKED, lock_at_r: 'off' } })).join(), /exit: lock_at_r and lock_to_ticks are both off or both set/);
-  for (const v of [-1, 1.5, '2', null]) assert.match(errorsOf(p({ exit: { ...LOCKED, lock_to_ticks: v } })).join(), /exit.lock_to_ticks: .* is not a whole number of ticks/, String(v));
+  for (const v of [0, -1, 1.5, '2', null]) assert.match(errorsOf(p({ exit: { ...LOCKED, lock_to_ticks: v } })).join(), /exit.lock_to_ticks: .* is not a whole number of ticks/, String(v));
   for (const v of [0, -1, 51, 'x']) assert.match(errorsOf(p({ exit: { ...LOCKED, lock_at_r: v } })).join(), /exit.lock_at_r: .* is not R above 0/, String(v));
   for (const v of [0, 51, 'x']) assert.match(errorsOf(p({ exit: { ...LOCKED, warning_giveback_r: v } })).join(), /exit.warning_giveback_r: .* is not R above 0/, String(v));
-  assert.deepStrictEqual(errorsOf(p({ exit: { ...LOCKED, lock_to_ticks: 0 } })), [], 'breakeven exactly is a valid lock');
   for (const k of ['lock_at_r', 'lock_to_ticks', 'warning_giveback_r']) {
     const { [k]: _gone, ...rest } = LOCKED;
     assert.match(errorsOf(p({ exit: rest })).join(), new RegExp(`exit.${k}: missing; state it`), k);

@@ -116,7 +116,7 @@ function afterTargetStep(trade, bar, plan, tick, swing = null) {
 }
 
 /** The early lock is on: both keys set (the rulebook's lock_at_r and lock_to_ticks; left out of the plan when off). */
-const lockOn = a => Number.isFinite(a.lockAtR) && a.lockAtR > 0 && Number.isInteger(a.lockToTicks) && a.lockToTicks >= 0;
+const lockOn = a => Number.isFinite(a.lockAtR) && a.lockAtR > 0 && Number.isInteger(a.lockToTicks) && a.lockToTicks > 0;
 
 /**
  * Live: the swing a structure trail stands behind at the close of `bar` (one of `bars`, the runner's closed bars,
