@@ -235,9 +235,11 @@ test('a pass applying the lock bar and the next together (a slow cycle): the run
   const bars = barsOf(history, path);
   const plan = exitPlan({ risk: { min_rr: 2 }, exit: EXIT });
   const sim = viaSimBroker({ bars, i: 40, sign: 1, entry: 21500, plan, swings: swingSeries(bars, 15) });
-  const slow = await viaRunner({ bars, i: 40, sign: 1, entry: 21500, everyBars: 2 });
+  // A pass every 4 bars sees the lock bar and the bar through the lock together.
+  const slow = await viaRunner({ bars, i: 40, sign: 1, entry: 21500, everyBars: 4 });
   assert.strictEqual(sim.price, 21500.25, 'the simulators: the lock rested and filled');
-  assert.ok(slow.price !== null && slow.price <= sim.price, `the slow runner ${slow.price} vs the simulators ${sim.price}`);
+  assert.deepStrictEqual([slow.price, slow.stops], [21496, []], 'the runner: its lock never rested; out at market at the close');
+  assert.ok(slow.price <= sim.price, 'never more optimistic than the simulators');
 });
 
 test('parity guard: the four callers share the slippage the vectors assume', () => {

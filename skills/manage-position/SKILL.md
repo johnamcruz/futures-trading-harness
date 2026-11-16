@@ -63,8 +63,9 @@ description: Use when a position is open - its stop, the plan's management, the 
     or weakening (2+ signs; an HTF flip alone is one) → the same giveback:
     a warning, never an exit. Weakening and stalling at a key level or
     opposing liquidity → take the base hit at market.
-  - A 15m close through the protected swing (Manage read: BROKEN) → the
-    reversal: `close_position`, then the full top-down flow decides anew.
+  - A 15m close through the protected swing (Manage read: BROKEN; the
+    Trade read's `reversal: 15m BOS`) → the reversal: `close_position`,
+    then the full top-down flow decides anew.
   - Healthy pullback, a 3m swing or CHoCH, one candle against → hold.
   - A level the Manage read says is past the price → hold (the floor
     stands); never a stop through the market.

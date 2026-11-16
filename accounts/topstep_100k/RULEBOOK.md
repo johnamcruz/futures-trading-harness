@@ -171,9 +171,9 @@ each trade from its recorded path, prop/attempts.js exitAs):
   30-session pass rate 11.9% / 9.0% -> 6.9% / 8.3% (paired -5.1 points,
   90% {-10.2, -0.4}, and -1.2, {-5.8, +3.0}); trades of +4R or more
   6.5% / 5.1% -> 5.5% / 3.8%. On the model's own entries of the arm-B run
-  (52, all tuning) the R fell from 45.2 to 23.9 (paired -0.41R a trade,
-  90% {-0.76, -0.10}): the lock scratched runners that came back to the
-  entry before running. At 3 ticks of stop slippage every lock exit is a
+  (52, all tuning; fills as the replay broker's) the R fell from 27.8 to
+  13.2 (paired -0.28R a trade, 90% {-0.64, +0.04}): the lock scratched
+  runners that came back to the entry before running. At 3 ticks of stop slippage every lock exit is a
   loss. The owner's call to keep it, with these numbers.
   `warning_giveback_r`
   (0.5, taught, no code moves a stop by it) is the stop the model may
