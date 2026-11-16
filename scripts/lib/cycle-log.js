@@ -46,7 +46,7 @@
 const fs = require('fs');
 const path = require('path');
 const { tradingDayKey } = require('./trading/clock');
-const { STOP_START } = require('./trading/stop-line');
+const { stopLines } = require('./trading/stop-line');
 const { REQUIRED_FOR_ENTRY, REQUIRED_FOR_COMPOSED, REQUIRED_AT_ENTRY, skillName } = require('./trading/skills-loaded');
 const { cycleFactChecks } = require('./trading/fact-claims');
 const { resolveClock } = require('./trading/harness-now');
@@ -423,12 +423,14 @@ function headOwnText(output) {
 }
 
 /**
- * The STOP-led lines of the head trader's own text (headOwnText; trading/stop-line.js STOP_START), joined: all a managed
- * cycle's STOP line needs, so the runner never receives the rest of that text (its STATE line among it). '' with none.
+ * The STOP-led strings of the head trader's own text (headOwnText; trading/stop-line.js stopLines), one per line: all a
+ * managed cycle's STOP line needs, so the runner never receives the rest of that text (its STATE line among it). One
+ * read from the end of a `9 Manage:` line is given as `9 Manage: STOP ...` (the label only, never the line's other
+ * words), so parseStopLine still reads it as inline and a line-start one still wins. '' with none.
  */
 function stopLineText(output) {
   try {
-    return headOwnText(output).split('\n').filter(l => STOP_START.test(l)).join('\n');
+    return stopLines(headOwnText(output)).map(x => (x.inline ? `9 Manage: ${x.text}` : x.text)).join('\n');
   } catch (_err) {
     return '';
   }

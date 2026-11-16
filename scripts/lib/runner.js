@@ -904,7 +904,9 @@ function createRunner(deps) {
     const line = parseStopLine(typeof r.stopText === 'string' ? r.stopText : r.transcript || r.result || '');
     for (const t of trades) {
       const tighter = line.stated && !line.hold && Number.isFinite(t.stop) ? t.sign * (line.stop - t.stop) > 0 : null;
-      emit('stop_line', { contractId: t.contractId, side: t.side, working: t.stop, stated: line.stated, ...(line.stated ? { stop: line.stop, hold: line.hold, reason: line.reason, text: line.text, tighter } : { why: line.why }) });
+      // inline: read from the end of the PLAN's 9 Manage: line; modifyOrders: the cycle's modify_order calls (null: not known).
+      const modifyOrders = Number.isInteger(r.modifyOrders) ? r.modifyOrders : null;
+      emit('stop_line', { contractId: t.contractId, side: t.side, working: t.stop, stated: line.stated, ...(line.stated ? { stop: line.stop, hold: line.hold, reason: line.reason, text: line.text, tighter, inline: line.inline } : { why: line.why }), modifyOrders });
       if (!line.stated) log(`${t.contractId}: process failure: ${line.why} on a managed cycle; read as hold (the stop stays ${t.stop ?? 'unknown'})`, 'error');
       else log(`${t.contractId}: STOP ${line.hold ? 'hold' : line.stop}: ${line.text} (${line.reason}; working ${t.stop ?? 'unknown'}${tighter === false ? '; not tighter: no modify' : ''})`);
     }

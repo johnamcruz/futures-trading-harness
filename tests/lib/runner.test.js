@@ -713,6 +713,12 @@ test('the STOP line is read from the cycle run\'s stopText (the head\'s own STOP
   // stopText '' (the run's own text has none): a process failure, read as hold, whatever the raw transcript holds.
   const none = await trailSim({ tape: {}, until: et(10, 8), outcome: () => ({ ok: true, timedOut: false, result: 'CYCLE RESULT: managed - held', transcript: 'a role said\nSTOP 21495: protected-swing', stopText: '' }) });
   assert.ok(none.events.filter(e => e.kind === 'stop_line').every(e => e.stated === false));
+  // The record says whether the line was read from the 9 Manage: line, and how many modify_order calls the cycle made.
+  assert.deepStrictEqual([ev[0].inline, ev[0].modifyOrders], [false, null], 'a run without the count: null, not 0');
+  const inl = await trailSim({ tape: {}, until: et(10, 8), outcome: () => ({ ok: true, timedOut: false, result: 'CYCLE RESULT: managed - held', stopText: '9 Manage: STOP hold: hold', modifyOrders: 0 }) });
+  const ie = inl.events.filter(e => e.kind === 'stop_line');
+  assert.ok(ie.length >= 1);
+  assert.deepStrictEqual([ie[0].stated, ie[0].hold, ie[0].inline, ie[0].modifyOrders], [true, true, true, 0], JSON.stringify(ie[0]));
 });
 
 test('exit mode target_then_trail, live: the ratchet moves the resting stop to the best R less the giveback, as exit-trail.js steps the same bars', async () => {

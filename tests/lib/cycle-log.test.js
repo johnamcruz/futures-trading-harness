@@ -443,4 +443,11 @@ test('stopLineText: only the STOP-led lines of the head trader\'s own text (an o
   assert.strictEqual(stopLineText(cc), 'STOP hold: hold (a pullback)');
   assert.strictEqual(stopLineText('STATE: x\nSTOP hold: hold\nCYCLE RESULT: managed - held'), 'STOP hold: hold');
   assert.strictEqual(stopLineText('no line here; the stop stays'), '');
+  // A line read from the end of the PLAN's 9 Manage: line: its STOP text under the bare label, never the line's prose.
+  const inl = stopLineText('STATE: x\n9 Manage: invalidation 15620.5 (my plan); STOP hold: hold\nCYCLE RESULT: managed - held; STOP hold');
+  assert.strictEqual(inl, '9 Manage: STOP hold: hold');
+  const P = require('../../scripts/lib/trading/stop-line').parseStopLine(inl);
+  assert.deepStrictEqual([P.stated, P.hold, P.inline], [true, true, true]);
+  // A line-start line still wins over it after the round trip.
+  assert.strictEqual(require('../../scripts/lib/trading/stop-line').parseStopLine(stopLineText('STOP 15690: protected-swing\n9 Manage: x; STOP hold: hold')).stop, 15690);
 });
