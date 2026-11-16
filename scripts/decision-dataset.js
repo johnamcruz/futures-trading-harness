@@ -13,7 +13,7 @@
  *       final refused; only decisions made under the harness's skills and prompt digest now (the one an adapter's
  *       manifest records), the others dropped and counted, unless --include-digest names them (any, or a digest prefix):
  *       kept and marked in meta.jsonl. The head trader's turns only (its tool calls and results included); a
- *       subagent's turns (unchecked claims) only when --roles names it, marked in meta.jsonl. Warns when every sampled
+ *       subagent's turns only when --roles names it and the code verified its claims, marked in meta.jsonl. Warns when every sampled
  *       repeat of a moment answered the same, and refuses when most did (sampling probably not applied)
  *   node scripts/decision-dataset.js show <dataset dir>
  *       its fingerprint (checked against its files), counts, labels and balance
@@ -132,6 +132,11 @@ function show(argv) {
   say(`roles: ${d.roles.join(', ')}; exit plan ${String(d.exitPlan).slice(0, 12)}; dropped without an exit-plan record: ${d.untaggedExit.train.examples} train, ${d.untaggedExit.validate.examples} validate example(s)`);
   say(`valid setups (train): ${d.validSetups.train.correctTakes} correct takes, ${d.validSetups.train.correctPasses} correct passes (a pass on a valid setup is rarely verifiable: the set leans to taking); repeated samples ${d.repeatedSamples.identical} of ${d.repeatedSamples.moments} moment(s)`);
   say(`sources: ${d.sources.map(s => `${s.set} ${s.runId}${s.samples ? ` (${s.samples} samples)` : ''}`).join(', ')}`);
+  for (const [set, c] of Object.entries(d.coverage || {})) {
+    say(`coverage (${set}, ${c.n} examples): roles ${JSON.stringify(c.role)}; kinds ${JSON.stringify(c.kind)}; read types ${JSON.stringify(c.readType)}`);
+    say(`  skills: ${Object.entries(c.skill).map(([k, n]) => `${k} ${n}`).join(', ')} (not measured, no read: ${c.notMeasured.join(', ')})`);
+    if (set === 'train') say(`  GAPS (under ${c.minExamplesPerSkill === null ? 'no floor: the spec names no coverage' : c.minExamplesPerSkill}): ${c.gaps.length ? c.gaps.map(g => `${g.skill} ${g.n}`).join(', ') : 'none'}`);
+  }
   return 0;
 }
 

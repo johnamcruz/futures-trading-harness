@@ -85,6 +85,10 @@ function validateSpec(spec) {
     for (const k of ['maxSkillShare', 'maxYearShare', 'minNearMllShare']) if (!share(b[k])) e.push(`balance.${k}: a share above 0 and under 1`);
     if (!(Number.isInteger(b.minYears) && b.minYears >= 1)) e.push('balance.minYears: a whole number from 1');
   }
+  // Optional: the decision dataset's coverage floor (its GAPS list) and the structure-read dataset's balance.
+  if (spec.coverage !== undefined && !(isObj(spec.coverage) && Number.isInteger(spec.coverage.minExamplesPerSkill) && spec.coverage.minExamplesPerSkill >= 1)) e.push('coverage: { minExamplesPerSkill (a whole number from 1) }');
+  const sr = spec.structureRead;
+  if (sr !== undefined && !(isObj(sr) && Number.isInteger(sr.seed) && share(sr.maxCaseShare) && share(sr.maxRegimeShare))) e.push('structureRead: { seed (a whole number), maxCaseShare, maxRegimeShare (shares above 0 and under 1) }');
   const steps = Array.isArray(spec.steps) ? spec.steps : null;
   if (!steps || steps.length !== 2) e.push('steps: two (step 1 on stage-1 data, step 2 on stage-2 data with stage 1 mixed back in)');
   else {

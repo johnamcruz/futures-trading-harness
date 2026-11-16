@@ -2922,8 +2922,13 @@ and use an adapter. In short:
 3. **Build.** `node scripts/decision-dataset.js build` writes the correct
    decisions as model-agnostic chat JSONL:
    - the exact prompts the head trader saw, then its whole turn with its
-     tool calls and their results (format version 2); a subagent's turns only
-     when `--roles` names it (its claims are unchecked);
+     tool calls and their results (format version 2), from opencode's or
+     Claude Code's run records (a resumed or forked Claude Code session gives
+     none: its history isn't recorded); a subagent's turns only when
+     `--roles` names it and the code verified its claims (today only a
+     risk-manager reply whose fact check is all true);
+   - a coverage report: examples per skill, read type, kind and role, and
+     the GAPS (skills under the spec's `coverage` floor);
    - never a failed, timed-out or interrupted cycle;
    - balanced by `adapters/spec.json`;
    - deduplicated and fingerprinted, with its source runs;
@@ -2936,6 +2941,13 @@ and use an adapter. In short:
    Train comes from practice-train only and validate from practice-validate
    only; test and final are refused. Each example is tagged stage 1 (no
    account state) or stage 2 (account state plus risk action).
+
+   **Structure reads** (`node scripts/structure-read-dataset.js`; the
+   `adapters/README.md` section of that name) are a second, separate
+   dataset under the same split and digest rules: a recorded bar briefing
+   and a fixed instruction, answered by a model's answer only when every
+   field verifies against the briefing's own facts, else by the code's
+   answer (`source: code`).
 4. **Train in two steps** (`adapters/spec.json`): step 1 on stage-1 data
    alone, then step 2 on stage-2 data with the spec's slice of stage-1 data
    mixed back in. The template is `adapters/<base>/train.example.sh`; the

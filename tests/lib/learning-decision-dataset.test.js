@@ -27,7 +27,7 @@ function trainRun(home, { runId = 'train1', prompt = 'PROMPT-A  \r\né', documen
   return F.writeRun(home, {
     runId, start: '2022-03-07T00:00:00Z', end: '2022-03-12T00:00:00Z', stage: 1, documents,
     decisions: [
-      { t: '2022-03-07T14:33:00.000Z', kind: 'take', record: rec('fair-value-gaps'), prompt, headText: ['TAKE-A'], tasks: [{ role: 'risk-manager', prompt: 'RM-A', reply: 'APPROVED' }], R: 2.5 },
+      { t: '2022-03-07T14:33:00.000Z', kind: 'take', record: rec('fair-value-gaps'), prompt, headText: ['TAKE-A'], tasks: [{ role: 'risk-manager', prompt: 'RM-A', reply: 'APPROVED' }], factCheck: F.FACTS_TRUE, R: 2.5 },
       { t: '2022-03-08T14:33:00.000Z', kind: 'take', record: rec('order-blocks'), prompt: 'PROMPT-LOSER', headText: ['TAKE-LOSER'], R: -1 },
       { t: '2022-03-08T15:33:00.000Z', kind: 'take', record: { ...rec('fair-value-gaps'), reads: [{ step: 'setup', skill: 'fair-value-gaps', check: false }] }, prompt: 'PROMPT-WRONG-WINNER', headText: ['TAKE-WRONG'], R: 4 },
       { t: '2022-03-09T14:33:00.000Z', kind: 'pass', composed: [{ symbol: 'MNQ', ok: false, reads: [] }], prompt: 'PROMPT-PASS', headText: ['PASS-NO-SETUP'] },
@@ -260,12 +260,14 @@ test('the repository\'s spec builds on a fixture that meets it', () => {
   assert.strictEqual(built.dataset.counts.step2.train, 0, 'no stage-2 data: step 2 waits for it');
 });
 
-test('roles: a subagent\'s turns only when named, marked in meta.jsonl; the head trader always', () => {
+test('roles: a subagent\'s turns only when named and its claims verified by code, marked in meta.jsonl; the head trader always', () => {
   const home = tmpDir();
   const src = sourceOf(trainRun(path.join(home, 'a')));
   const named = DS.buildDataset({ train: [src], spec: SPEC, rules: RULES, current: CURRENT, roles: ['fth-head-trader', 'risk-manager'] });
   const meta = lines(named.files['meta.jsonl']);
-  assert.ok(meta.some(m => m.role === 'risk-manager' && m.subagent === true));
+  // Two risk-manager replies 'APPROVED' (07 and 10): only the 07 cycle's fact check verified its claims.
+  assert.strictEqual(meta.filter(m => m.role === 'risk-manager' && m.subagent === true).length, 1);
+  assert.ok(meta.filter(m => m.role === 'risk-manager').every(m => m.decision.key.startsWith('2022-03-07')), 'the unverified reply (no fact check) gives no example');
   assert.ok(lines(named.files['step1/train.jsonl']).some(x => x.messages[x.messages.length - 1].content === 'APPROVED'));
   assert.ok(lines(DS.buildDataset({ train: [src], spec: SPEC, rules: RULES, current: CURRENT, roles: ['fth-head-trader', 'all'] }).files['meta.jsonl']).some(m => m.subagent));
   assert.throws(() => DS.buildDataset({ train: [src], spec: SPEC, rules: RULES, current: CURRENT, roles: ['risk-manager'] }), /roles: the head trader/);
@@ -323,7 +325,8 @@ test('examplesOf: the head trader\'s turns by default; the fingerprint names the
   const head = { role: 'fth-head-trader', faithful: true, messages: [{ role: 'user', content: 'h' }] };
   const sub = { role: 'risk-manager', faithful: true, messages: [{ role: 'user', content: 's' }] };
   assert.deepStrictEqual(DS.examplesOf({ turns: [head, sub] }).map(x => x.role), ['fth-head-trader']);
-  assert.deepStrictEqual(DS.examplesOf({ turns: [head, sub] }, ['fth-head-trader', 'risk-manager']).map(x => [x.role, x.subagent]), [['fth-head-trader', false], ['risk-manager', true]]);
+  assert.deepStrictEqual(DS.examplesOf({ turns: [head, sub] }, ['fth-head-trader', 'risk-manager']).map(x => [x.role, x.subagent]), [['fth-head-trader', false]], 'a subagent turn its claims unverified: none');
+  assert.deepStrictEqual(DS.examplesOf({ turns: [head, { ...sub, verified: true }] }, ['fth-head-trader', 'risk-manager']).map(x => [x.role, x.subagent]), [['fth-head-trader', false], ['risk-manager', true]]);
   // A format-1 fingerprint (the files alone) is never a format-2 one.
   const files = { 'step1/train.jsonl': 'x\n' };
   const legacy = require('crypto').createHash('sha256');
@@ -404,4 +407,36 @@ test('a mixed pool (decisions made with a delivery key on and without it) is ref
   for (const x of [r3.t1, r3.t2]) withDelivery(x, { cycleDataInPrompt: true, headSkillsInPrompt: true });
   withDelivery(r3.v, { cycleDataInPrompt: true });
   assert.throws(() => build3(r3.t1, r3.t2, r3.v), /2 head trader deliveries/);
+});
+
+test('a Claude Code run: its head turns are examples (the same chat format, the appended system prompt); a resumed session\'s are not', () => {
+  const crypto = require('crypto');
+  const home = tmpDir();
+  const raw = fs.readFileSync(path.join(ROOT, 'tests', 'fixtures', 'claude-cycle-transcript.jsonl'), 'utf8');
+  const sys = 'HEAD SYSTEM PROMPT\n';
+  const sha = crypto.createHash('sha256').update(sys).digest('hex');
+  const argv = ['claude', '-p', '<prompt>', '--append-system-prompt-file', `/somewhere/head-prompt/claude-head-${sha}.md`];
+  const r = F.writeRun(home, {
+    runId: 'claude1', start: '2022-03-07T00:00:00Z', end: '2022-03-12T00:00:00Z', stage: 1,
+    decisions: [
+      { t: '2022-03-07T14:33:00.000Z', kind: 'take', record: rec('fair-value-gaps'), prompt: 'CLAUDE-PROMPT-A', rawTranscript: raw, argv },
+      { t: '2022-03-08T14:33:00.000Z', kind: 'pass', composed: [{ symbol: 'MNQ', ok: false, reads: [] }], prompt: 'CLAUDE-PROMPT-PASS', rawTranscript: raw, argv },
+      { t: '2022-03-09T14:33:00.000Z', kind: 'take', record: rec('breakout'), prompt: 'CLAUDE-RESUMED', rawTranscript: raw, argv: [...argv, '--resume', 's1', '--fork-session'] },
+    ],
+  });
+  fs.mkdirSync(path.join(home, 'head-prompt'));
+  fs.writeFileSync(path.join(home, 'head-prompt', `claude-head-${sha}.md`), sys);
+  const built = DS.buildDataset({ train: [sourceOf(r)], spec: SPEC, rules: RULES, current: CURRENT });
+  const train = lines(built.files['step1/train.jsonl']);
+  assert.strictEqual(train.length, 2);
+  const take = train.find(x => x.messages[1].content === 'CLAUDE-PROMPT-A');
+  assert.deepStrictEqual(take.messages[0], { role: 'system', content: sys });
+  assert.deepStrictEqual(take.messages.slice(2).map(m => m.role), ['assistant', 'tool', 'tool', 'assistant']);
+  assert.ok(!built.files['step1/train.jsonl'].includes('CLAUDE-RESUMED'), 'a resumed session: its history is not in the record');
+  // The coverage report: per skill, kind and role, the GAPS under the spec's floor.
+  const cov = built.dataset.coverage.train;
+  assert.deepStrictEqual([cov.n, cov.kind, cov.role], [2, { pass: 1, take: 1 }, { 'fth-head-trader': 2 }]);
+  assert.strictEqual(cov.skill['fair-value-gaps'], 1);
+  assert.strictEqual(cov.minExamplesPerSkill, REPO_SPEC.coverage.minExamplesPerSkill);
+  assert.ok(cov.gaps.some(g => g.skill === 'fair-value-gaps' && g.n === 1));
 });
