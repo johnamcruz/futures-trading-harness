@@ -658,6 +658,28 @@ test('news: a blackout entry without a valid start and end is unknown (the gate 
   assert.strictEqual(d.candidates[0].blocked, 'news unknown (the blackouts file can\'t be read)');
 });
 
+// Round 19 (q93: the 15m line's bare `none` was read as "no 15m turn"): a candle with no pattern label prints
+// "no pattern" (candle-facts.js patternText, the Setups-to-check line's word too), never a bare `none`; the JSON keeps
+// its label `none`. Real briefings on the parity bars.
+test('candle lines: a candle with no pattern label prints "no pattern", never a bare none; the JSON keeps none', () => {
+  const CF = require('../../scripts/lib/trading/candle-facts');
+  assert.strictEqual(CF.patternText('none'), 'no pattern');
+  assert.strictEqual(CF.patternText('inside'), 'inside');
+  let seen = 0;
+  for (let n = 1200; n <= 1400 && seen < 3; n += 1) {
+    const b = build(n);
+    const candles = b.sections.m3.data.candles;
+    const none = Object.entries(candles).filter(([tf, c]) => tf !== '4h' && c && !c.unavailable && c.pattern === 'none').map(([tf]) => tf);
+    if (!none.length) continue;
+    seen += 1;
+    const text = B.renderBriefing(b, { now: new Date(b.closedAt) });
+    for (const tf of none) assert.match(text, new RegExp(`\\n- ${tf} \\([a-z, ]*closed \\d\\d:\\d\\d\\): no pattern, `), `${n} ${tf}`);
+    assert.doesNotMatch(text, /\n- \d+[mh] \([a-z, ]*closed [^)]*\): none\b/, String(n));
+    assert.strictEqual(candles[none[0]].pattern, 'none');
+  }
+  assert.ok(seen >= 3, `${seen} briefings with a no-pattern candle`);
+});
+
 test('completed-candle facts: per timeframe in m3 and a summary line each, the levels at the briefing\'s own values, 5m unavailable on 3m bars; frames share the runner\'s', () => {
   const b = build(1300);
   const d = b.sections.m3.data;
@@ -905,4 +927,21 @@ test('the Setups line on the bar that closed the setup states the record\'s wind
   fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace(/^valid_bars: 2\b/m, 'valid_bars: 3'));
   for (const env of [{}, { FTH_STRATEGIES_DIRS: dir }]) assert.strictEqual(B.gateValidBars(env), gate(env), JSON.stringify(env));
   assert.deepStrictEqual([B.gateValidBars({}), B.gateValidBars({ FTH_STRATEGIES_DIRS: dir })], [2, 2]);
+});
+
+// The Market state line (market-state.js, feat/chop-read, MARKET-STATE-SPEC): printed right under the Bias line in the
+// runner's briefing, the text marketStateLine gives on stateOf with the briefing's threshold (config/analysis.json
+// regime.rangeCrosses); a read, not a filter; never a data field; the Class side line is gone.
+test('render: the Market state line follows the Bias line, from market-state.js; no Class side line; no data field', () => {
+  const { biasLine } = require('../../scripts/lib/trading/bias-line');
+  const M = require('../../scripts/lib/trading/market-state');
+  const AN = require('../../scripts/lib/tunables').analysis();
+  const TH = { crossesChop: AN.regime.rangeCrosses, maxPullbackDepth: AN.pullbackRead.maxStateDepth };
+  const b = build(1300);
+  const text = B.renderBriefing(b, { now: new Date(b.closedAt) });
+  const line = M.marketStateLine(M.stateOf(b, TH));
+  assert.ok(line && biasLine(b), 'the fixture has both lines');
+  assert.ok(text.includes(`\n- ${biasLine(b)}.\n- ${line}.\n`), line);
+  assert.doesNotMatch(text, /Class side/);
+  assert.doesNotMatch(JSON.stringify(b.sections), /Market state|marketState/, 'not stored in the briefing\'s data');
 });

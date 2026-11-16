@@ -102,7 +102,29 @@ test('context quiz: every layer asked, ids unique, the bar the whole quiz at K 5
   // pinned false-reject rate) (feat/pullback-concept, owner-approved 2026-11-14: the pullback to a broken level, BOS confirms and
   // CHoCH warns on the 3m and the 15m against the 4h + 1h side, the pause not chop, late, the down mirror, the strict side,
   // the deep case, close to the picture a read, the 15m and 3m CISD; closed choices, each measured at k=3 before it entered the bar).
-  assert.strictEqual(QUIZ.questions.length, 88);
+  // 98 since q113-q122 (feat/chop-read, owner-approved 2026-11-14: chop is the quality of movement, range its geometry;
+  // repeated CHoCH both ways is chop, one CHoCH never; aligned and choppy is chop; a pause inside a Pullback never; a range
+  // day is catchable at the edge the side's way, its mid-range churn chop; transitional is unclear; q123, the CHoCH pair
+  // inside an open Pullback on a rotational day: the watch, not chop, Fable round 1). q120 (one 3m CHoCH inside a pullback,
+  // rotational: not chop) was dropped before any run: at 107 questions the gate's Monte Carlo misses its detection bound
+  // under a fixed slip count; q114, q123 and trend-vs-range's example cover its point. 100 with the Market state redesign
+  // (PREREG addendum 14): q124 and q125 (how chop ends), q126 (the early 15m pullback), q127 (a CHoCH alone: a potential
+  // reversal); q122 (mid-range churn, the same shape as q119 under the state table) and q116 (chop without edges; q117 keeps
+  // chop is not range) retired before any run; q128 (the 3m pair the 15m confirms) and q129 (the 15m CHoCH back as the turn)
+  // added, q115 (transitional, the table's not-aligned row) and q117 (the clean range day, q121's shape) retired, so the
+  // quiz stays at 108 where the gate's bounds hold. Round 15 (PREREG addenda 15-16): the BOS/CHoCH invalidation items
+  // q130-q133 added, q54 folded into the wick case (the same close-only lesson) and q127 into the CHoCH-holds case; q113
+  // (the chop shape q119 and q128 test), q59 (the pause inside the trend, q95's row), q55 (a CHoCH an early warning: q127,
+  // q132) and q108 (the late 15m BOS: q92 on the same briefing) retired: at 114 the gate's Monte Carlo misses its flaky
+  // bound under maxSlips 10. q112, q121 (known gaps) and q91 (at the line in the probes) stay. Round 18 (PREREG addendum
+  // 24): q118a (q118's briefing, the action) added; at 101 the gate's Monte Carlo misses its caught-broken bound (seed 1,
+  // 536 of 600), so q94 (not aligned: unclear, 6/6 on every k=6; q112 asks the same row on the same printed class) retired.
+  assert.strictEqual(QUIZ.questions.length, 100);
+  assert.ok(!QUIZ.questions.some(x => ['q55', 'q59', 'q94', 'q108', 'q113'].includes(x.id)), 'q55, q59, q94, q108 and q113 retired');
+  assert.ok(QUIZ.questions.some(x => x.id === 'q118a'), 'q118a added');
+  assert.ok(['q91', 'q112', 'q121'].every(id => QUIZ.questions.some(x => x.id === id)), 'q91, q112 and q121 kept');
+  assert.ok(!QUIZ.questions.some(x => ['q115', 'q116', 'q117', 'q122'].includes(x.id)), 'q115, q116, q117 and q122 retired');
+  assert.ok(!QUIZ.questions.some(x => x.id === 'q120'), 'q120 dropped');
   for (const id of ['q71', 'q72', 'q73', 'q74', 'q75', 'q76', 'q77', 'q78']) assert.ok(!QUIZ.questions.some(x => x.id === id), id);
   assert.strictEqual(QUIZ.partB.length, 8);
 });
@@ -185,9 +207,10 @@ test('context quiz: the pullback questions (q87-q112) are asked against the prom
     ['q92', 'lookup', PB, /Far past the level, no retest: late, not this read's entry/g],
     ['q93', 'lookup', PB, /a live strong 15m CISD on the CISD line is the setup read even when the last 15m candle line shows no pattern/g],
     // A strict-side guard (main's text): one of the 4h and 1h ranging is chop or unclear to the head trader, whatever the 3m.
-    ['q94', 'head', undefined, /not both one way → `unclear`/g],
-    ['q112', 'head', undefined, /not both one way → `unclear` \(never a trend class, smooth or not\)/g],
-    ['q95', 'head', undefined, /a 15m pullback, `range` or `transition` under them doesn't cancel it/g],
+    // Re-anchored to the Market state table (PREREG addendum 14): the class rule's sentence is replaced by it.
+    // Round 17: re-anchored to the table keyed on the printed line (one authority for the class word).
+    ['q112', 'head', undefined, /\| `unclear` \| no trend trade, never counter \|/g],
+    ['q95', 'head', undefined, /`forming`: no setup yet: wait for the first RTH 3m break\./g],
     ['q96', 'lookup', PB, /watch for the BOS or CISD; not the entry\./g],
     ['q97', 'lookup', PB, /No BOS or CISD after it: no setup, pass\./g],
     ['q98', 'lookup', PB, /a candle at the level is no confirmation alone/g],
@@ -199,10 +222,10 @@ test('context quiz: the pullback questions (q87-q112) are asked against the prom
     ['q104', 'head', undefined, /unless a `Pullback` line prints\./g],
     ['q105', 'lookup', PB, /A 3m CHoCH or CISD against inside it: the watch restarts\./g],
     ['q107', 'head', undefined, /your PLAN's `4 Setup` line is the read chain/g],
-    ['q108', 'lookup', PB, /a 15m BOS far past value \(no 3m BOS or CISD near it\): late, not an entry/g],
+    // q108 retired (PREREG addendum 16): q92 asks the late 15m BOS on the same briefing.
     ['q109', 'lookup', PB, /Counter candles that don't engulf it: a pullback forming, not a reversal/g],
     ['q110', 'lookup', PB, /a counter candle engulfing it reads as a CHoCH against: wait/g],
-    ['q111', 'head', undefined, /nor does your `frames disagree`/g],
+    ['q111', 'head', undefined, /No other row, picture or frame read changes it\. When your frames differ, say why in the PLAN\./g],
     ['q106', 'lookup', PB, /the CISD line's `strong` is its displacement's strength, not a pattern name/g],
   ];
   assert.deepStrictEqual(Q.anchorsMissing(QUIZ, prompts).filter(x => want.some(w => w[0] === x)), []);
@@ -228,22 +251,143 @@ test('context quiz: the pullback questions (q87-q112) are asked against the prom
   for (const [id, close] of [['q87', 21518.25], ['q96', 21512.5], ['q97', 21503.75], ['q99', 21518], ['q101', 21509.5], ['q102', 21513.75], ['q103', 21503], ['q104', 21504.25], ['q105', 21505.5], ['q106', 21518.25], ['q107', 21518.25]]) {
     for (const line of [up, pb(close), near]) assert.ok(text(id).includes(`\n${line}\n`), `${id}: ${line}`);
   }
-  assert.ok(text('q94').includes(`\n- ${Q.excerptOf({ bias: { h4: 0, h1: 1, t15: 1 } })[0]}\n`));
   assert.ok(text('q93').includes(`\n- ${Q.excerptOf({ bias: { h4: -1, h1: -1, t15: -1 } })[0]}\n`));
   const deep = pullbackLine({ frame: '15m', side: 'short', leg: { origin: 4337.5, extreme: 4246.25 }, depth: 0.83, pastOrigin: false, counter: { bars: 12, volRatio: 1.1, volume: 'rising', rangeRatio: 1.2 },
     swing: { '15m': { price: 4291.75, holds: false }, '1h': { price: 4352.5, holds: true } }, against: { '15m': { kind: 'CHoCH', direction: 'up', level: 4291.75, barsAgo: 3 }, '1h': null } });
   assert.ok(text('q98').includes(`\n${deep}\n`), deep);
 });
 
-// The pullback block's free-phrase choice items (q88-q112) hold the correct choice where a seeded shuffle put it (sha256 of
+// The chop read (feat/chop-read, owner-approved 2026-11-14): chop is the quality of movement, range its geometry.
+test('context quiz: the chop-read questions (q114-q133, less q115, q116, q117, q120 and q122) are asked against the prompt holding the sentence each anchors to, go missing without it, on the code writers\' lines', () => {
+  const prompts = Q.buildPrompts(ROOT, QUIZ);
+  const flat = t => t.replace(/\s+/g, ' ');
+  const cut = re => Object.fromEntries(Object.entries(prompts).map(([k, v]) => [k, flat(v).replace(re, '')]));
+  const want = [
+    ['q114', 'head', undefined, 'wait: a reversal attempt; class trend-up, not chop; no short', /wait for the 15m turn \(a live strong 15m CISD, a 15m BOS, a 15m CHoCH back or a 15m reaction at the level\)/g],
+    ['q118', 'head', undefined, 'F4', /Write the class the `Market state` line prints after `class`/g],
+    // Round 18 (PREREG addendum 24): q118's briefing, the action (the trade cost): wait for the 15m turn, never sit out.
+    ['q118a', 'head', undefined, 'F2', /Small overlapping candles inside a printed pullback are a pause, not chop/g],
+    ['q119', 'head', undefined, 'F2', /\| `chop` \| sit out \|/g],
+    ['q123', 'head', undefined, 'F3', /enter on the first 3m BOS or CISD the side's way near value/g],
+    ['q121', 'head', undefined, 'enter long: the turn at the low edge the side\'s way, 3m BOS near value', /setups at the range edge or on a breakout, the side's way/g],
+    // How chop ends (owner, 2026-11-14; round 20, decision 6: on displacement, the code's rule as trade-session states it).
+    ['q124', 'head', undefined, 'F2', /a displaced 3m break or a displaced 3m CISD/g],
+    ['q125', 'head', undefined, 'F2', /a displaced close beyond the IB \(complete at 10:30\)/g],
+    // The owner: "BOS is same-trend continuation, while CHoCH is a potential reversal" (bos-vs-choch, a lookup).
+    ['q127', 'lookup', ['bos-vs-choch'], 'a potential reversal up that still holds (above its origin 21462.50): unconfirmed until a BOS up', /a CHoCH holds until the low \(high\) that started the shift breaks/g],
+    // The owner's invalidation rule (round 15, bos-vs-choch): each break's protected swing; a close through it, not a wick.
+    ['q54', 'lookup', ['bos-vs-choch'], 'not invalidated: only a close below 21480.25 counts; the trend holds', /Only a close through it counts; a wick is not\./g],
+    ['q130', 'lookup', ['bos-vs-choch'], 'the trend holds: no close below the protected HL 21480.25', /a BOS holds until the leg's higher low \(lower high\) breaks/g],
+    ['q131', 'lookup', ['bos-vs-choch'], 'invalidated: the close below the protected HL ended the up trend (a potential reversal, unconfirmed)', /a BOS holds until the leg's higher low \(lower high\) breaks/g],
+    ['q132', 'lookup', ['bos-vs-choch'], 'failed: the potential reversal up is invalidated', /a CHoCH holds until the low \(high\) that started the shift breaks/g],
+    ['q133', 'lookup', ['bos-vs-choch'], 'a confirmed transition up: the CHoCH up was followed by a BOS up', /A potential reversal: CHoCH then BOS: confirmed/g],
+    // Top-down: the 3m CHoCH pair the 15m BOS confirms is the 15m continuation (owner, 2026-11-15).
+    ['q128', 'head', undefined, "trend-up: the 3m CHoCH pair is the 15m BOS up (continuation); long setups the side's way", /`trend`, their way: setups the side's way\./g],
+    // The 15m CHoCH back the side's way is a 15m turn (owner-approved 2026-11-15).
+    ['q129', 'head', undefined, 'enter long: the 15m CHoCH up is the turn; the 3m BOS up near value is the entry', /a live strong 15m CISD, a 15m BOS, a 15m CHoCH back or a 15m reaction at the level, the side's way/g],
+    // The owner: "15min up trend, 3min down trend could mean pullback".
+    ['q126', 'head', undefined, 'a pullback in the 15m trend: class trend-up; watch for the 15m turn, then a 3m BOS or CISD up', /or "15m up: a pullback in the 15m trend", down the mirror/g],
+  ];
+  assert.deepStrictEqual(Q.anchorsMissing(QUIZ, prompts).filter(x => want.some(w => w[0] === x)), []);
+  for (const [id, prompt, lookup, answer, re] of want) {
+    const q = QUIZ.questions.find(x => x.id === id);
+    assert.ok(q, id);
+    assert.deepStrictEqual([q.prompt, q.lookup, q.answer], [prompt, lookup, answer], id);
+    assert.ok(q.choices.includes(q.answer), `${id}: a closed choice`);
+    assert.deepStrictEqual(Q.anchorsMissing(QUIZ, cut(re)).filter(x => x === id), [id], `${id}: its sentence deleted, its anchor goes missing`);
+  }
+  // q99 carries only briefing facts (construct validity, feat/chop-read): no quiz-only framing sentence.
+  assert.doesNotMatch(QUIZ.questions.find(x => x.id === 'q99').text, /No exact touch|no named reversal candle/);
+  // q112 prints the Market state line under its Bias line, as the briefing does (market-state.js): not aligned.
+  assert.match(QUIZ.questions.find(x => x.id === 'q112').text, /\n- Bias: [^\n]*\n- Market state \(3m\): [^\n]*\(not aligned\); class unclear\.\n/);
+  // The invalidation items print the protected swing the way the state reads it (round 20: from the printed breaks, holds,
+  // broken by a close, failed).
+  const tq = id => QUIZ.questions.find(x => x.id === id).text;
+  assert.match(tq('q130'), /Market state \(3m\): in the up leg: [^\n]*, HL 21480\.25 holds; 4h\+1h up/);
+  assert.match(tq('q131'), /Market state \(3m\): range: [^\n]*, HL 21480\.25 broken by a close; 4h\+1h up/);
+  // Round 20b: q119 states the layer facts its text describes (no leg holds, overlap high, efficiency low, a failed
+  // continuation): its line prints chop, its key.
+  assert.match(tq('q119'), /\n- Market state \(3m\): chop: no leg holds \(breaks both ways\); overlap 0\.\d+, efficiency 0\.05, failed continuation; [^\n]*; class chop\.\n/);
+  assert.ok(QUIZ.questions.find(x => x.id === 'q119').layers, 'q119: its layer facts');
+  assert.match(tq('q132'), /Market state \(3m\): range: 3m BOS down then CHoCH up \(failed: a close below its origin 21462\.5\); 4h\+1h up/);
+  assert.match(tq('q127'), /Market state \(3m\): range: 3m BOS down then CHoCH up \(unconfirmed, holds above 21462\.5 \(origin\)\); 4h\+1h up/);
+  // The chop-end items show the facts that confirm the CHoCH (round 20: no layer facts stated, so no chop memory: the line
+  // prints the confirmed leg).
+  const tx = id => QUIZ.questions.find(x => x.id === id).text;
+  assert.match(tx('q124'), /\n- CISD \(completed candles\): 3m bullish at [\d.]+ \(closed 10:45, strong\)/);
+  assert.match(tx('q124'), /Market state \(3m\): in the up leg: [^\n]*, then a 3m CISD up \(confirmed\); 4h\+1h up/);
+  assert.match(tx('q125'), /initial balance 21480-21560/);
+  assert.match(tx('q125'), /Market state \(3m\): in the up leg: [^\n]*, then a close above the IB high 21560 \(confirmed\); 4h\+1h up/);
+  // The early 15m pullback: the 15m up, the 3m trending down, no Pullback line yet.
+  assert.match(tx('q126'), /Market state \(3m\): in the down leg: [^\n]*; 15m up: a pullback in the 15m trend; 4h\+1h up/);
+  assert.ok(!/\n- Pullback \(/.test(tx('q126')), 'q126: no Pullback line yet');
+  // trend-vs-range is a lookup, not embedded in the head prompt.
+  assert.ok(!prompts.head.includes('<skill name="trend-vs-range">'));
+  // The briefing lines are the code's writers (Bias, Day so far); the Day so far score is efficiency x sqrt(bars), and its
+  // word the day-context bands (rotational under 0.34, mixed below 0.75).
+  const { daySoFarLine } = require('../../scripts/lib/trading/day-so-far');
+  const text = id => QUIZ.questions.find(x => x.id === id).text;
+  for (const id of want.map(w => w[0])) {
+    const m = /\n(- Day so far \((\d+) 3m bars; `day-context`\): (rotational|mixed up|mixed down): efficiency ([\d.]+) \(x sqrt\(bars\) ([\d.]+)\), RTH VWAP crosses (\d+), range ([\d.]+) x 3m ATR\(14\), net (up|down)[^\n]*)\n/.exec(text(id));
+    assert.ok(m, `${id}: a Day so far line`);
+    const [, line, bars, word, eff, score, crosses, range, dir] = m;
+    assert.strictEqual(line, daySoFarLine({ status: 'read', bars: +bars, read: word.split(' ')[0], direction: dir, efficiency: +eff, score: +score, vwapCrosses: +crosses, rangeAtr: +range }), id);
+    assert.ok(Math.abs(+eff * Math.sqrt(+bars) - +score) < 0.006, `${id}: score`);
+    assert.strictEqual(word.startsWith('rotational'), +score < 0.34, `${id}: the word's band`);
+    assert.ok(/\n- Bias: /.test(text(id)), `${id}: a Bias line`);
+  }
+  // Repeated CHoCH both ways (the printed chop fact) where the answer is chop; never on the pullback, pause or edge items.
+  const both = id => /m3\.lastBreak: last CHoCH \w+ at [\d.]+ \(barsAgo \d+\), previous CHoCH/.test(text(id));
+  for (const id of ['q119', 'q124', 'q125', 'q128']) assert.ok(both(id), `${id}: breaks both ways`);
+  for (const id of ['q114', 'q118', 'q121']) assert.ok(!both(id), `${id}: one CHoCH at most`);
+  // The SETUP15 hard case: the pair and rotational with many crosses, inside an open Pullback: the trend class, not chop.
+  assert.ok(both('q123') && /\n- Pullback \(15m, long leg/.test(text('q123')) && /rotational: .*RTH VWAP crosses [5-9]/.test(text('q123')), 'q123: the full chop facts inside a Pullback');
+});
+
+// Quiz realism (feat/chop-read, PREREG addendum 14): every Part A item whose synthetic briefing shows a Bias line prints
+// the Market state line right under it, the one market-state.js stateOf computes from that item's own printed lines
+// (context-quiz.js marketStateOfText), as the live briefing would. Part B's bias excerpts print none (too few facts, D3).
+test('context quiz: every item\'s Bias line is followed by its Market state line, built by stateOf from its own lines', () => {
+  let n = 0;
+  for (const q of QUIZ.questions) {
+    const t = String(q.text || '');
+    const m = /\n- (Bias: [^\n]*)\.\n- (Market state \(3m\): [^\n]*)\./.exec(t);
+    if (!/\n- Bias: /.test(t)) { assert.doesNotMatch(t, /Market state/, q.id); continue; }
+    assert.ok(m, `${q.id}: the Market state line right under the Bias line`);
+    assert.strictEqual(`${m[2]}`, Q.marketStateOfText(t.replace(/\n- Market state[^\n]*/, ''), q.layers || null), q.id);
+    assert.strictEqual(t.split('Market state').length, 2, `${q.id}: one line`);
+    n += 1;
+  }
+  assert.ok(n >= 35, `${n} items`);
+  for (const q of QUIZ.partB) assert.doesNotMatch(Q.questionText(QUIZ, q), /Market state|Class side/, q.id);
+  assert.doesNotMatch(JSON.stringify(QUIZ), /Class side/, 'the dropped line is gone');
+});
+
+// The pullback and chop blocks' free-phrase choice items (q88-q129) hold the correct choice where a seeded shuffle put it (sha256 of
 // the id, mod the choice count), never always first: a guard against first-answer bias in items added later.
 test('context quiz: the pullback items\' correct choice sits at its seeded position, not always first', () => {
   const crypto = require('crypto');
-  const block = QUIZ.questions.filter(q => /^q(8[8-9]|9\d|1[01]\d)$/.test(q.id) && Array.isArray(q.choices) && !/^F\d$/.test(q.choices[0]));
+  const block = QUIZ.questions.filter(q => /^q(8[8-9]|9\d|1[0-2]\d)$/.test(q.id) && Array.isArray(q.choices) && !/^F\d$/.test(q.choices[0]));
   assert.ok(block.length >= 15, `${block.length} free-phrase items`);
   for (const q of block) {
     const want = Number(BigInt(`0x${crypto.createHash('sha256').update(q.id).digest('hex')}`) % BigInt(q.choices.length));
     assert.strictEqual(q.choices.indexOf(q.answer), want, q.id);
   }
   assert.ok(block.filter(q => q.choices.indexOf(q.answer) === 0).length <= block.length / 2, 'not mostly first');
+});
+
+// Round 19 (q93: a bare `none` on the 15m line was read as "no 15m turn"): every quiz candle line prints its pattern the
+// way the briefing does (candle-facts.js patternText: the label `none` is "no pattern"), never a bare `none`.
+test('context quiz: every candle line prints its pattern as the briefing does ("no pattern", never a bare none)', () => {
+  const { patternText } = require('../../scripts/lib/trading/candle-facts');
+  const CANDLE_LINE = /\n- (\d+[mh]) \(([a-z, ]*)closed \d\d:\d\d\): ([^,.;\n]+)/g;
+  const noPattern = [];
+  for (const q of [...QUIZ.questions, ...(QUIZ.partB || [])]) {
+    for (const m of String(q.text || '').matchAll(CANDLE_LINE)) {
+      assert.notStrictEqual(m[3], 'none', `${q.id}: ${m[0].trim()}`);
+      if (m[3] === patternText('none')) noPattern.push(q.id);
+    }
+  }
+  // The items that print a no-pattern candle (q93's mirror and its kin) print the briefing's words.
+  assert.deepStrictEqual(noPattern, ['q93', 'q99', 'q101', 'q102', 'q112', 'q123']);
 });

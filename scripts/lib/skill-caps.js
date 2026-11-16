@@ -8,8 +8,8 @@
  *   SKILL_BYTES          the cap of a skill (config/training.json skillCaps, only falls)
  *   SETUP_SKILL_BYTES    the two setups' cap (they also carry a timeframe table)
  *   SETUP_SKILLS         the setups: rejection, breakout
- *   PER_SKILL            one skill's own cap (skillCaps.perSkill, only falls): candle-reading's reaction read
- *                        (owner-approved, improves context; one skill only)
+ *   PER_SKILL            a skill's own cap (skillCaps.perSkill, only falls; owner-approved, improves context):
+ *                        candle-reading, pullback-vs-reversal, trend-vs-range, bos-vs-choch
  *   skillByteCap(name)   the cap of the skill named: its own, else the setups', else SKILL_BYTES
  */
 

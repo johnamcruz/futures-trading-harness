@@ -29,17 +29,18 @@ From the highest timeframe down, for each side (`m15.alignment`; read
 | `mixed` | timeframes disagree without a clear pullback | Priority step 4; a quiet session is a read against |
 | `counter` | the highest timeframe is against it | No entry: never counter |
 
-**The side rule** (in an attempt): each trending 4h or 1h your way,
-neither against; both ranging: the 15m and `Trend declared?` your way;
+**The side rule** (side only; the class is the Market state line's; in
+an attempt): each trending 4h or 1h your way, neither against; both ranging: the 15m and `Trend declared?` your way;
 else no trade. A CHoCH against the bias is context, never a way in.
 The setup is the 15m (or higher) reaction or break the
 bias's way (its candle's strength and close: `candle-reading`): it
 is the entry; the 3m only times the entry: the next 3m bar, no
 confirming close, no 3m turn to wait for (waiting cost R), unless a
-`Pullback` line prints.
+`Pullback` line prints. A 15m break far past value (RTH VWAP or EMA20
+beyond about ±0.5): late, not an entry.
 **Pullback** (`pullback-vs-reversal`): BOS or CISD the side's way
-confirms, CHoCH or CISD against warns. Setup: the 15m turn: a live 15m
-CISD, a 15m BOS or a 15m reaction at the level, the side's way; no 3m BOS
+confirms, CHoCH or CISD against warns. Setup: the 15m turn: a live strong 15m
+CISD, a 15m BOS, a 15m CHoCH back or a 15m reaction at the level, the side's way; no 3m BOS
 or CISD yet: watch (the bar stays a pass; the read stays open).
 Entry: the first 3m BOS or CISD the side's way near value
 (`Trend declared?` RTH VWAP or EMA20 within about ±0.5, + is the side's
@@ -48,11 +49,8 @@ late, not an entry. In a trade, 15m BOS: hold. A CHoCH or CISD against
 (3m: the watch restarts; 15m: a reversal attempt): wait.
 Not in a prop attempt: the trend rule alone (both ranging, the 15m's
 side; no trend anywhere, both sides).
-Then the head trader's own STATE read decides the take (`trade-session`
-step 3): its own 4h and 1h both range, or one of them not trending the
-side, is `unclear` to it (`chop`: choppy movement only); both the
-side's way, a 15m range, transition or pullback under them, is the
-side's trend class. The briefing's
+Then the class is the one the Market state line prints after `class`;
+a take needs your own STATE 4h and 1h the side's way too. The briefing's
 `Bias:`/`Trend rule:` lines are the gate's floor (what it refuses),
 never your side: your own STATE read is stricter.
 

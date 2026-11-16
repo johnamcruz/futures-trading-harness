@@ -1772,27 +1772,102 @@ Frozen definitions:
   `3m-break`. A name off the list is counted apart (the record's own
   dropped count, and any other name kept off the list), never matched
   loosely. A met signal's field maps to its cite name (the 15m to
-  `15m-trend`, the Bias line to `trend-rule`); the VWAP crosses and the
+  `15m-trend`, the Bias line to `trend-rule`, the breaks both ways to
+  `15m-break` and `3m-break`); the VWAP crosses and the
   declared trend have none, so they are listed as met but uncitable, never
   as ignored.
 - **The evidence word** (the reference for guess and lag): with exactly one
   side the trend rule allows (the Bias line's sides), that side's signal
   class C reads `trend-<way>`, B reads `chop`, A or D reads `unclear`. With
   no such side, the side-free signals' class B reads `chop`, else
-  `unclear`. The signals per side, each a present fact of the candle's
+  `unclear`. It is a bars-only read independent of the lesson except
+  through C3 (the in-Pullback CHoCH pair is not C3): inside an open
+  `Pullback` line (pullback-read.js `isOpen`) it can still read `chop` (on
+  C1 and C7).
+  The signals per side, each a present fact of the candle's
   briefing: the day so far rotational (C1) or directional the side's way
-  (T1); the 15m range (C2), the side's way (T2) or against (C9); the 3m
-  regime range (C3), the side's way (T3) or against (C9, once); the Bias
+  (T1); the 15m breaking both ways, its last and previous breaks both
+  CHoCH (C2); the 15m trend the side's way (T2) or against (C9); the 3m
+  breaking both ways, the same on `m3.lastBreak`, with no open `Pullback`
+  line (inside one the pair is the pullback and its watch, as taught)
+  (C3); the 3m regime the
+  side's way (T3) or against (C9, once); the Bias
   line naming no side (C4); session VWAP crosses at or above
   `signals.crossesChop` (C7) or at or below `signals.crossesTrendMax` with
   price on the side's side (T6); inside the initial balance after opening
   inside the prior value area (C8) or an IB trend day the side's way (T7);
   the day's trend declared for the side (T5). Class A: no signal; C: trend
   only; B: chop outnumbers trend; D: both, trend at least chop.
-- **The coded read**: the day so far rotational reads `chop`; else the 4h
-  and 1h agreeing up or down read `trend-<way>`; else the 15m and the 3m
-  regime both ranging read `chop`; else `unclear`. It is never the
-  model's.
+- **The coded read** = the briefing's Market state (scripts/lib/trading/
+  market-state.js `readState`, the one definition the summary line prints;
+  the Market state pull request), the class word of its table: chop reads
+  `chop`; the 4h and 1h not both one way read `unclear`; a pullback read
+  their way (an open `Pullback` line no deeper than config/analysis.json
+  `pullbackRead.maxStateDepth`, or the 15m trending their way under a 3m
+  last break that is a BOS against them) reads `trend-<way>`; a 3m trend
+  their way, ranging or forming under them, reads `trend-<way>`; a 3m trend
+  against them reads `unclear`. The 3m state, once, on the RTH breaks (those
+  whose candles closed at or after 09:30 ET): none yet: forming; one: a BOS
+  a trend that way, a CHoCH ranging unless a live 3m CISD its way on a later
+  candle confirms it; two or more: chop (the last two breaks both CHoCH, a
+  failed reversal; no pullback read active; the 15m not confirming the way
+  it ends with its last break a BOS that way known at or after 09:30 ET and
+  by the close; no confirmed turn), trend (the last break a BOS whose
+  protected swing still holds; the pair the 15m confirms; or a CHoCH
+  confirmed by a live 3m CISD its way closed on a later candle, or by a close
+  beyond the initial balance, complete from 10:30 ET, with the previous break
+  inside it), else ranging. Each 3m break's protected swing (structure-
+  events.js `protectedOf`: the origin of the leg that made it): a BOS whose
+  protected higher low (lower high) a close went through has ended its
+  trend (ranging); a CHoCH whose origin a close went through has failed (its
+  CISD turn no longer confirms it; no new chop condition). The pullback read
+  is open while the leg was never given back past its origin and its 15m
+  swing was never broken by a close since the extreme (pullback-read.js
+  `isOpen`, sticky on the leg). The day so far rotational and the RTH VWAP
+  crosses at `signals.crossesChop` are printed beside a chop, never its
+  conditions. It is never the model's. Against the coded read before it:
+  the bare CHoCH pair (no open `Pullback` line, no rotational day or crosses)
+  now reads `chop`; the 4h and 1h agreeing with the 3m's last break a BOS
+  against them and no pullback read reads `unclear` (it read the trend); the
+  RTH breaks, the 15m guard, the protected swings, the sticky and bounded
+  pullback and the early read on a BOS only are new. (The briefing passes
+  config/analysis.json `regime.rangeCrosses` for the printed crosses, pinned
+  equal to `crossesChop`, and `pullbackRead.maxStateDepth`; the recognition
+  key passes the same depth bound. C7 still reads the session crosses, as
+  frozen.)
+- **Three reads, kept apart** (the chop pull request):
+  - *The coded read* = the Market state restated (never `chop` inside an
+    open `Pullback` line). Since round 18 of the Market state pull request
+    the briefing prints it: the Market state line ends `; class <word>`
+    (market-state.js `classWordOf`, the same function), so a model can copy
+    it. Its agreement with the coded read is no longer a recognition
+    measure; the evidence word stays independent and is the recognition
+    measure. The scorecard's pass on "the head trader's own STATE read"
+    off the side (scorecard.js `stateOffSide`) now scores a class the
+    line printed, copyable too; renaming both fields is a follow-up.
+    Printing the class is a taught read of code output, not a filter: no
+    gate, hook or compose code reads it.
+  - *The evidence word* = a bars-only read, independent of the lesson
+    except through C3 (the in-Pullback CHoCH pair is not C3); scoring a
+    model against it does not assume the lesson is right.
+  - *Open-Pullback candles* (the post-merge moment-test plan) = a separate
+    stratum: the candles whose present key has `facts.pullback` true
+    (pullback-read.js `lineOpen`), judged by
+    the pass check (did the pullback resume, or range or reverse: READ15's
+    A/B/C, hindsight only) and the actual-exit R of entries there; the
+    evidence word is reported beside, not used to score the guardrail.
+  An open `Pullback` line: the briefing prints one and its leg is not
+  given back past its origin (pullback-read.js `givenBack`: `pastOrigin`
+  when stated, else depth ≥ 1; pullback-vs-reversal step 8; `lineOpen`,
+  what `facts.pullback` and C3 read, as frozen); the briefing's Market
+  state reads the stricter `isOpen` (never given back nor its 15m swing
+  broken since the extreme) with the depth bound; the skills name the
+  state.
+- **Chop is not range** (the owner's rule, the chop pull request): chop is
+  the quality of movement, range its geometry. A 15m `range` or a 3m
+  `range` regime is neither a chop signal nor the coded read's `chop`; C2,
+  C3 and the coded read were redefined on the breaks both ways (they read a
+  range as chop before).
 - **Confirmation, one rule**: `barFacts.valid` for the side at the candle
   (the entry check: the window allows entries, the trend rule allows the
   side, the entry rule including `declaredOf`, a standard plan or a
@@ -2571,7 +2646,10 @@ were measured at 53 questions. At 95 (87 + 8 in Part B, feat/pullback-concept)
 0.7-1.0% (stable) and 2.0-5.2% (flaky) false rejects, a broken stable question
 caught 90.5-92.7%, a flaky one dropped to 0 97.3-98.7%. At 8 the flaky mix
 rejected 8.7-10.8% at most seeds (one seed's 5.3% was the draw), with the same
-detection. A flagged
+detection. At 106 (98 + 8, feat/chop-read) 9 rejected 6.0-7.8% on the flaky mix,
+over its 6% bound; `maxSlips` is 10: 0.7-1.5% (stable) and 3.2-4.2% (flaky)
+false rejects, a broken stable question caught 91.5-93.0%, a flaky one dropped to
+0 97.7-99.7%, the same detection as at 9. A flagged
 flaky question that does not confirm is not a slip (it has no baseline to lose).
 Summaries, the confirm runs' too, must carry the quiz
 hash they were graded with (`grade` writes it), equal to the current quiz's; a

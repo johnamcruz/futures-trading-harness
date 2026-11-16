@@ -159,6 +159,18 @@ test('briefingInputs: a displacement down is a pattern and its side', () => {
   assert.strictEqual(x.candles['5m'].dir, 'down');
 });
 
+// Round 19: the candle lines print "no pattern" for the label `none` (candle-facts.js patternText); a recording made
+// before (a bare `none`) and one made after read back the same label, `none`.
+test('briefingInputs: "no pattern" (the line today) and a bare none (an older recording) both read back as pattern none', () => {
+  const old = B.briefingInputs(PROMPT);
+  const now = B.briefingInputs(PROMPT.replace('- 15m (setup candle, closed 10:00): none,', '- 15m (setup candle, closed 10:00): no pattern,')
+    .replace('- 3m (entry candle, timing, closed 10:03): none,', '- 3m (entry candle, timing, closed 10:03): no pattern,'));
+  for (const tf of ['15m', '3m']) {
+    assert.strictEqual(old.candles[tf].pattern, 'none', tf);
+    assert.deepStrictEqual(now.candles[tf], old.candles[tf], tf);
+  }
+});
+
 // Stand-ins for scripts/lib/trading/frame-state.js (feat/state-line): the interface only.
 const stub = {
   frameStates: ({ m15, h1, candles, closedAt }) => ({ seen: { m15, h1, candles, closedAt }, '1h': { label: h1.h1.trend, state: 'disagree' } }),

@@ -113,9 +113,10 @@ const CITES = Object.freeze({
 });
 // `cites none` / `cites n/a`: no name cited, an empty list (not a dropped name).
 const NO_NAME = Object.freeze(['none', 'n/a']);
-// A class word in the regime's spelling (chop is a range; trend-up and trend-down are regime tags too; unclear has none):
-// for a report or a test to tell a class word copied from the regime label. Never a check on a decision.
-const AS_REGIME = Object.freeze({ 'trend-up': 'trend-up', 'trend-down': 'trend-down', chop: 'range' });
+// A class word in the regime's spelling (trend-up and trend-down are regime tags too; chop is not range: chop is the
+// quality of movement, range its geometry; unclear has none): for a report or a test to tell a class word copied from the
+// regime label. Never a check on a decision.
+const AS_REGIME = Object.freeze({ 'trend-up': 'trend-up', 'trend-down': 'trend-down' });
 /** Whether a class word is the regime word in another spelling. */
 const classIsRegime = (classWord, regime) => Object.prototype.hasOwnProperty.call(AS_REGIME, classWord) && AS_REGIME[classWord] === regime;
 

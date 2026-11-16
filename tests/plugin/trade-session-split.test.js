@@ -312,6 +312,9 @@ const LATE = [
     reason: "feat/bias-bg: the stop moves only behind turned structure (the trail), never to breakeven by feel" },
   { from: "Rules strategies (none active) firing both sides (`confluence.against`): stand aside (priority step 6: no exception).", to: "Rules candidates (none active) firing both sides (`confluence.against`): stand aside (priority step 6: no exception).",
     reason: "feat/bias-bg (review MED-2): a fire the trend rule refuses is no candidate, so no disagreement" },
+  { from: "Start from the computed regime (the briefing's `m3` `regime`, the same value market-snapshot and `strategies_scan` report): trend-up, trend-down, range, or transition, plus volatility.",
+    to: "Start from the computed regime (the briefing's `m3` `regime`, the same value market-snapshot and `strategies_scan` report): trend-up, trend-down, range, or transition, plus volatility: a read, not the class (the `Market state` line's).",
+    reason: "feat/chop-read round 19 (owner, PREREG addendum 25, q118): the regime's values share the class spelling; the class word is the Market state line's alone, the regime a read" },
 ];
 const LATE_STALE = (() => {
   const r = withLate(ALLOWED, LATE, units(require('fs').readFileSync(require('path').join(__dirname, '..', '..', BEFORE), 'utf8')));
@@ -417,7 +420,21 @@ const OLD_AGENTS_MD = 24466;
 // rule's compose bullet in AGENTS.md scopes the entry timing (unless a `Pullback` line is printed), and the class rule's
 // range is not chop (the owner: chop is the movement's quality, range its geometry); htf-to-ltf and trader-process are
 // common to both sides.
-const RAISED = 154 + 130 + 1625 + 336 + 382 + 939 + 843;
+// Plus 1823 for feat/chop-read (same rule, owner-approved 2026-11-14): trade-session's class rule names the owner's chop
+// (repeated CHoCH both ways with rotational or many VWAP crosses, never one fact, aligned days too), the action (chop: sit
+// out; a lower-timeframe range inside the 4h + 1h trend: setups at the edge the side's way), the pause inside a Pullback
+// never chop (its 3m CHoCH against then back the watch; open defined: printed, not given back past its origin; round 5: the printed Class side line names the trend class, the rule reordered with no else chain, the pause gives the class, a rejection inside the zone is the reaction; round 6: the Class side line's provenance, the pause gives the class bullets' class; round 7: chop first, rotational is the printed word, the watch ends at the first 3m BOS or CISD, the live strong 15m CISD is the turn; day-context's printed word; round 8: the Class side line as the one source), and two worked examples (4h range, 1h up, smooth: unclear; close
+// to the level: enter); htf-to-ltf is common to both sides.
+// The Market state redesign (feat/chop-read, PREREG addendum 14) replaced the class rule's bullets with the state table:
+// the chop-read term falls 1823 -> 1621, the measured need of the worst path.
+// Round 15 (PREREG addendum 15, same rule): the table's forming row, the chop row's current 15m BOS and the strong 15m CISD
+// in the read chain and the setup sentence (+138, the measured need of the worst path).
+// Round 19 (PREREG addendum 25, same rule): the 15m frame read feeds the setup, not the class (q118), the 3m CISD is the
+// pullback entry as a 3m BOS is and the read chain's worked entry shows it (q102), and setup-judgment's regime is a read,
+// not the class (+146, the measured need of the worst path).
+// Round 20 (PREREG addendum 28, same rule): the setup rows for the layers' state words (range, in the up leg, transition)
+// and chop's end with displacement (+144, the measured need of the worst path).
+const RAISED = 154 + 130 + 1625 + 336 + 382 + 939 + 843 + 1621 + 138 + 146 + 144;
 const EVERY_CYCLE = ['multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'trader-process', 'htf-to-ltf', 'autonomous-trading'];
 const PATHS = {
   'full cycle, no candidate': ['role-round', 'setup-judgment', 'day-context'],
@@ -546,9 +563,33 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // 105053 full, 45414 -> 46207 index; the trend-momentum analyst 56933 -> 63594 full, 42212 -> 42334 index; the risk
 // manager 95141 -> 95294 full, 81029 -> 81182 index; the news-calendar and volume-liquidity analysts +62 both modes;
 // every other role within its pin.
+// Then feat/chop-read (same rule, owner-approved 2026-11-14): trend-vs-range's chop definition and chop is not range
+// (+1666, the two analysts that embed it), bos-vs-choch's core rule, pullback-vs-reversal's pause vs chop, cisd's transition
+// unclear, htf-to-ltf's class sentence, vwap-volume-profile's range-day edge (+108): the market-structure analyst 105053 ->
+// 107114 full, 46207 -> 46376 index; the trend-momentum analyst 63594 -> 65664 full, 42334 -> 42514 index; the
+// volume-liquidity analyst 50413 -> 50521 full, 35045 -> 35153 index; every other role within its pin.
+// Then the Market state redesign (feat/chop-read, PREREG addendum 14), at the measured need: bos-vs-choch's labelling rule
+// and the owner's trending and chop definitions in trend-vs-range, the class sentences that named the dropped rule now
+// pointing to the Market state line: the market-structure analyst 107114 -> 107352 full, 46376 -> 46370 index; the
+// trend-momentum analyst 65664 -> 66039 full, 42514 -> 42645 index; the trade reviewer 9454 -> 9400 both modes (with the
+// owner's 15m CHoCH back as a 15m turn in pullback-vs-reversal step 4 and the 3m pair's chop reading in bos-vs-choch).
+// Then round 15 (PREREG addendum 15, same rule), at the measured need: bos-vs-choch's protected swing line, its fields and
+// the current 15m BOS, pullback-vs-reversal's and htf-to-ltf's strong 15m CISD: the market-structure analyst 107352 ->
+// 107830 full (with pvr's Depth row clause, Fable round 16), 46370 -> 46657 index; the trend-momentum analyst 66039 ->
+// 66510 full, 42645 -> 42925 index.
+// Then round 17 (one authority for the class word), at the measured need: bos-vs-choch's line that a BOS keeps its label
+// after its protected swing breaks (+96 in each role that embeds it in index mode; its CHoCH-pair sentence now points to the
+// line), trend-vs-range's and pullback-vs-reversal's class sentences replaced by pointers: the market-structure analyst
+// 107830 -> 107817 full, 46657 -> 46753 index; the trend-momentum analyst 66510 -> 66501 full, 42925 -> 43021 index.
+// Then round 18 (the line prints the class), at the measured need: htf-to-ltf's side rule says it decides the side only and
+// its no-Pullback 15m break far past value is late (q119, q92): the market-structure analyst 107817 -> 107925 full,
+// 46753 -> 46864 index; every other role falls or stays.
+// Then round 20 (the owner's three layers in bos-vs-choch, his chop checklist, behavioral list and classes in
+// trend-vs-range, one home each), at the measured need: the market-structure analyst 107925 -> 110333 full, 46864 -> 47963
+// index; the trend-momentum analyst 66501 -> 68877 full, 43021 -> 44094 index; every other role falls or stays.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 105053, 'news-calendar-analyst': 10868, 'risk-manager': 95294, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 63594, 'volume-liquidity-analyst': 50413 },
-  index: { 'market-structure-analyst': 46207, 'news-calendar-analyst': 10868, 'risk-manager': 81182, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9454, 'trend-momentum-analyst': 42334, 'volume-liquidity-analyst': 35045 },
+  full: { 'market-structure-analyst': 110333, 'news-calendar-analyst': 10868, 'risk-manager': 95294, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9400, 'trend-momentum-analyst': 68877, 'volume-liquidity-analyst': 50521 },
+  index: { 'market-structure-analyst': 47963, 'news-calendar-analyst': 10868, 'risk-manager': 81182, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9400, 'trend-momentum-analyst': 44094, 'volume-liquidity-analyst': 35153 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

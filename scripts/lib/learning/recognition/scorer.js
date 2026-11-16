@@ -49,7 +49,7 @@ const WORDS = Object.freeze(['trend-up', 'trend-down', 'chop', 'unclear']);
 // exports them), and the cite name of each field a present-fact signal reads (key.js): none for the VWAP crosses and the
 // declared trend, which the record's list doesn't name (uncitable: met, never counted as ignored).
 const CITE_FIELDS = Object.freeze(['4h-trend', '1h-trend', '15m-trend', 'trend-rule', 'regime', 'day-type', 'day-so-far', 'pullback', '1h-break', '15m-break', '3m-break']);
-const CITE_OF = Object.freeze({ '15m': '15m-trend', regime: 'regime', 'day-so-far': 'day-so-far', 'day-type': 'day-type', bias: 'trend-rule', vwap: null, declared: null });
+const CITE_OF = Object.freeze({ '15m': '15m-trend', '15m-break': '15m-break', '3m-break': '3m-break', regime: 'regime', 'day-so-far': 'day-so-far', 'day-type': 'day-type', bias: 'trend-rule', vwap: null, declared: null });
 
 // The model's own frames, read from the STATE record's read.frames by equality (state-read.js FRAME_VALUES words).
 const FRAME_KEYS = Object.freeze(['4h', '1h', '15m']);

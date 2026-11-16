@@ -124,7 +124,24 @@ test('CORE: the composed bar\'s reads the gate requires (SITUATIONAL taught in t
   // pause, the 15m turn and the 3m BOS or CISD) and the pointers to it in trade-session, trader-process, rejection,
   // breakout, confluence-counting and trade-lifecycle, trade-session's read chain for the PLAN's 4 Setup line and the 15m
   // turn and late 15m BOS stated alike in its three homes, and the class rule's range is not chop (+1760).
-  assert.ok(Buffer.byteLength(prompt) <= 83102, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
+  // Then 84907 (feat/chop-read, owner-approved 2026-11-14, same rule): trade-session's class rule names the owner's chop
+  // (repeated CHoCH both ways with rotational or many VWAP crosses, never one fact, aligned days too), chop: sit out, a
+  // range inside the 4h + 1h trend tradable at the edge the side's way, the pause inside a Pullback never chop, two worked
+  // examples, the CHoCH pair inside a Pullback its watch; htf-to-ltf's class sentence, aligned or not, open, chop and pause each defined once; round 5: the Class side line named, no else chain, the pause gives the class, a rejection inside the zone is the reaction; round 6: the Class side line's provenance, the pause gives the class bullets' class; round 7: chop first, rotational the printed word, the watch's end, the live strong 15m CISD is the turn; round 8: the Class side line as the one source (+1805).
+  // Then 84568 with the Market state redesign (feat/chop-read, PREREG addendum 14): the class rule's bullets replaced by the
+  // Market state table (the 3m state, the pullback read, the 4h + 1h) and the owner's trending and chop definitions, at the measured need.
+  // Then 84713 (round 15, PREREG addendum 15, same rule): the table's forming row, the chop row's current 15m BOS, a strong
+  // 15m CISD in the read chain and the setup sentence (+145, the measured need).
+  // Then 84758 (round 18, PREREG addendum 24, same rule): the line prints the class and the table maps class -> action
+  // (bytes fell), then the review's fixes (the setup bullets' precedence, htf-to-ltf's late 15m break by value) raised it
+  // 45 bytes over 84713, at the measured need.
+  // Then 84971 (round 19, PREREG addendum 25, same rule): the 15m frame read feeds the setup, not the class (q118); a 3m
+  // CISD is the pullback entry as a 3m BOS is, even after a 3m CHoCH against, and the read chain's worked entry shows it
+  // (q102); setup-judgment's regime is a read, not the class (+213, the measured need).
+  // Then 85118 (round 20, the same rule): the setup rows for the layers' state words (`range`: the edge or a breakout the
+  // side's way only; `in the up leg`; `transition`: the first 3m break the side's way) and chop's end with displacement
+  // (+147, the measured need).
+  assert.ok(Buffer.byteLength(prompt) <= 85118, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
   // Only the head trader's prompt grows: no other role's prompt embeds trade-lifecycle (the risk manager's embeds
   // confluence-counting and invalidation as before; its prompt is unchanged, pinned in trade-session-split.test.js).
   for (const [name, a] of Object.entries(index.agent)) if (name !== H.HEAD_AGENT && a.prompt) assert.ok(!a.prompt.includes('<skill name="trade-lifecycle">'), name);

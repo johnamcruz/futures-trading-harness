@@ -15,8 +15,9 @@ const AGENTS = fs.readdirSync(path.join(ROOT, 'agents')).filter(f => f.endsWith(
 const { TAGS: REGIME_TAGS } = require('../../scripts/lib/trading/regime');
 // The STATE line's cite names (trade-session step 3): the record's own fields, never a skill.
 const CITE_NAMES = Object.keys(require('../../scripts/lib/trading/state-read').CITES);
-// Order-gate checks and the cycle's result words a skill names in backticks (never a skill).
-const NOT_SKILLS = ['mtf-trend', 'order-consistency', 'replay-clock', 'retired-lane', 'trigger-fired', 'no-trade'];
+// Order-gate checks, the cycle's result words and the briefing's field values a skill names in backticks (never a skill):
+// `few-swings` is the swing-structure vote (mtf.js, round 20).
+const NOT_SKILLS = ['mtf-trend', 'order-consistency', 'replay-clock', 'retired-lane', 'trigger-fired', 'no-trade', 'few-swings'];
 
 test('every backticked kebab-case name in a skill is a skill (or a role, a regime tag, a gate check, a result word)', () => {
   const known = new Set([...SKILLS, ...AGENTS, ...REGIME_TAGS, ...NOT_SKILLS, ...CITE_NAMES]);

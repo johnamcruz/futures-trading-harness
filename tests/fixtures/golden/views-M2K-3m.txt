@@ -21,20 +21,21 @@ Summary (M2K 3m, 06:33 ET):
 - Price 2283.1. 1R = 0.31 pts (0.5 x 3m ATR(20) 0.61, the 3m reference stop); every distance below is in points and R.
 - Trend rule: no trend on 4h, 1h, or 15m; in a prop attempt no side (the entry rule), else both sides open.
 - Bias: no side yet (15m range).
+- Market state (3m): forming (no RTH structure yet); 4h range, 1h range (not aligned); class unclear.
 - Alignment: long mixed, short mixed. Regime: transition, normal volatility.
 - VWAP (session): price above, 1.99 x 3m ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP 0, the session VWAP 0 (the regime's count).
 - News: no blackout ahead.
 - Room above (R = the 3m reference stop): session VAH 2283.8 (0.75 pts, 2.46R), prior POC 2284.5 (1.38 pts, 4.52R), session high / overnight high 2286.7 (3.6 pts, 11.79R).
 - Room below (R = the 3m reference stop): prior VAL 2282.7 (0.44 pts, 1.44R), VWAP (session) 2281.88 (1.22 pts, 3.99R), session POC / 15m swing low 2280.4 (2.7 pts, 8.84R).
 - Broker bar fields (last 3 bars, oldest first): ext.a 0.5/0/-0.5; ext.b.flag true/false/false; ext.b.n 4/5/6; flow.complete true/true/true; flow.ofiTrade -0.177/-0.446/-0.86; flow.windows.3.delta null/-5/-85; +3 more.
-- 3m (entry candle, timing, closed 06:33): none, close bottom third, range 1.33 ATR, vol 1.33x, momentum down; traded beyond the previous 3m low, closed below its low; broke below CRT 1h range low (breakout); touched 15m fvg high (2283.4).
+- 3m (entry candle, timing, closed 06:33): no pattern, close bottom third, range 1.33 ATR, vol 1.33x, momentum down; traded beyond the previous 3m low, closed below its low; broke below CRT 1h range low (breakout); touched 15m fvg high (2283.4).
 - 15m (setup candle, closed 06:30): shooting star, close bottom third, range 1.04 ATR, vol 1.74x, net 0.21 ATR, momentum down; swept the previous 15m high, closed back inside; rejected prior POC (closed back below; long-wick rejection, short side), rejected previous 15m high (closed back below; plain), touched session VAH (plain), touched CRT 1h range high (plain), +2 more.
 - 1h (closed 06:00): doji, close bottom third, range 0.32 ATR, vol 0.13x; swept the previous 1h high, closed back inside; rejected prior POC (closed back below; long-wick rejection, short side), rejected previous 1h high (closed back below; long-wick rejection, short side).
 - 4h (closed 06:00): bullish engulfing, close top third, vol 0.2x; traded beyond the previous 4h high, closed above its high; rejected prior POC (closed back below), broke above session POC, broke above 15m swing high 2281.3, broke above previous 4h high, +4 more.
 - Next swing above (R = the 3m reference stop): 15m 2285.9 (2.8 pts, 28 ticks, 9.17R), 1h/4h 2297 (13.9 pts, 139 ticks, 45.51R); below: 15m 2280.4 (2.7 pts, 27 ticks, 8.84R), 1h 2277.5 (5.6 pts, 56 ticks, 18.34R), 4h 2275.6 (7.5 pts, 75 ticks, 24.56R).
 - Prior candle range (R = the 3m reference stop): 1h (closed 06:00) high 2285 (1.9 above, 6.22R), mid 2284.25 (1.1 above, 3.6R), low 2283.5 (0.4 above, 1.31R), low taken, closed below it; 4h (closed 06:00) high 2285 (1.9 above, 6.22R), mid 2281.8 (1.3 below, 4.26R), low 2278.6 (4.5 below, 14.73R).
 - FVGs near price or retested (completed candles): 15m bullish 2282.6-2283.5 (04:45) filled to 2283, retest closed out.
-- CISD (completed candles; a read, not a signal): 3m bearish at 2283.7 (closed 06:33, strong), no key-level sweep, OTE 2284.2-2284.6 (mid 2284.4), waiting; 15m bullish at 2280.4 (closed 03:15, weak), no key-level sweep, a weak displacement: no zone; 1h bearish at 2284.7 (closed 02-19 21:00, strong), no key-level sweep, OTE 2283.2-2284.8 (mid 2284), bounced.
+- CISD (completed candles): 3m bearish at 2283.7 (closed 06:33, strong), no key-level sweep, OTE 2284.2-2284.6 (mid 2284.4), waiting; 15m bullish at 2280.4 (closed 03:15, weak), no key-level sweep, a weak displacement: no zone; 1h bearish at 2284.7 (closed 02-19 21:00, strong), no key-level sweep, OTE 2283.2-2284.8 (mid 2284), bounced.
 - Compression (completed candles; a read, not a signal): 1h nr7 box 2283.5-2285 (0.32 ATR, at prior POC, prior VAL).
 - Setups to check (the 15m candle closed 06:30): "15m rejected prior poc down" (short, 2284.48; setup candle: shooting star, close bottom third); "1h cisd down" (short, strong displacement, bounced OTE); the setup still stands: no confirming read needed. Compose and check each (trade-lifecycle, rejection, breakout, cisd); pass unless every read is true; SKIP each one you don't compose, with its reason.
 - Standard plan (code, as compose_check plans it): short "15m rejected prior poc down": plan OK: entry 2283.1, stop 2285.1 (20t), target 2278.6, R:R 2.25; reads "1h range", "vwap above", "15m rejected prior poc down", "3m momentum down", "stop 15m high 2285", "target prior 4h low 2278.6". OK -> compose_check with its reads; never estimate R:R.
@@ -63,7 +64,7 @@ Detail by timeframe:
   referenceStop: {"distance":0.31,"long":2282.79,"short":2283.41}
   swings: {"high":2285,"highAt":"06:15","low":2283.4,"lowAt":"06:00"}
   liquidity: {"swingHighs":[{"price":2284.7,"t":"05:24"},{"price":2285,"t":"05:45"},{"price":2284.6,"t":"06:00"},{"price":2285,"t":"06:15"}],"swingLows":[{"price":2283.5,"t":"05:12"},{"price":2284.3,"t":"05:33"},{"price":2284,"t":"05:42"},{"price":2283.4,"t":"06:00"}],"equalHighs":[],"equalLows":[],"openFvgs":[],"partlyFilledFvgs":[]}
-  lastBreak: {"last":{"kind":"BOS","direction":"down","level":2283.4,"swingAt":"06:00","at":"06:30","barsAgo":0},"previous":{"kind":"CHoCH","direction":"down","level":2284,"swingAt":"05:42","at":"05:54","barsAgo":12}}
+  lastBreak: {"last":{"kind":"BOS","direction":"down","level":2283.4,"swingAt":"06:00","at":"06:30","barsAgo":0,"protected":{"side":"high","level":2285,"at":"06:15","brokenAt":null}},"previous":{"kind":"CHoCH","direction":"down","level":2284,"swingAt":"05:42","at":"05:54","barsAgo":12,"protected":{"side":"high","level":2285,"at":"05:45","brokenAt":null}}}
   sweeps: []
   htfLevels: [{"name":"15m swing low","type":"low","price":2278.6,"side":"below","brokenAt":null},{"name":"15m swing low","type":"low","price":2279.2,"side":"below","brokenAt":null},{"name":"15m swing low","type":"low","price":2280.4,"side":"below","brokenAt":null},{"name":"15m swing high","type":"high","price":2281.3,"side":"below","brokenAt":"03:54"},{"name":"1h swing high","type":"high","price":2321.3,"side":"above","brokenAt":null},{"name":"1h swing high","type":"high","price":2297,"side":"above","brokenAt":null},{"name":"1h swing low","type":"low","price":2275.6,"side":"below","brokenAt":null},{"name":"1h swing low","type":"low","price":2277.5,"side":"below","brokenAt":null},{"name":"1h swing high","type":"high","price":2289.8,"side":"above","brokenAt":"02-19 14:12"}]
   untested1hSwings: [{"type":"high","price":2321.3,"t":"02-19 01:00"},{"type":"high","price":2297,"t":"02-19 14:00"},{"type":"low","price":2275.6,"t":"02-19 09:00"},{"type":"low","price":2277.5,"t":"02-19 23:00"}]
@@ -84,7 +85,7 @@ Detail by timeframe:
   indicators: {"regime":{"primary":"trend-up","volatility":"low"},"ema9":2283.4,"ema20":2282.38,"adx":27.38,"adxSlope":4.09,"supertrend":{"direction":"up","line":2280.12},"keltner":{"upper":2284.71,"mid":2282.38,"lower":2280.05},"atr14":1.45}
 [h1] version h1@2025-02-20T11:33:00.000Z, valid until 07:00 ET
   h1: {"trend":"range","bias":0,"swingPattern":"HH/HL","close":2283.9,"ema20":2283.93,"ema50":null,"adx":5.13,"atr":4.5,"range":{"high":2297,"low":2275.6,"mid":2286.3},"note":"no EMA50 vote, needs 50"}
-  h4: {"trend":"range","bias":0,"swingPattern":"unclear","close":2283.9,"ema20":2291.4,"ema50":null,"adx":null,"atr":null,"range":{"high":2321.3,"low":2275.6,"mid":2298.4},"note":"no EMA50 vote, needs 50"}
+  h4: {"trend":"range","bias":0,"swingPattern":"few-swings","close":2283.9,"ema20":2291.4,"ema50":null,"adx":null,"atr":null,"range":{"high":2321.3,"low":2275.6,"mid":2298.4},"note":"no EMA50 vote, needs 50"}
   lastBreak: {"last":{"kind":"CHoCH","direction":"up","level":2289.8,"swingAt":"02-19 11:00","at":"02-19 14:00","barsAgo":14,"knownAt":"02-19 15:00"},"previous":{"kind":"BOS","direction":"down","level":2298,"swingAt":"02-18 23:00","at":"02-19 02:00","barsAgo":26,"knownAt":"02-19 03:00"}}
 [day] version day@2025-02-20T11:33:00.000Z, valid until 16:03 ET
   priorRth: {"day":"2025-02-19","high":2297,"low":2275.6,"close":2289.4}
@@ -113,6 +114,7 @@ Summary (M2K 3m, 12:33 ET):
 - Price 2263.7. 1R = 1 pts (0.5 x 3m ATR(20) 2.01, the 3m reference stop); every distance below is in points and R.
 - Trend rule: SHORT allowed (prevailing 15m down; the 4h and 1h ranging: in a prop attempt only with the trend declared); no long against it.
 - Bias: no side yet (15m down, declared short: no).
+- Market state (3m): pullback (short leg 2286.7 -> 2254.4, depth 29%): 3m up leg, HL 2260.9 holds; overlap 0.67, efficiency 0.37, 15m trending up; 4h range, 1h range (not aligned); class unclear.
 - Alignment: long mixed, short mixed. Regime: trend-up, normal volatility. RTH volatility: unknown (1 prior session with these minutes; needs 3).
 - VWAP (rth): price below, 0.57 x 3m ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP 0, the session VWAP 0 (the regime's count).
 - News: no blackout ahead.
@@ -120,12 +122,12 @@ Summary (M2K 3m, 12:33 ET):
 - Room below (R = the 3m reference stop): session VAL 2260.1 (3.59 pts, 3.58R), round number 2260 (3.7 pts, 3.69R), IB low 2258 (5.7 pts, 5.68R).
 - This bar's close: 20+ closes in a row below prior value.
 - Broker bar fields (last 3 bars, oldest first): ext.a -0.7/0.9/0.4; ext.b.flag true/false/false; ext.b.n 5/6/0; flow.complete true/true/true; flow.ofiTrade -0.271/0.217/0.011; flow.windows.3.delta -205/-108/-32; +3 more.
-- 3m (entry candle, timing, closed 12:33): none, close top third, range 1.07 ATR, vol 0.98x; traded beyond the previous 3m high, closed above its high; touched CRT 4h range low (plain); touched 1h fvg low (2262.7).
-- 15m (setup candle, closed 12:30): none, close top third, range 0.43 ATR, vol 0.65x; traded beyond the previous 15m high, closed above its high; broke above previous 15m high (plain); touched 1h fvg low (2261.6).
-- 1h (closed 12:00): none, close middle third, range 0.92 ATR, vol 2.79x, net 0.11 ATR; swept the previous 1h low, closed back inside; rejected IB low (closed back below; long-wick rejection, short side), rejected session VAL (closed back below; conflicting), rejected previous 1h low (closed back above; plain), rejected round number 2260 (closed back below; conflicting).
+- 3m (entry candle, timing, closed 12:33): no pattern, close top third, range 1.07 ATR, vol 0.98x; traded beyond the previous 3m high, closed above its high; touched CRT 4h range low (plain); touched 1h fvg low (2262.7).
+- 15m (setup candle, closed 12:30): no pattern, close top third, range 0.43 ATR, vol 0.65x; traded beyond the previous 15m high, closed above its high; broke above previous 15m high (plain); touched 1h fvg low (2261.6).
+- 1h (closed 12:00): no pattern, close middle third, range 0.92 ATR, vol 2.79x, net 0.11 ATR; swept the previous 1h low, closed back inside; rejected IB low (closed back below; long-wick rejection, short side), rejected session VAL (closed back below; conflicting), rejected previous 1h low (closed back above; plain), rejected round number 2260 (closed back below; conflicting).
 - Next swing above (R = the 3m reference stop): 15m 2286.7 (23 pts, 230 ticks, 22.93R), 1h 2288 (24.3 pts, 243 ticks, 24.22R), 4h 2297 (33.3 pts, 333 ticks, 33.2R); below: 15m 2254.4 (9.3 pts, 93 ticks, 9.27R).
 - Prior candle range (R = the 3m reference stop): 1h (closed 12:00) high 2260.2 (3.5 below, 3.49R), mid 2257.3 (6.4 below, 6.38R), low 2254.4 (9.3 below, 9.27R), high taken, closed above it; 4h (closed 10:00) high 2288 (24.3 above, 24.22R), mid 2275.55 (11.8 above, 11.76R), low 2263.1 (0.6 below, 0.6R), low taken, closed back inside.
-- CISD (completed candles; a read, not a signal): 3m bullish at 2262.4 (closed 12:33, strong), no key-level sweep, OTE 2261.5-2262 (mid 2261.8), waiting; 15m bullish at 2286.3 (closed 08:45, strong), no key-level sweep, zone void; 1h bearish at 2278.5 (closed 10:00, strong), no key-level sweep, OTE 2275.2-2280.9 (mid 2278.1), waiting.
+- CISD (completed candles): 3m bullish at 2262.4 (closed 12:33, strong), no key-level sweep, OTE 2261.5-2262 (mid 2261.8), waiting; 15m bullish at 2286.3 (closed 08:45, strong), no key-level sweep, zone void; 1h bearish at 2278.5 (closed 10:00, strong), no key-level sweep, OTE 2275.2-2280.9 (mid 2278.1), waiting.
 - Compression (completed candles; a read, not a signal): 15m expanding up: nr7 box 2256.3-2260 (3.7 pts, 0.85 ATR, at IB low 2258 (inside)), expansion closed 12:15 above it (range 1.27 ATR, 0.3 ATR beyond, volume 0.81x), 1 bar ago; 1h expanding down: inside x1 box 2282-2288 (6 pts, 1.36 ATR, at prior VAL 2282.7 (its bottom), prior POC 2284.5 (inside)), expansion closed 10:00 below it (range 5.34 ATR, 4.19 ATR beyond, volume 10.27x), 2 bars ago.
 - Day so far (61 3m bars; `day-context`): directional down: efficiency 0.13 (x sqrt(bars) 1.02), RTH VWAP crosses 1, range 17.2 x 3m ATR(14), net down (its size: Trend declared? day's move); IB day type: today.dayType.
 - Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP -0.57, EMA20 +1.64, overnight range broke out against, day's move -11.24, regime with; short RTH VWAP +0.57, EMA20 -1.64, overnight range broke out its way, day's move +11.24, regime against.
@@ -156,7 +158,7 @@ Detail by timeframe:
   referenceStop: {"distance":1,"long":2262.7,"short":2264.7}
   swings: {"high":2262.7,"highAt":"12:18","low":2260.9,"lowAt":"12:24"}
   liquidity: {"swingHighs":[{"price":2260.2,"t":"11:09"},{"price":2259.5,"t":"11:21"},{"price":2260,"t":"11:48"},{"price":2262.7,"t":"12:18"}],"swingLows":[{"price":2254.4,"t":"11:36"},{"price":2256.1,"t":"12:00"},{"price":2260.1,"t":"12:12"},{"price":2260.9,"t":"12:24"}],"equalHighs":[],"equalLows":[],"openFvgs":[],"partlyFilledFvgs":[]}
-  lastBreak: {"last":{"kind":"BOS","direction":"up","level":2262.7,"swingAt":"12:18","at":"12:30","barsAgo":0},"previous":{"kind":"BOS","direction":"up","level":2260,"swingAt":"11:48","at":"12:03","barsAgo":9}}
+  lastBreak: {"last":{"kind":"BOS","direction":"up","level":2262.7,"swingAt":"12:18","at":"12:30","barsAgo":0,"protected":{"side":"low","level":2260.9,"at":"12:24","brokenAt":null}},"previous":{"kind":"BOS","direction":"up","level":2260,"swingAt":"11:48","at":"12:03","barsAgo":9,"protected":{"side":"low","level":2256.1,"at":"12:00","brokenAt":null}}}
   sweeps: []
   htfLevels: [{"name":"15m swing high","type":"high","price":2288,"side":"above","brokenAt":null},{"name":"15m swing high","type":"high","price":2286.8,"side":"above","brokenAt":null},{"name":"15m swing high","type":"high","price":2286.7,"side":"above","brokenAt":null},{"name":"15m swing low","type":"low","price":2254.7,"side":"below","brokenAt":null},{"name":"15m swing low","type":"low","price":2254.4,"side":"below","brokenAt":null},{"name":"15m swing low","type":"low","price":2258,"side":"below","brokenAt":"10:45"},{"name":"1h swing high","type":"high","price":2297,"side":"above","brokenAt":null},{"name":"1h swing high","type":"high","price":2288,"side":"above","brokenAt":null},{"name":"1h swing low","type":"low","price":2275.6,"side":"above","brokenAt":"09:42"}]
   untested1hSwings: [{"type":"high","price":2321.3,"t":"02-19 01:00"},{"type":"high","price":2297,"t":"02-19 14:00"},{"type":"high","price":2288,"t":"07:00"}]
@@ -177,7 +179,7 @@ Detail by timeframe:
   indicators: {"regime":{"primary":"trend-down","volatility":"high"},"ema9":2261.89,"ema20":2267.64,"adx":51.85,"adxSlope":7.73,"supertrend":{"direction":"down","line":2271.73},"keltner":{"upper":2273.31,"mid":2267.64,"lower":2261.97},"atr14":4.21}
 [h1] version h1@2025-02-20T17:33:00.000Z, valid until 13:00 ET
   h1: {"trend":"range","bias":0,"swingPattern":"mixed","close":2256.4,"ema20":2277.42,"ema50":null,"adx":14.15,"atr":6.26,"range":{"high":2294.2,"low":2254.4,"mid":2274.3},"note":"no EMA50 vote, needs 50"}
-  h4: {"trend":"range","bias":0,"swingPattern":"unclear","close":2263.5,"ema20":2288.74,"ema50":null,"adx":null,"atr":null,"range":{"high":2321.3,"low":2263.1,"mid":2292.2},"note":"no EMA50 vote, needs 50"}
+  h4: {"trend":"range","bias":0,"swingPattern":"few-swings","close":2263.5,"ema20":2288.74,"ema50":null,"adx":null,"atr":null,"range":{"high":2321.3,"low":2263.1,"mid":2292.2},"note":"no EMA50 vote, needs 50"}
   lastBreak: {"last":{"kind":"CHoCH","direction":"down","level":2277.5,"swingAt":"02-19 23:00","at":"09:00","barsAgo":2,"knownAt":"10:00"},"previous":{"kind":"CHoCH","direction":"up","level":2289.8,"swingAt":"02-19 11:00","at":"02-19 14:00","barsAgo":20,"knownAt":"02-19 15:00"}}
 [day] version day@2025-02-20T17:33:00.000Z, valid until 16:03 ET
   priorRth: {"day":"2025-02-19","high":2297,"low":2275.6,"close":2289.4}
@@ -208,6 +210,7 @@ Summary (M2K 3m, 09:51 ET):
 - Price 2261.2. 1R = 1.26 pts (0.5 x 3m ATR(20) 2.52, the 3m reference stop); every distance below is in points and R.
 - Trend rule: SHORT allowed (prevailing 4h down); no long against it.
 - Bias: short only (4h down, 1h range; long refused).
+- Market state (3m): trend down: LH 2286.1 holds; overlap 0.54, efficiency 0.61, 15m early; 4h down, 1h range (not aligned); class unclear.
 - Alignment: long counter, short mixed. Regime: trend-down, high volatility. RTH volatility: unknown (2 prior sessions with these minutes; needs 3).
 - VWAP (rth): price below, 3.56 x 3m ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP 0, the session VWAP 1 (the regime's count).
 - News: no blackout ahead.
@@ -220,7 +223,7 @@ Summary (M2K 3m, 09:51 ET):
 - 1h (closed 09:00): displacement up, 8 in a row inside the 00:00 candle 2264.2-2286.5, close top third, range 1.89 ATR, vol 1.22x, momentum up; traded beyond the previous 1h high, closed above its high; broke above session VAH (breakout), broke above 15m swing high 2275.4 (breakout), broke above CRT 4h range high (breakout), broke above previous 1h high (breakout), +1 more; rejected 15m fvg high up (2272.6).
 - Next swing above (R = the 3m reference stop): 15m/1h 2286.5 (25.3 pts, 253 ticks, 20.11R), 4h 2288 (26.8 pts, 268 ticks, 21.31R); below: 15m 2258.5 (2.7 pts, 27 ticks, 2.15R), 1h/4h 2254.4 (6.8 pts, 68 ticks, 5.41R).
 - Prior candle range (R = the 3m reference stop): 1h (closed 09:00) high 2282.7 (21.5 above, 17.09R), mid 2277.6 (16.4 above, 13.04R), low 2272.5 (11.3 above, 8.98R); 4h (closed 06:00) high 2275 (13.8 above, 10.97R), mid 2270.3 (9.1 above, 7.23R), low 2265.6 (4.4 above, 3.5R).
-- CISD (completed candles; a read, not a signal): 3m bearish at 2282.8 (closed 09:33, strong), no key-level sweep, OTE 2276.6-2280.9 (mid 2278.8), waiting; 15m bearish at 2273.5 (closed 09:45, strong), no key-level sweep, OTE 2276.6-2280.9 (mid 2278.8), waiting; 1h bullish at 2265.3 (closed 02:00, strong), no key-level sweep, zone void.
+- CISD (completed candles): 3m bearish at 2282.8 (closed 09:33, strong), no key-level sweep, OTE 2276.6-2280.9 (mid 2278.8), waiting; 15m bearish at 2273.5 (closed 09:45, strong), no key-level sweep, OTE 2276.6-2280.9 (mid 2278.8), waiting; 1h bullish at 2265.3 (closed 02:00, strong), no key-level sweep, zone void.
 - Day so far (7 3m bars; `day-context`): too early (a read from 10 bars), RTH VWAP crosses 0.
 - Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP -3.56, EMA20 -4.48, overnight range broke out against, day's move -7.64, regime against; short RTH VWAP +3.56, EMA20 +4.48, overnight range broke out its way, day's move +7.64, regime with.
 - 3m timing (short: the entry rule's side; context, the setup is the entry): 3m with the HTF side.
@@ -252,7 +255,7 @@ Detail by timeframe:
   referenceStop: {"distance":1.26,"long":2259.94,"short":2262.46}
   swings: {"high":2286.1,"highAt":"09:27","low":2282.3,"lowAt":"09:15"}
   liquidity: {"swingHighs":[{"price":2279.6,"t":"08:30"},{"price":2282.7,"t":"08:48"},{"price":2283.8,"t":"09:00"},{"price":2286.1,"t":"09:27"}],"swingLows":[{"price":2272.6,"t":"07:39"},{"price":2272.5,"t":"08:03"},{"price":2280.5,"t":"09:03"},{"price":2282.3,"t":"09:15"}],"equalHighs":[],"equalLows":[],"openFvgs":[],"partlyFilledFvgs":[]}
-  lastBreak: {"last":{"kind":"CHoCH","direction":"down","level":2282.3,"swingAt":"09:15","at":"09:30","barsAgo":6},"previous":{"kind":"BOS","direction":"up","level":2283.8,"swingAt":"09:00","at":"09:18","barsAgo":10}}
+  lastBreak: {"last":{"kind":"CHoCH","direction":"down","level":2282.3,"swingAt":"09:15","at":"09:30","barsAgo":6,"protected":{"side":"high","level":2286.1,"at":"09:27","brokenAt":null}},"previous":{"kind":"BOS","direction":"up","level":2283.8,"swingAt":"09:00","at":"09:18","barsAgo":10,"protected":{"side":"low","level":2280.5,"at":"09:03","brokenAt":"09:30"}}}
   sweeps: []
   htfLevels: [{"name":"15m swing high","type":"high","price":2286.5,"side":"above","brokenAt":null},{"name":"15m swing low","type":"low","price":2265.6,"side":"above","brokenAt":"09:48"},{"name":"1h swing high","type":"high","price":2288,"side":"above","brokenAt":null},{"name":"1h swing high","type":"high","price":2286.5,"side":"above","brokenAt":null},{"name":"1h swing low","type":"low","price":2262.5,"side":"above","brokenAt":"09:48"}]
   untested1hSwings: [{"type":"high","price":2297,"t":"02-19 14:00"},{"type":"high","price":2288,"t":"02-20 07:00"},{"type":"high","price":2286.5,"t":"00:00"},{"type":"low","price":2254.4,"t":"02-20 11:00"}]
@@ -304,6 +307,7 @@ Summary (M2K 3m, 10:06 ET):
 - Price 2253.5. 1R = 1.4 pts (0.5 x 3m ATR(20) 2.8, the 3m reference stop); every distance below is in points and R.
 - Trend rule: SHORT allowed (prevailing 4h down); no long against it.
 - Bias: short only (4h down, 1h range; long refused).
+- Market state (3m): trend down: LH 2286.1 holds; overlap 0.66, efficiency 0.44, 15m trending down; 4h down, 1h range (not aligned); class unclear.
 - Alignment: long counter, short mixed. Regime: trend-down, high volatility. RTH volatility: unknown (2 prior sessions with these minutes; needs 3).
 - VWAP (rth): price below, 4.33 x 3m ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP 0, the session VWAP 1 (the regime's count).
 - News: no blackout ahead.
@@ -311,13 +315,13 @@ Summary (M2K 3m, 10:06 ET):
 - Room below (R = the 3m reference stop): day low / session low 2253.1 (0.4 pts, 0.29R), round number 2250 (3.5 pts, 2.5R).
 - This bar's close: 2 closes in a row below prior value.
 - Broker bar fields (last 3 bars, oldest first): ext.a 0.6/0.1/-0.4; ext.b.flag false/false/true; ext.b.n 1/2/3; flow.complete true/true/true; flow.ofiTrade -0.159/-0.811/-1; flow.windows.3.delta null/-3677/-5244; +3 more.
-- 3m (entry candle, timing, closed 10:06): none, close bottom third, range 0.93 ATR, vol 1.21x; traded beyond the previous 3m low, closed below its low; touched prior RTH low (closed beyond: breakout).
-- 15m (setup candle, closed 10:00): none, close bottom third, range 2.76 ATR, vol 4.97x, net 1.63 ATR, momentum down; traded beyond the previous 15m low, closed below its low; rejected prior RTH close (closed back below; plain), rejected prior VAH (closed back below; plain), rejected prior POC (closed back below; plain), rejected session VAL (closed back below; plain), +9 more.
+- 3m (entry candle, timing, closed 10:06): no pattern, close bottom third, range 0.93 ATR, vol 1.21x; traded beyond the previous 3m low, closed below its low; touched prior RTH low (closed beyond: breakout).
+- 15m (setup candle, closed 10:00): no pattern, close bottom third, range 2.76 ATR, vol 4.97x, net 1.63 ATR, momentum down; traded beyond the previous 15m low, closed below its low; rejected prior RTH close (closed back below; plain), rejected prior VAH (closed back below; plain), rejected prior POC (closed back below; plain), rejected session VAL (closed back below; plain), +9 more.
 - 1h (closed 10:00): displacement down, close bottom third, range 4.62 ATR, vol 8.64x, net 3.8 ATR, momentum down; traded beyond the previous 1h high and low, closed below its low; rejected session VAH (closed back below; plain), rejected session POC (closed back below; plain), rejected previous 1h high (closed back below; plain), rejected round number 2260 (closed back above; conflicting), +17 more; broke 15m fvg low down (2272.2).
 - 4h (closed 10:00): bearish engulfing, close bottom third, range 1.9 ATR, vol 2.17x, momentum down; traded beyond the previous 4h high and low, closed below its low; rejected session VAH (closed back below), rejected session POC (closed back below), rejected previous 4h high (closed back below), rejected round number 2260 (closed back above), +14 more.
 - Next swing above (R = the 3m reference stop): 15m 2286.1 (32.6 pts, 326 ticks, 23.31R), 1h/4h 2286.5 (33 pts, 330 ticks, 23.6R); below: none found.
 - Prior candle range (R = the 3m reference stop): 1h (closed 10:00) high 2286.1 (32.6 above, 23.31R), mid 2272.85 (19.3 above, 13.8R), low 2259.6 (6.1 above, 4.36R), low taken, closed below it; 4h (closed 10:00) high 2286.1 (32.6 above, 23.31R), mid 2272.85 (19.3 above, 13.8R), low 2259.6 (6.1 above, 4.36R), low taken, closed below it.
-- CISD (completed candles; a read, not a signal): 3m bearish at 2282.8 (closed 09:33, strong), no key-level sweep, OTE 2273.6-2279.2 (mid 2276.4), waiting; 15m bearish at 2273.5 (closed 09:45, strong), no key-level sweep, OTE 2273.6-2279.2 (mid 2276.4), waiting; 1h bearish at 2272.2 (closed 10:00, strong), no key-level sweep, OTE 2273.6-2279.2 (mid 2276.4), waiting.
+- CISD (completed candles): 3m bearish at 2282.8 (closed 09:33, strong), no key-level sweep, OTE 2273.6-2279.2 (mid 2276.4), waiting; 15m bearish at 2273.5 (closed 09:45, strong), no key-level sweep, OTE 2273.6-2279.2 (mid 2276.4), waiting; 1h bearish at 2272.2 (closed 10:00, strong), no key-level sweep, OTE 2273.6-2279.2 (mid 2276.4), waiting.
 - Compression (completed candles; a read, not a signal): 3m expanding down: inside x1 box 2259.6-2263.5 (3.9 pts, 1.31 ATR, after a down displacement pole, at overnight low 2262.5 (inside)), expansion closed 10:03 below it (range 2.11 ATR, 1.17 ATR beyond, volume 2.85x), 1 bar ago.
 - Day so far (12 3m bars; `day-context`): directional down: efficiency 0.54 (x sqrt(bars) 1.88), RTH VWAP crosses 0, range 9.69 x 3m ATR(14), net down (its size: Trend declared? day's move).
 - Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP -4.33, EMA20 -4.53, overnight range broke out against, day's move -9.45, regime against; short RTH VWAP +4.33, EMA20 +4.53, overnight range broke out its way, day's move +9.45, regime with.
@@ -350,7 +354,7 @@ Detail by timeframe:
   referenceStop: {"distance":1.4,"long":2252.1,"short":2254.9}
   swings: {"high":2269.6,"highAt":"09:45","low":2282.3,"lowAt":"09:15"}
   liquidity: {"swingHighs":[{"price":2282.7,"t":"08:48"},{"price":2283.8,"t":"09:00"},{"price":2286.1,"t":"09:27"},{"price":2269.6,"t":"09:45"}],"swingLows":[{"price":2272.6,"t":"07:39"},{"price":2272.5,"t":"08:03"},{"price":2280.5,"t":"09:03"},{"price":2282.3,"t":"09:15"}],"equalHighs":[],"equalLows":[],"openFvgs":[],"partlyFilledFvgs":[]}
-  lastBreak: {"last":{"kind":"CHoCH","direction":"down","level":2282.3,"swingAt":"09:15","at":"09:30","barsAgo":11},"previous":{"kind":"BOS","direction":"up","level":2283.8,"swingAt":"09:00","at":"09:18","barsAgo":15}}
+  lastBreak: {"last":{"kind":"CHoCH","direction":"down","level":2282.3,"swingAt":"09:15","at":"09:30","barsAgo":11,"protected":{"side":"high","level":2286.1,"at":"09:27","brokenAt":null}},"previous":{"kind":"BOS","direction":"up","level":2283.8,"swingAt":"09:00","at":"09:18","barsAgo":15,"protected":{"side":"low","level":2280.5,"at":"09:03","brokenAt":"09:30"}}}
   sweeps: [{"name":"overnight low","price":2262.5,"side":"low","key":true,"at":"09:48","back":"09:51","bars":2,"wick":2260,"close":2262.9,"wickShare":0.29}]
   htfLevels: [{"name":"15m swing high","type":"high","price":2286.5,"side":"above","brokenAt":null},{"name":"15m swing high","type":"high","price":2286.1,"side":"above","brokenAt":null},{"name":"15m swing low","type":"low","price":2265.6,"side":"above","brokenAt":"09:48"},{"name":"1h swing high","type":"high","price":2288,"side":"above","brokenAt":null},{"name":"1h swing high","type":"high","price":2286.5,"side":"above","brokenAt":null},{"name":"1h swing low","type":"low","price":2262.5,"side":"above","brokenAt":"09:48"}]
   untested1hSwings: [{"type":"high","price":2297,"t":"02-19 14:00"},{"type":"high","price":2288,"t":"02-20 07:00"},{"type":"high","price":2286.5,"t":"00:00"}]

@@ -1,5 +1,5 @@
 {
- "commit": "75fa52295a03565575985902a048c2b0ddcf0d0f",
+ "commit": "cf14db0ca",
  "days": {
   "no-fill": {
    "passes": [
@@ -8,7 +8,7 @@
      "ran": [
       {
        "action": "trade",
-       "prompt": "sha256:f953559e00d6dfdaeeef06f983adf71b1b7ef161728df32f8fdec5f7c95a3ae9 (60264 chars)",
+       "prompt": "sha256:8692cb5c9ff1a84a668b6d262c200b811c6e1214f6925e26fed402d7cb2f88d8 (62975 chars)",
        "result": "CYCLE RESULT: no-trade - nothing to take",
        "ok": true,
        "timedOut": false
@@ -25,7 +25,7 @@
       "FTH_CYCLE": "full",
       "FTH_CYCLE_BARS": "{\"MNQ\":\"2026-04-28T04:06:00.000Z\"}",
       "FTH_CYCLE_DESK": "market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager",
-      "FTH_CYCLE_SKILLS": "sha256:b26ce5a83c96c8205484a5c8a5531aa92337a8e255e71e23ab48b37e5bcf7626 (476 chars)",
+      "FTH_CYCLE_SKILLS": "sha256:2747e0096b438eb50bb9ad99a43a58efd321a77dbd6fb3de90d160f845959c74 (476 chars)",
       "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript3>.jsonl",
       "FTH_EARLY_CLOSE_DATES": "2026-11-27,2026-12-24,2027-11-26",
       "FTH_ENTRY_HOURS": "",
@@ -91,7 +91,7 @@
      "ran": [
       {
        "action": "trade",
-       "prompt": "sha256:de86fd7835bc3524317aa93c53a1fce79a261900726ca78331c6c75651cc20b9 (57691 chars)",
+       "prompt": "sha256:425bb6d3af08785e88c74c89e525121ab3a574073cfdad3c3fe741f029fc3bc7 (60401 chars)",
        "result": "CYCLE RESULT: no-trade - nothing to take",
        "ok": true,
        "timedOut": false
@@ -110,7 +110,7 @@
       "FTH_CYCLE_CACHED": "risk-manager",
       "FTH_CYCLE_DESK": "market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst",
       "FTH_CYCLE_PHASE1": "sha256:382d258861f0a1e503af28b693e076f76ded653c08a9f09a8df8a4cac1670afe (424 chars)",
-      "FTH_CYCLE_SKILLS": "sha256:4b446f4ec456e99b62386f4e956e4c6843c18fc902c8560e7a3d79104434bcb1 (469 chars)",
+      "FTH_CYCLE_SKILLS": "sha256:6f3439fab0f0fbb41f3ad7337f743790bda0af50368ec60527e8a6d367a3e75a (469 chars)",
       "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript4>.jsonl",
       "FTH_EARLY_CLOSE_DATES": "2026-11-27,2026-12-24,2027-11-26",
       "FTH_ENTRY_HOURS": "",
@@ -186,7 +186,7 @@
      "ran": [
       {
        "action": "trade",
-       "prompt": "sha256:dd0f8cf698f95190cc74f02530ecd7e259b51bb1dba1d85dc42c71a1c7be144b (57541 chars)",
+       "prompt": "sha256:f8c83e4deac8b5d31a0f7c29ab2f7a4b4d3b82368a04301ee375306c7060dd2d (60251 chars)",
        "result": "CYCLE RESULT: no-trade - nothing to take",
        "ok": true,
        "timedOut": false
@@ -205,7 +205,7 @@
       "FTH_CYCLE_CACHED": "risk-manager",
       "FTH_CYCLE_DESK": "market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst",
       "FTH_CYCLE_PHASE1": "sha256:23be06cd1a6cf7a49df11ec98ddb54a291c3c4a0f959c8b2def48c18ab63c7b1 (424 chars)",
-      "FTH_CYCLE_SKILLS": "sha256:c5861af343b49972ddd7ba4d60733dbe0d8b10050c9d16e1c4afb04e5f0e5a64 (469 chars)",
+      "FTH_CYCLE_SKILLS": "sha256:db80dfe26bc0a841e8023e97b8c3aaf7ca8b814920215e94e3adc3d47a65463d (469 chars)",
       "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript5>.jsonl",
       "FTH_EARLY_CLOSE_DATES": "2026-11-27,2026-12-24,2027-11-26",
       "FTH_ENTRY_HOURS": "",
@@ -339,7 +339,7 @@
          "bos-vs-choch"
         ],
         "sections": [],
-        "bytes": 56633,
+        "bytes": 59345,
         "over": []
        },
        "skillLookups": {
@@ -387,7 +387,7 @@
        "complete": true,
        "decided": true
       },
-      "prompt": "sha256:f953559e00d6dfdaeeef06f983adf71b1b7ef161728df32f8fdec5f7c95a3ae9 (60264 chars)",
+      "prompt": "sha256:8692cb5c9ff1a84a668b6d262c200b811c6e1214f6925e26fed402d7cb2f88d8 (62975 chars)",
       "context": {
        "symbols": [
         {
@@ -561,11 +561,11 @@
          "location",
          "bias"
         ],
-        "bytes": 56633
+        "bytes": 59345
        },
        "cachedLookups": {}
       },
-      "transcript": "sha256:6464e037d3993c50af3e77db956d430e9d4bc7199767f877dca506c2b45af075 (23188 chars)",
+      "transcript": "sha256:ee32d318f6a4be4c0f05d83843d0eded706009eb47cee42a4310f439b6af7f6b (23486 chars)",
       "argv": [
        "claude",
        "-p",
@@ -644,7 +644,7 @@
          "bos-vs-choch"
         ],
         "sections": [],
-        "bytes": 53151,
+        "bytes": 55862,
         "over": []
        },
        "skillLookups": {
@@ -690,7 +690,7 @@
        "complete": true,
        "decided": true
       },
-      "prompt": "sha256:de86fd7835bc3524317aa93c53a1fce79a261900726ca78331c6c75651cc20b9 (57691 chars)",
+      "prompt": "sha256:425bb6d3af08785e88c74c89e525121ab3a574073cfdad3c3fe741f029fc3bc7 (60401 chars)",
       "context": {
        "symbols": [
         {
@@ -936,11 +936,11 @@
          "location",
          "bias"
         ],
-        "bytes": 53151
+        "bytes": 55862
        },
        "cachedLookups": {}
       },
-      "transcript": "sha256:b8d7f86a0334c7f86621b5675f28fc8b01fb3d491d937e4fa69a5b1c480599fd (24956 chars)",
+      "transcript": "sha256:28e5bf148bdd685d4112b25af35c7146377102608e5740deb3c281655ab75542 (25281 chars)",
       "argv": [
        "claude",
        "-p",
@@ -1019,7 +1019,7 @@
          "bos-vs-choch"
         ],
         "sections": [],
-        "bytes": 53151,
+        "bytes": 55862,
         "over": []
        },
        "skillLookups": {
@@ -1065,7 +1065,7 @@
        "complete": true,
        "decided": true
       },
-      "prompt": "sha256:dd0f8cf698f95190cc74f02530ecd7e259b51bb1dba1d85dc42c71a1c7be144b (57541 chars)",
+      "prompt": "sha256:f8c83e4deac8b5d31a0f7c29ab2f7a4b4d3b82368a04301ee375306c7060dd2d (60251 chars)",
       "context": {
        "symbols": [
         {
@@ -1302,11 +1302,11 @@
          "location",
          "bias"
         ],
-        "bytes": 53151
+        "bytes": 55862
        },
        "cachedLookups": {}
       },
-      "transcript": "sha256:3145f875633077616c89570050d04de1143d34ee9f6de7362f139eda11133911 (23594 chars)",
+      "transcript": "sha256:f637555b92a6fc4fc8f4e891b6630d88b786feb79e523828e93998bfdf6038c5 (23919 chars)",
       "argv": [
        "claude",
        "-p",
@@ -1387,7 +1387,7 @@
        "bos-vs-choch"
       ],
       "sections": [],
-      "bytes": 56633,
+      "bytes": 59345,
       "over": []
      },
      "skillLookups": {
@@ -1480,7 +1480,7 @@
        "bos-vs-choch"
       ],
       "sections": [],
-      "bytes": 53151,
+      "bytes": 55862,
       "over": []
      },
      "skillLookups": {
@@ -1571,7 +1571,7 @@
        "bos-vs-choch"
       ],
       "sections": [],
-      "bytes": 53151,
+      "bytes": 55862,
       "over": []
      },
      "skillLookups": {
@@ -1649,7 +1649,7 @@
     ],
     [
      "briefing/MNQ.json",
-     "sha256:edcee538b26abde1bfe53f97433b5c20c48a3c5165a62c27d01b8740c5c5eafa (18133 chars)"
+     "sha256:dd6fe51c83de6e15c6e5615c842cd886cee9f39030b7d3ae34e5de23ed24f8fa (18418 chars)"
     ],
     [
      "brokers.json",
@@ -1672,12 +1672,12 @@
      "sha256:5b2dd2f8eaeed4aa6611eda7fbed97e8f8773b86f23175dc82ca08cbe8e6378e (133449 chars)"
     ],
     [
-     "head-prompt/cycle-skills-2a7867dd27a60f807530edae93508d48a81db150ffdc409a7adab6a9c82139b0.md",
-     "sha256:2a7867dd27a60f807530edae93508d48a81db150ffdc409a7adab6a9c82139b0 (57222 chars)"
+     "head-prompt/cycle-skills-67c6b0cd080c30cbbb08ab75d1fee36391806e173f3eae89adff741c89bacded.md",
+     "sha256:67c6b0cd080c30cbbb08ab75d1fee36391806e173f3eae89adff741c89bacded (59933 chars)"
     ],
     [
-     "head-prompt/cycle-skills-514fc3f9fd785954c97e88ca302139f30837c40670187244aee211d3fb75a192.md",
-     "sha256:514fc3f9fd785954c97e88ca302139f30837c40670187244aee211d3fb75a192 (53696 chars)"
+     "head-prompt/cycle-skills-fc13f458af5250d4f477ab96933d178ef618e05f8f07af65e5eaf58ce51cb3df.md",
+     "sha256:fc13f458af5250d4f477ab96933d178ef618e05f8f07af65e5eaf58ce51cb3df (56406 chars)"
     ],
     [
      "journal.jsonl",
@@ -1831,7 +1831,7 @@
      "ran": [
       {
        "action": "trade",
-       "prompt": "sha256:f953559e00d6dfdaeeef06f983adf71b1b7ef161728df32f8fdec5f7c95a3ae9 (60264 chars)",
+       "prompt": "sha256:8692cb5c9ff1a84a668b6d262c200b811c6e1214f6925e26fed402d7cb2f88d8 (62975 chars)",
        "result": "CYCLE RESULT: no-trade - nothing to take",
        "ok": true,
        "timedOut": false
@@ -1848,7 +1848,7 @@
       "FTH_CYCLE": "full",
       "FTH_CYCLE_BARS": "{\"MNQ\":\"2026-04-28T04:06:00.000Z\"}",
       "FTH_CYCLE_DESK": "market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager",
-      "FTH_CYCLE_SKILLS": "sha256:b26ce5a83c96c8205484a5c8a5531aa92337a8e255e71e23ab48b37e5bcf7626 (476 chars)",
+      "FTH_CYCLE_SKILLS": "sha256:2747e0096b438eb50bb9ad99a43a58efd321a77dbd6fb3de90d160f845959c74 (476 chars)",
       "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript3>.jsonl",
       "FTH_EARLY_CLOSE_DATES": "2026-11-27,2026-12-24,2027-11-26",
       "FTH_ENTRY_HOURS": "",
@@ -1914,7 +1914,7 @@
      "ran": [
       {
        "action": "trade",
-       "prompt": "sha256:de86fd7835bc3524317aa93c53a1fce79a261900726ca78331c6c75651cc20b9 (57691 chars)",
+       "prompt": "sha256:425bb6d3af08785e88c74c89e525121ab3a574073cfdad3c3fe741f029fc3bc7 (60401 chars)",
        "result": "CYCLE RESULT: no-trade - nothing to take",
        "ok": true,
        "timedOut": false
@@ -1933,7 +1933,7 @@
       "FTH_CYCLE_CACHED": "risk-manager",
       "FTH_CYCLE_DESK": "market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst",
       "FTH_CYCLE_PHASE1": "sha256:382d258861f0a1e503af28b693e076f76ded653c08a9f09a8df8a4cac1670afe (424 chars)",
-      "FTH_CYCLE_SKILLS": "sha256:4b446f4ec456e99b62386f4e956e4c6843c18fc902c8560e7a3d79104434bcb1 (469 chars)",
+      "FTH_CYCLE_SKILLS": "sha256:6f3439fab0f0fbb41f3ad7337f743790bda0af50368ec60527e8a6d367a3e75a (469 chars)",
       "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript4>.jsonl",
       "FTH_EARLY_CLOSE_DATES": "2026-11-27,2026-12-24,2027-11-26",
       "FTH_ENTRY_HOURS": "",
@@ -2009,7 +2009,7 @@
      "ran": [
       {
        "action": "trade",
-       "prompt": "sha256:fb62064888b16baf4c78ec5b0d46413416bcd233acfdef02e9389db8743c956c (29583 chars)",
+       "prompt": "sha256:fdc1201aab981b52cc634f71bde35bdfb71b4aba804fb8ada56d6f9d2a22e423 (32185 chars)",
        "result": "CYCLE RESULT: managed - the open long",
        "ok": true,
        "timedOut": false
@@ -2026,7 +2026,7 @@
       "FTH_CYCLE": "full",
       "FTH_CYCLE_BARS": "{\"MNQ\":\"2026-04-28T04:12:00.000Z\"}",
       "FTH_CYCLE_DESK": "market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager",
-      "FTH_CYCLE_SKILLS": "sha256:677577b50d3a679351a0cd3fabe4fb1cf750c92cf5a90a47f23340604ff4f72f (323 chars)",
+      "FTH_CYCLE_SKILLS": "sha256:b3ec9a4347b988cc465209ac42abad88b339c9b716a9c4c2826d575b8e44d724 (323 chars)",
       "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript5>.jsonl",
       "FTH_EARLY_CLOSE_DATES": "2026-11-27,2026-12-24,2027-11-26",
       "FTH_ENTRY_HOURS": "",
@@ -2163,7 +2163,7 @@
          "bos-vs-choch"
         ],
         "sections": [],
-        "bytes": 56633,
+        "bytes": 59345,
         "over": []
        },
        "skillLookups": {
@@ -2211,7 +2211,7 @@
        "complete": true,
        "decided": true
       },
-      "prompt": "sha256:f953559e00d6dfdaeeef06f983adf71b1b7ef161728df32f8fdec5f7c95a3ae9 (60264 chars)",
+      "prompt": "sha256:8692cb5c9ff1a84a668b6d262c200b811c6e1214f6925e26fed402d7cb2f88d8 (62975 chars)",
       "context": {
        "symbols": [
         {
@@ -2385,11 +2385,11 @@
          "location",
          "bias"
         ],
-        "bytes": 56633
+        "bytes": 59345
        },
        "cachedLookups": {}
       },
-      "transcript": "sha256:6464e037d3993c50af3e77db956d430e9d4bc7199767f877dca506c2b45af075 (23188 chars)",
+      "transcript": "sha256:ee32d318f6a4be4c0f05d83843d0eded706009eb47cee42a4310f439b6af7f6b (23486 chars)",
       "argv": [
        "claude",
        "-p",
@@ -2468,7 +2468,7 @@
          "bos-vs-choch"
         ],
         "sections": [],
-        "bytes": 53151,
+        "bytes": 55862,
         "over": []
        },
        "skillLookups": {
@@ -2514,7 +2514,7 @@
        "complete": true,
        "decided": true
       },
-      "prompt": "sha256:de86fd7835bc3524317aa93c53a1fce79a261900726ca78331c6c75651cc20b9 (57691 chars)",
+      "prompt": "sha256:425bb6d3af08785e88c74c89e525121ab3a574073cfdad3c3fe741f029fc3bc7 (60401 chars)",
       "context": {
        "symbols": [
         {
@@ -2760,11 +2760,11 @@
          "location",
          "bias"
         ],
-        "bytes": 53151
+        "bytes": 55862
        },
        "cachedLookups": {}
       },
-      "transcript": "sha256:b8d7f86a0334c7f86621b5675f28fc8b01fb3d491d937e4fa69a5b1c480599fd (24956 chars)",
+      "transcript": "sha256:28e5bf148bdd685d4112b25af35c7146377102608e5740deb3c281655ab75542 (25281 chars)",
       "argv": [
        "claude",
        "-p",
@@ -2821,7 +2821,7 @@
          "bos-vs-choch"
         ],
         "sections": [],
-        "bytes": 25623,
+        "bytes": 28226,
         "over": []
        },
        "skillLookups": {
@@ -2867,7 +2867,7 @@
        "complete": false,
        "decided": true
       },
-      "prompt": "sha256:fb62064888b16baf4c78ec5b0d46413416bcd233acfdef02e9389db8743c956c (29583 chars)",
+      "prompt": "sha256:fdc1201aab981b52cc634f71bde35bdfb71b4aba804fb8ada56d6f9d2a22e423 (32185 chars)",
       "context": {
        "symbols": [
         {
@@ -3090,7 +3090,7 @@
          "management",
          "bias"
         ],
-        "bytes": 25623
+        "bytes": 28226
        },
        "cachedLookups": {}
       },
@@ -3175,7 +3175,7 @@
        "bos-vs-choch"
       ],
       "sections": [],
-      "bytes": 56633,
+      "bytes": 59345,
       "over": []
      },
      "skillLookups": {
@@ -3268,7 +3268,7 @@
        "bos-vs-choch"
       ],
       "sections": [],
-      "bytes": 53151,
+      "bytes": 55862,
       "over": []
      },
      "skillLookups": {
@@ -3337,7 +3337,7 @@
        "bos-vs-choch"
       ],
       "sections": [],
-      "bytes": 25623,
+      "bytes": 28226,
       "over": []
      },
      "skillLookups": {
@@ -3418,7 +3418,7 @@
     ],
     [
      "briefing/MNQ.json",
-     "sha256:edcee538b26abde1bfe53f97433b5c20c48a3c5165a62c27d01b8740c5c5eafa (18133 chars)"
+     "sha256:dd6fe51c83de6e15c6e5615c842cd886cee9f39030b7d3ae34e5de23ed24f8fa (18418 chars)"
     ],
     [
      "brokers.json",
@@ -3441,12 +3441,12 @@
      "sha256:8958c92cf593bd05692ee4d6acc6e57af3982754417c4bd8dba205b76d902c70 (134398 chars)"
     ],
     [
-     "head-prompt/cycle-skills-514fc3f9fd785954c97e88ca302139f30837c40670187244aee211d3fb75a192.md",
-     "sha256:514fc3f9fd785954c97e88ca302139f30837c40670187244aee211d3fb75a192 (53696 chars)"
+     "head-prompt/cycle-skills-4ddff8e72d3e4ab2e6e8715d6a29386a0a362412a0037350bfc107e9476ba31a.md",
+     "sha256:4ddff8e72d3e4ab2e6e8715d6a29386a0a362412a0037350bfc107e9476ba31a (28484 chars)"
     ],
     [
-     "head-prompt/cycle-skills-79b346dbeb1cf9357a76b8c271d5e2b9a6fd9cf8051923ee71d0aced82e78ca4.md",
-     "sha256:79b346dbeb1cf9357a76b8c271d5e2b9a6fd9cf8051923ee71d0aced82e78ca4 (25882 chars)"
+     "head-prompt/cycle-skills-fc13f458af5250d4f477ab96933d178ef618e05f8f07af65e5eaf58ce51cb3df.md",
+     "sha256:fc13f458af5250d4f477ab96933d178ef618e05f8f07af65e5eaf58ce51cb3df (56406 chars)"
     ],
     [
      "journal.jsonl",
@@ -3600,7 +3600,7 @@
      "ran": [
       {
        "action": "trade",
-       "prompt": "sha256:6fe79a6664875022680bf1f5c0e2425d4820ae91b41df8fe482cf5cf73b00b00 (60330 chars)",
+       "prompt": "sha256:33ae402ad63c5dede509a961425363fc1e67fd17903aa313c4fad42a345d0dc9 (63041 chars)",
        "result": "CYCLE RESULT: no-trade - nothing to take",
        "ok": true,
        "timedOut": false
@@ -3617,7 +3617,7 @@
       "FTH_CYCLE": "full",
       "FTH_CYCLE_BARS": "{\"MNQ\":\"2026-04-28T04:06:00.000Z\"}",
       "FTH_CYCLE_DESK": "market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager",
-      "FTH_CYCLE_SKILLS": "sha256:b26ce5a83c96c8205484a5c8a5531aa92337a8e255e71e23ab48b37e5bcf7626 (476 chars)",
+      "FTH_CYCLE_SKILLS": "sha256:2747e0096b438eb50bb9ad99a43a58efd321a77dbd6fb3de90d160f845959c74 (476 chars)",
       "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript2>.jsonl",
       "FTH_EARLY_CLOSE_DATES": "2026-11-27,2026-12-24,2027-11-26",
       "FTH_ENTRY_HOURS": "",
@@ -3693,7 +3693,7 @@
      "ran": [
       {
        "action": "manage",
-       "prompt": "sha256:bc2d22b43c7c2a9c227439acbc47dae04a40149b871bef6bc5c12fec00d98c59 (29170 chars)",
+       "prompt": "sha256:6d0653f3b03311e55cda984b0e202f9675e136c765b630f19df6d76ae6c11700 (31772 chars)",
        "result": "CYCLE RESULT: managed - the open long",
        "ok": true,
        "timedOut": false
@@ -3709,7 +3709,7 @@
       "FTH_CLOSED_DATES": "2026-01-01,2026-01-19,2026-02-16,2026-04-03,2026-05-25,2026-06-19,2026-07-03,2026-09-07,2026-11-26,2026-12-25,2027-01-01,2027-01-18,2027-02-15,2027-03-26,2027-05-31,2027-06-18,2027-07-05,2027-09-06,2027-11-25,2027-12-24",
       "FTH_CYCLE": "full",
       "FTH_CYCLE_BARS": "{\"MNQ\":\"2026-04-28T04:12:00.000Z\"}",
-      "FTH_CYCLE_SKILLS": "sha256:e30f97a39fdd943c46e5002f0a6a3831bc58a2639cb7fdff076e39af459449a6 (323 chars)",
+      "FTH_CYCLE_SKILLS": "sha256:cf21a40a7e2dd57f3d5a5c04502fafc4c68e8bbb3a5ba8baf4c329faea02c67b (323 chars)",
       "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript3>.jsonl",
       "FTH_EARLY_CLOSE_DATES": "2026-11-27,2026-12-24,2027-11-26",
       "FTH_ENTRY_HOURS": "",
@@ -3844,7 +3844,7 @@
          "bos-vs-choch"
         ],
         "sections": [],
-        "bytes": 56633,
+        "bytes": 59345,
         "over": []
        },
        "skillLookups": {
@@ -3892,7 +3892,7 @@
        "complete": true,
        "decided": true
       },
-      "prompt": "sha256:6fe79a6664875022680bf1f5c0e2425d4820ae91b41df8fe482cf5cf73b00b00 (60330 chars)",
+      "prompt": "sha256:33ae402ad63c5dede509a961425363fc1e67fd17903aa313c4fad42a345d0dc9 (63041 chars)",
       "context": {
        "symbols": [
         {
@@ -4066,11 +4066,11 @@
          "location",
          "bias"
         ],
-        "bytes": 56633
+        "bytes": 59345
        },
        "cachedLookups": {}
       },
-      "transcript": "sha256:6464e037d3993c50af3e77db956d430e9d4bc7199767f877dca506c2b45af075 (23188 chars)",
+      "transcript": "sha256:ee32d318f6a4be4c0f05d83843d0eded706009eb47cee42a4310f439b6af7f6b (23486 chars)",
       "argv": [
        "claude",
        "-p",
@@ -4127,7 +4127,7 @@
          "bos-vs-choch"
         ],
         "sections": [],
-        "bytes": 25623,
+        "bytes": 28226,
         "over": []
        },
        "skillLookups": {
@@ -4156,7 +4156,7 @@
        "complete": true,
        "decided": true
       },
-      "prompt": "sha256:bc2d22b43c7c2a9c227439acbc47dae04a40149b871bef6bc5c12fec00d98c59 (29170 chars)",
+      "prompt": "sha256:6d0653f3b03311e55cda984b0e202f9675e136c765b630f19df6d76ae6c11700 (31772 chars)",
       "context": {
        "symbols": [
         {
@@ -4361,7 +4361,7 @@
          "management",
          "bias"
         ],
-        "bytes": 25623
+        "bytes": 28226
        },
        "cachedLookups": {}
       },
@@ -4446,7 +4446,7 @@
        "bos-vs-choch"
       ],
       "sections": [],
-      "bytes": 56633,
+      "bytes": 59345,
       "over": []
      },
      "skillLookups": {
@@ -4517,7 +4517,7 @@
        "bos-vs-choch"
       ],
       "sections": [],
-      "bytes": 25623,
+      "bytes": 28226,
       "over": []
      },
      "skillLookups": {
@@ -4578,7 +4578,7 @@
     ],
     [
      "briefing/MNQ.json",
-     "sha256:ca4c7d0cc5354f54b063ef3a3b3dfc9edaa57ff4d10e428055689154d62767fa (18170 chars)"
+     "sha256:81482f056ceca599398e00e4afae316979c33d3c72855794331a7a55ea7f2e87 (18455 chars)"
     ],
     [
      "brokers.json",
@@ -4601,12 +4601,12 @@
      "sha256:8958c92cf593bd05692ee4d6acc6e57af3982754417c4bd8dba205b76d902c70 (134398 chars)"
     ],
     [
-     "head-prompt/cycle-skills-2a7867dd27a60f807530edae93508d48a81db150ffdc409a7adab6a9c82139b0.md",
-     "sha256:2a7867dd27a60f807530edae93508d48a81db150ffdc409a7adab6a9c82139b0 (57222 chars)"
+     "head-prompt/cycle-skills-4ddff8e72d3e4ab2e6e8715d6a29386a0a362412a0037350bfc107e9476ba31a.md",
+     "sha256:4ddff8e72d3e4ab2e6e8715d6a29386a0a362412a0037350bfc107e9476ba31a (28484 chars)"
     ],
     [
-     "head-prompt/cycle-skills-79b346dbeb1cf9357a76b8c271d5e2b9a6fd9cf8051923ee71d0aced82e78ca4.md",
-     "sha256:79b346dbeb1cf9357a76b8c271d5e2b9a6fd9cf8051923ee71d0aced82e78ca4 (25882 chars)"
+     "head-prompt/cycle-skills-67c6b0cd080c30cbbb08ab75d1fee36391806e173f3eae89adff741c89bacded.md",
+     "sha256:67c6b0cd080c30cbbb08ab75d1fee36391806e173f3eae89adff741c89bacded (59933 chars)"
     ],
     [
      "journal.jsonl",
@@ -4743,7 +4743,7 @@
      "ran": [
       {
        "action": "trade",
-       "prompt": "sha256:f953559e00d6dfdaeeef06f983adf71b1b7ef161728df32f8fdec5f7c95a3ae9 (60264 chars)",
+       "prompt": "sha256:8692cb5c9ff1a84a668b6d262c200b811c6e1214f6925e26fed402d7cb2f88d8 (62975 chars)",
        "result": "CYCLE RESULT: no-trade - nothing to take",
        "ok": true,
        "timedOut": false
@@ -4760,7 +4760,7 @@
       "FTH_CYCLE": "full",
       "FTH_CYCLE_BARS": "{\"MNQ\":\"2026-04-28T04:06:00.000Z\"}",
       "FTH_CYCLE_DESK": "market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager",
-      "FTH_CYCLE_SKILLS": "sha256:b26ce5a83c96c8205484a5c8a5531aa92337a8e255e71e23ab48b37e5bcf7626 (476 chars)",
+      "FTH_CYCLE_SKILLS": "sha256:2747e0096b438eb50bb9ad99a43a58efd321a77dbd6fb3de90d160f845959c74 (476 chars)",
       "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript3>.jsonl",
       "FTH_EARLY_CLOSE_DATES": "2026-11-27,2026-12-24,2027-11-26",
       "FTH_ENTRY_HOURS": "",
@@ -4826,7 +4826,7 @@
      "ran": [
       {
        "action": "trade",
-       "prompt": "sha256:de86fd7835bc3524317aa93c53a1fce79a261900726ca78331c6c75651cc20b9 (57691 chars)",
+       "prompt": "sha256:425bb6d3af08785e88c74c89e525121ab3a574073cfdad3c3fe741f029fc3bc7 (60401 chars)",
        "result": "CYCLE RESULT: executed - fx_break long MNQ 1",
        "ok": true,
        "timedOut": false
@@ -4845,7 +4845,7 @@
       "FTH_CYCLE_CACHED": "risk-manager",
       "FTH_CYCLE_DESK": "market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst",
       "FTH_CYCLE_PHASE1": "sha256:382d258861f0a1e503af28b693e076f76ded653c08a9f09a8df8a4cac1670afe (424 chars)",
-      "FTH_CYCLE_SKILLS": "sha256:4b446f4ec456e99b62386f4e956e4c6843c18fc902c8560e7a3d79104434bcb1 (469 chars)",
+      "FTH_CYCLE_SKILLS": "sha256:6f3439fab0f0fbb41f3ad7337f743790bda0af50368ec60527e8a6d367a3e75a (469 chars)",
       "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript4>.jsonl",
       "FTH_EARLY_CLOSE_DATES": "2026-11-27,2026-12-24,2027-11-26",
       "FTH_ENTRY_HOURS": "",
@@ -4921,7 +4921,7 @@
      "ran": [
       {
        "action": "trade",
-       "prompt": "sha256:a59cb003155eb08e4aecb7c35b19959ebe6a87cb7c0342bd36b9dd958d5ffb78 (29591 chars)",
+       "prompt": "sha256:1694f8e6edcc240c2bdc8504f23e7bbd972dde704d1f012b0f54b3e9fc5e1b22 (32193 chars)",
        "result": "CYCLE RESULT: managed - the open long",
        "ok": true,
        "timedOut": false
@@ -4938,7 +4938,7 @@
       "FTH_CYCLE": "full",
       "FTH_CYCLE_BARS": "{\"MNQ\":\"2026-04-28T04:12:00.000Z\"}",
       "FTH_CYCLE_DESK": "market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager",
-      "FTH_CYCLE_SKILLS": "sha256:677577b50d3a679351a0cd3fabe4fb1cf750c92cf5a90a47f23340604ff4f72f (323 chars)",
+      "FTH_CYCLE_SKILLS": "sha256:b3ec9a4347b988cc465209ac42abad88b339c9b716a9c4c2826d575b8e44d724 (323 chars)",
       "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript5>.jsonl",
       "FTH_EARLY_CLOSE_DATES": "2026-11-27,2026-12-24,2027-11-26",
       "FTH_ENTRY_HOURS": "",
@@ -5075,7 +5075,7 @@
          "bos-vs-choch"
         ],
         "sections": [],
-        "bytes": 56633,
+        "bytes": 59345,
         "over": []
        },
        "skillLookups": {
@@ -5123,7 +5123,7 @@
        "complete": true,
        "decided": true
       },
-      "prompt": "sha256:f953559e00d6dfdaeeef06f983adf71b1b7ef161728df32f8fdec5f7c95a3ae9 (60264 chars)",
+      "prompt": "sha256:8692cb5c9ff1a84a668b6d262c200b811c6e1214f6925e26fed402d7cb2f88d8 (62975 chars)",
       "context": {
        "symbols": [
         {
@@ -5297,11 +5297,11 @@
          "location",
          "bias"
         ],
-        "bytes": 56633
+        "bytes": 59345
        },
        "cachedLookups": {}
       },
-      "transcript": "sha256:6464e037d3993c50af3e77db956d430e9d4bc7199767f877dca506c2b45af075 (23188 chars)",
+      "transcript": "sha256:ee32d318f6a4be4c0f05d83843d0eded706009eb47cee42a4310f439b6af7f6b (23486 chars)",
       "argv": [
        "claude",
        "-p",
@@ -5402,7 +5402,7 @@
          "bos-vs-choch"
         ],
         "sections": [],
-        "bytes": 53151,
+        "bytes": 55862,
         "over": []
        },
        "skillLookups": {
@@ -5483,7 +5483,7 @@
        "complete": true,
        "decided": true
       },
-      "prompt": "sha256:de86fd7835bc3524317aa93c53a1fce79a261900726ca78331c6c75651cc20b9 (57691 chars)",
+      "prompt": "sha256:425bb6d3af08785e88c74c89e525121ab3a574073cfdad3c3fe741f029fc3bc7 (60401 chars)",
       "context": {
        "symbols": [
         {
@@ -5729,11 +5729,11 @@
          "location",
          "bias"
         ],
-        "bytes": 53151
+        "bytes": 55862
        },
        "cachedLookups": {}
       },
-      "transcript": "sha256:e3ed7ef7b64fa2d65d026e4a347b0b509946f8805412dff729de50e4d8b886e0 (29265 chars)",
+      "transcript": "sha256:3f46fe3d28ab9cef87cbb11f2beecd0e1c6712ad3bceef7c6873ba5f88e0ecbb (29590 chars)",
       "argv": [
        "claude",
        "-p",
@@ -5790,7 +5790,7 @@
          "bos-vs-choch"
         ],
         "sections": [],
-        "bytes": 25623,
+        "bytes": 28226,
         "over": []
        },
        "skillLookups": {
@@ -5836,7 +5836,7 @@
        "complete": false,
        "decided": true
       },
-      "prompt": "sha256:a59cb003155eb08e4aecb7c35b19959ebe6a87cb7c0342bd36b9dd958d5ffb78 (29591 chars)",
+      "prompt": "sha256:1694f8e6edcc240c2bdc8504f23e7bbd972dde704d1f012b0f54b3e9fc5e1b22 (32193 chars)",
       "context": {
        "symbols": [
         {
@@ -6057,7 +6057,7 @@
          "management",
          "bias"
         ],
-        "bytes": 25623
+        "bytes": 28226
        },
        "cachedLookups": {}
       },
@@ -6142,7 +6142,7 @@
        "bos-vs-choch"
       ],
       "sections": [],
-      "bytes": 56633,
+      "bytes": 59345,
       "over": []
      },
      "skillLookups": {
@@ -6257,7 +6257,7 @@
        "bos-vs-choch"
       ],
       "sections": [],
-      "bytes": 53151,
+      "bytes": 55862,
       "over": []
      },
      "skillLookups": {
@@ -6333,7 +6333,7 @@
        "bos-vs-choch"
       ],
       "sections": [],
-      "bytes": 25623,
+      "bytes": 28226,
       "over": []
      },
      "skillLookups": {
@@ -6423,7 +6423,7 @@
     ],
     [
      "briefing/MNQ.json",
-     "sha256:edcee538b26abde1bfe53f97433b5c20c48a3c5165a62c27d01b8740c5c5eafa (18133 chars)"
+     "sha256:dd6fe51c83de6e15c6e5615c842cd886cee9f39030b7d3ae34e5de23ed24f8fa (18418 chars)"
     ],
     [
      "brokers.json",
@@ -6450,12 +6450,12 @@
      "sha256:2f9210306288c02aec6ca7444e56220899c4750fa2d36dedf2c2584018fe983b (913 chars)"
     ],
     [
-     "head-prompt/cycle-skills-514fc3f9fd785954c97e88ca302139f30837c40670187244aee211d3fb75a192.md",
-     "sha256:514fc3f9fd785954c97e88ca302139f30837c40670187244aee211d3fb75a192 (53696 chars)"
+     "head-prompt/cycle-skills-4ddff8e72d3e4ab2e6e8715d6a29386a0a362412a0037350bfc107e9476ba31a.md",
+     "sha256:4ddff8e72d3e4ab2e6e8715d6a29386a0a362412a0037350bfc107e9476ba31a (28484 chars)"
     ],
     [
-     "head-prompt/cycle-skills-79b346dbeb1cf9357a76b8c271d5e2b9a6fd9cf8051923ee71d0aced82e78ca4.md",
-     "sha256:79b346dbeb1cf9357a76b8c271d5e2b9a6fd9cf8051923ee71d0aced82e78ca4 (25882 chars)"
+     "head-prompt/cycle-skills-fc13f458af5250d4f477ab96933d178ef618e05f8f07af65e5eaf58ce51cb3df.md",
+     "sha256:fc13f458af5250d4f477ab96933d178ef618e05f8f07af65e5eaf58ce51cb3df (56406 chars)"
     ],
     [
      "journal.jsonl",

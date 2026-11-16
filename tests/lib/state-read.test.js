@@ -500,8 +500,20 @@ test('state line: the decision follows the model\'s own STATE read (taught, no c
     // The head trader's alone; taught, never a gate: the gate and compose_check stay as they are
     // (tests/e2e/state-read-invariance-e2e.test.js).
     "(the head trader's own, the last line of its PLAN; taught: the gate and `compose_check` do not read it)",
-    // The class follows the frames the model wrote: a trend class needs its 4h and 1h that way.
-    "The class follows your frames: your 4h and 1h both one way → that trend class (a 15m pullback, `range` or `transition` under them doesn't cancel it, nor does your `frames disagree`: never `chop` or `unclear` for it); not both one way → `unclear` (never a trend class, smooth or not), `chop` only when the movement itself is choppy (breaks both ways in `m3.lastBreak` last/previous, the Day so far `rotational`, many RTH VWAP crosses): a frame's `range` or `transition` alone is never `chop`.",
+    // The class word is the one the Market state line prints (feat/chop-read; round 18, the owner: the line prints code's
+    // class, classWordOf): the table maps the printed class to one action, never a state word to a class
+    // (tests/plugin/market-state-authority.test.js checks every printed line's class against code's); the model's own
+    // frames stay its read (off the line: say why). The trend and chop definitions live in trend-vs-range (reference).
+    "Write the class the `Market state` line prints after `class`; your own 4h/1h/15m reads stay in STATE. No other row, picture or frame read changes it. When your frames differ, say why in the PLAN.",
+    "| `chop` | sit out |",
+    "| `unclear` | no trend trade, never counter |",
+    // A range day is no chop (owner: a range day is catchable; round 20: the state word `range`, decision 3's response).
+    "- `range`: setups at the range edge or on a breakout, the side's way only, a range day too; a range is not chop.",
+    // The negative-only pause line (round 18, the diagnosis review): no positive chop definition in the always-loaded text.
+    "Small overlapping candles inside a printed pullback are a pause, not chop; the class stays the line's.",
+    "wait for the 15m turn (a live strong 15m CISD, a 15m BOS, a 15m CHoCH back or a 15m reaction at the level); enter on the first 3m BOS or CISD the side's way near value (a 3m CISD is the entry as a 3m BOS is, even after a 3m CHoCH against; `pullback-vs-reversal` steps 4-7).",
+    // Round 20 (decision 6): chop ends only on displacement.
+    "Chop ends when the line's state word is no longer `chop` (code's rule: a displaced 3m break or a displaced 3m CISD, a displaced close beyond the IB (complete at 10:30), or the protected level broken with displacement). The trend and chop definitions, for reference only: `trend-vs-range`.",
     // A take agrees with the read: the class and the 4h and 1h on the setup's side (the never-counter-HTF rule, in its own words).
     'A take: `class` on its side (`trend-up` long, `trend-down` short), your 4h and 1h too (`up` long, `down` short).',
     // compose_check first (its record is what the pass is scored on), then a pass that names the read: the head trader's
@@ -513,10 +525,10 @@ test('state line: the decision follows the model\'s own STATE read (taught, no c
   assert.doesNotMatch(para.replace('not a decisive against', ''), /decisive/);
   // The other sentences stay true: pass only on a decisive against or the head trader's own read.
   assert.ok(ts.includes("pass only on a decisive against, or your own STATE read off the setup's side (above)."));
-  // The 15m is no condition: a pullback entry has the 15m ranging or turning (the recorded trend-leg takes: 15m range,
-  // transition); it is named once, only to say it doesn't cancel the 4h and 1h.
-  assert.strictEqual(para.split('15m').length, 2);
-  assert.ok(para.includes("(a 15m pullback, `range` or `transition` under them doesn't cancel it, nor does your `frames disagree`: never `chop` or `unclear` for it)"));
+  // The 15m is no class condition of the 4h + 1h: it is named in the pullback row's action (the turn) and the chop row
+  // (the 15m continuation: the 3m state, code's); round 18: once more in "your own 4h/1h/15m reads stay in STATE".
+  assert.strictEqual(para.split('15m').length, 10); // +1: the pullback row's "a live strong 15m CISD" (round 15)
+  assert.doesNotMatch(para, /Class side|open `Pullback` line/, 'the dropped line and the rule the state settles');
   // No filled-in line here: the one example stays in trader-process (the class-word test below).
   assert.doesNotMatch(para, /`STATE:/);
   // Step 8 and the always-on decision rule point to it, addressed to the head trader alone.
@@ -531,11 +543,12 @@ test('state line: the decision follows the model\'s own STATE read (taught, no c
   // The side rule and its example stay main's (their alignment to the 4h AND 1h rule is its own later pull request); after
   // it, the head trader's OWN read (not the labels) decides the take, and the briefing's lines are the gate's floor.
   const htf = read('skills/htf-to-ltf/SKILL.md');
-  assert.ok(htf.includes('**The side rule** (in an attempt): each trending 4h or 1h your way, neither against; both ranging: the 15m and `Trend declared?` your way; else no trade.'));
+  // Round 18 (q119): the side rule says it decides the side only; the class is the Market state line's (no new rule).
+  assert.ok(htf.includes('**The side rule** (side only; the class is the Market state line\'s; in an attempt): each trending 4h or 1h your way, neither against; both ranging: the 15m and `Trend declared?` your way; else no trade.'));
   assert.ok(htf.includes('4h and 1h RANGE, 15m DOWN, declared short: short only.'));
-  assert.ok(htf.includes("Then the head trader's own STATE read decides the take (`trade-session` step 3): its own 4h and 1h both range, or one of them not trending the side, is `unclear` to it (`chop`: choppy movement only); both the side's way, a 15m range, transition or pullback under them, is the side's trend class."));
+  assert.ok(htf.includes("Then the class is the one the Market state line prints after `class`; a take needs your own STATE 4h and 1h the side's way too."));
   assert.ok(htf.includes("The briefing's `Bias:`/`Trend rule:` lines are the gate's floor (what it refuses), never your side: your own STATE read is stricter."));
-  assert.ok(htf.indexOf('Then the head trader') > htf.indexOf('**The side rule**'), 'after the side rule');
+  assert.ok(htf.indexOf('Then the class is the one the Market state line prints') > htf.indexOf('**The side rule**'), 'after the side rule');
   // The documented example (a full long take) satisfies the taught rule: class trend-up, 4h up, 1h up.
   const ex = /9 Manage:[^\n]*\n(STATE: [^\n]+)\n```/.exec(fs.readFileSync(path.join(ROOT, 'skills', 'trader-process', 'SKILL.md'), 'utf8').split('## Examples')[1]);
   const r = S.parseStateLine(ex[1]);
@@ -569,7 +582,7 @@ test('class word: one filled-in example in the skills and agents; its class word
     // The class word is not the regime label copied: not the PLAN's regime word, not another word on the line, no regime cite.
     const regime = /\bregime ([a-z-]+)/.exec(block);
     assert.ok(regime, `${where}: the example sits in a PLAN with its regime`);
-    // The same word in the regime's spelling: chop is a range, trend-up and trend-down are their own regime tags.
+    // The same word in the regime's spelling: trend-up and trend-down are their own regime tags (chop is no regime word).
     assert.ok(!S.classIsRegime(r.classWord, regime[1]), `${where}: the class word is the regime word`);
     assert.ok(!line.replace(`class ${r.classWord}`, '').includes(r.classWord), `${where}: the class word repeats another word on the line`);
     assert.ok(!r.cites.includes('regime'), `${where}: the example cites the regime label`);
@@ -580,8 +593,8 @@ test('class word: one filled-in example in the skills and agents; its class word
   }
 });
 
-test('class word: classIsRegime reads a class word in the spelling of the regime (chop is range); AS_REGIME covers every class word but unclear with regime words', () => {
-  assert.strictEqual(S.classIsRegime('chop', 'range'), true);
+test('class word: classIsRegime reads a class word in the spelling of the regime; chop is not range (chop is the quality of movement, range its geometry); AS_REGIME covers the trend class words only', () => {
+  assert.strictEqual(S.classIsRegime('chop', 'range'), false);
   assert.strictEqual(S.classIsRegime('trend-up', 'trend-up'), true);
   assert.strictEqual(S.classIsRegime('trend-down', 'trend-down'), true);
   assert.strictEqual(S.classIsRegime('trend-up', 'range'), false);
@@ -589,7 +602,7 @@ test('class word: classIsRegime reads a class word in the spelling of the regime
   assert.strictEqual(S.classIsRegime('unclear', 'transition'), false);
   assert.strictEqual(S.classIsRegime(null, 'range'), false);
   assert.ok(Object.isFrozen(S.AS_REGIME));
-  assert.deepStrictEqual(Object.keys(S.AS_REGIME).sort(), S.CLASS_WORDS.filter(w => w !== 'unclear').sort());
+  assert.deepStrictEqual(Object.keys(S.AS_REGIME).sort(), S.CLASS_WORDS.filter(w => w !== 'unclear' && w !== 'chop').sort());
   const { PRIMARY } = require('../../scripts/lib/trading/regime');
   for (const v of Object.values(S.AS_REGIME)) assert.ok(PRIMARY.includes(v), v);
 });

@@ -256,3 +256,79 @@ test('pullbackRead: a recorded given-back leg (2021-06-04 09:48 ET bar, the 4h d
   assert.match(line, /\): the leg given back past its origin; 147 bars since the extreme; /);
   assert.match(line, /swings since the extreme: 15m 13531\.75 broken by a close, 1h 13533 broken by a close; 15m break against: BOS up 13542\.5 \(10 bars ago\), 1h: BOS up 13546\.5 \(1 bars ago\); stacked\.$/);
 });
+
+// One definition in code (feat/chop-read, ECC): a leg given back past its origin (pastOrigin, else an older record's depth
+// >= 1), and an open Pullback line (printed by pullbackLine and not given back). The line, the word and the recognition
+// key read these two only.
+test('givenBack and isOpen: given back = pastOrigin when a boolean, else depth >= 1; open = a printed line not given back', () => {
+  const leg = { origin: 21462.5, extreme: 21538.75 };
+  const p = o => ({ frame: '15m', side: 'long', leg, depth: 0.38, counter: {}, swing: {}, against: {}, ...o });
+  assert.strictEqual(PR.givenBack(p({ pastOrigin: false })), false);
+  assert.strictEqual(PR.givenBack(p({ pastOrigin: true, depth: 0.4 })), true, 'pastOrigin decides when stated');
+  assert.strictEqual(PR.givenBack(p({ pastOrigin: false, depth: 1.2 })), false, 'pastOrigin decides when stated');
+  assert.strictEqual(PR.givenBack(p({ depth: 1 })), true, 'an older record: depth 1 is past');
+  assert.strictEqual(PR.givenBack(p({ depth: 0.996 })), false);
+  assert.strictEqual(PR.givenBack(p({ depth: null })), false, 'no depth, no flag: not given back');
+  assert.strictEqual(PR.givenBack(null), false);
+  assert.strictEqual(PR.isOpen(p({ pastOrigin: false })), true);
+  assert.strictEqual(PR.isOpen(p({ pastOrigin: true })), false, 'given back: printed but not open');
+  assert.strictEqual(PR.isOpen(p({ depth: 1.1 })), false);
+  assert.strictEqual(PR.isOpen({ frame: '15m' }), false, 'no leg: no line');
+  assert.strictEqual(PR.isOpen(null), false);
+  assert.strictEqual(PR.isOpen(undefined), false);
+  // The line and the word follow the same rule.
+  assert.match(PR.pullbackLine(p({ pastOrigin: true })), /the leg given back past its origin/);
+  assert.strictEqual(PR.pullbackWord(p({ depth: 1.1 })), 'leg given back');
+  assert.strictEqual(PR.pullbackWord(p({ pastOrigin: false, depth: 1.1 })), 'depth 110%');
+});
+
+// Round 15 fix 1 (PREREG addendum 15): a leg given back past its origin is invalidated; it does not reopen when price
+// crosses back. isOpen (the Market state's read) is false for good once a close since the extreme was beyond the origin
+// (givenBackSince) or the leg-defining 15m swing was broken by a close; lineOpen (the printed line's openness, the
+// recognition key's frozen C3) keeps the pre-round rule. The printed line never reads the new field.
+test('isOpen is sticky within the leg: given back since the extreme, or its 15m swing broken; lineOpen and the line unchanged', () => {
+  const leg = { origin: 21462.5, extreme: 21538.75 };
+  const p = o => ({ frame: '15m', side: 'long', leg, depth: 0.38, pastOrigin: false, counter: { bars: 10 }, swing: { '15m': { price: 21462.5, holds: true } }, against: {}, ...o });
+  assert.strictEqual(PR.isOpen(p({ givenBackSince: false })), true);
+  assert.strictEqual(PR.isOpen(p({ givenBackSince: true })), false, 'given back since the extreme: dead though the close is back above the origin');
+  assert.strictEqual(PR.isOpen(p({ swing: { '15m': { price: 21462.5, holds: false } } })), false, 'its 15m swing broken by a close: dead');
+  assert.strictEqual(PR.isOpen(p({ swing: { '1h': { price: 21400, holds: false } } })), true, 'only the leg-defining (structure-frame) swing');
+  assert.strictEqual(PR.lineOpen(p({ givenBackSince: true })), true, 'the printed line still reads open');
+  assert.strictEqual(PR.lineOpen(p({ pastOrigin: true })), false);
+  assert.strictEqual(PR.pullbackLine(p({ givenBackSince: true })), PR.pullbackLine(p({})), 'the line never reads it');
+  assert.strictEqual(PR.pullbackWord(p({ givenBackSince: true })), PR.pullbackWord(p({})));
+});
+
+test('pullbackRead on real bars (2021-06-04): the leg given back at 07:09 never reopens, though the printed line reads open again at 07:12', () => {
+  const bars = require('../fixtures/pullback/given-back-2021-06-04.json').map(([t, o, h, l, c, v]) => ({ t: `${t}:00.000Z`, o, h, l, c, v }));
+  const at = n => PR.pullbackRead({ bars: bars.slice(0, n), base: 3, prevailing: '4h down' });
+  const leg = q => [q.leg.origin, q.leg.extreme];
+  const live = at(163); // 06:57: the counter-move inside the leg
+  assert.deepStrictEqual([leg(live), live.givenBackSince, PR.isOpen(live)], [[13531.75, 13492.5], false, true]);
+  const back = at(167); // 07:09: a close past the origin
+  assert.deepStrictEqual([leg(back), back.pastOrigin, back.givenBackSince, PR.isOpen(back)], [[13531.75, 13492.5], true, true, false]);
+  const reopened = at(168); // 07:12: the close back inside the leg
+  assert.deepStrictEqual([leg(reopened), reopened.pastOrigin, reopened.givenBackSince], [[13531.75, 13492.5], false, true]);
+  assert.strictEqual(PR.lineOpen(reopened), true, 'the pre-round rule reopened it');
+  assert.strictEqual(PR.isOpen(reopened), false, 'dead for good on this leg');
+  const { givenBackSince: _gbs, ...rest } = reopened;
+  assert.strictEqual(PR.pullbackLine(rest), PR.pullbackLine(reopened), 'the printed line ignores it');
+  const p = at(bars.length);
+  assert.strictEqual(p.givenBackSince, true);
+});
+
+// PREREG addendum 16: the depth the Market state bounds is sticky: the deepest retrace any close since the extreme gave
+// back (maxDepth), not the current close. 2021-06-11 (real bars): the leg 17286.25 -> 17334 retraced 63% at 10:33 and
+// bounced to 61% at 10:36; the pullback had failed at 10:33 and stays failed.
+test('pullbackRead on real bars (2021-06-11): maxDepth is the deepest close since the extreme; the printed line keeps the current depth', () => {
+  const bars = require('../fixtures/pullback/depth-flicker-2021-06-11.json').map(([t, o, h, l, c, v]) => ({ t: `${t}:00.000Z`, o, h, l, c, v }));
+  const at = hm => PR.pullbackRead({ bars: bars.slice(0, bars.findIndex(b => b.t === `2021-06-11T${hm}:00.000Z`) + 1), base: 3, prevailing: '4h up' });
+  const deep = at('14:33');
+  const bounced = at('14:36');
+  assert.deepStrictEqual([bounced.leg.origin, bounced.leg.extreme, bounced.depth], [17286.25, 17334, 0.61]);
+  assert.ok(deep.depth >= 0.63 && bounced.maxDepth >= deep.depth, `maxDepth ${bounced.maxDepth}`);
+  assert.ok(bounced.maxDepth >= bounced.depth);
+  assert.match(PR.pullbackLine(bounced), /depth 61% of the leg/, 'the printed line: the current close');
+  const { maxDepth: _md, ...rest } = bounced;
+  assert.strictEqual(PR.pullbackLine(rest), PR.pullbackLine(bounced), 'the line never reads it');
+});

@@ -1,0 +1,255 @@
+== 2021-06-15
+09:30 Market state (3m): in the down leg: LH 17459.75 holds; 15m early; 4h+1h up; class unclear
+09:33 Market state (3m): in the down leg: LH 17459.75 holds; displacement up this bar; overlap 0.85, efficiency 0.43, 15m early; 4h+1h up; class unclear
+09:36 Market state (3m): trend down: LH 17459.75 holds; displacement up 1 bar ago; overlap 0.83, efficiency 0.28, 15m early; 4h+1h up; class unclear
+09:39 Market state (3m): trend down: LH 17459.75 holds; displacement up 2 bars ago, potential failed opening drive; overlap 0.8, efficiency 0.2, 15m early; 4h+1h up; class unclear
+09:42 Market state (3m): in the down leg: LH 17459.75 holds; displacement up this bar; overlap 0.61, efficiency 0.08, 15m early; 4h+1h up; class unclear
+09:45 Market state (3m): in the down leg: LH 17459.75 holds; displacement up 1 bar ago; overlap 0.53, efficiency 0.01, 15m early; 4h+1h up; class unclear
+09:48 Market state (3m): in the down leg: LH 17459.75 holds; displacement up 2 bars ago; overlap 0.61, efficiency 0.02, 15m early; 4h+1h up; class unclear
+09:51 Market state (3m): range: no leg holds, LH 17459.75 broken this bar, edges 17409.75-17467 (travel edge to edge); overlap 0.58, efficiency 0.06, 15m early; 4h+1h up; class trend-up
+09:54 Market state (3m): weakening down: LH 17459.75 holds; displacement up 1 bar ago through the LH, closed back; behavior rotating (overlap 0.62, efficiency 0.01), 15m early; 4h+1h up; class unclear
+09:57 Market state (3m): weakening down: LH 17459.75 holds; displacement up 2 bars ago through the LH, closed back; behavior trending (overlap 0.57, efficiency 0.07), 15m overlapping; 4h up, 1h range (not aligned); class unclear
+10:00 Market state (3m): in the down leg: LH 17459.75 holds, through the LH, closed back; no new low for 30 min; overlap 0.53, efficiency 0.1, 15m overlapping; 4h up, 1h range (not aligned); class unclear
+10:03 Market state (3m): in the down leg: LH 17459.75 holds, through the LH, closed back; no new low for 33 min; overlap 0.52, efficiency 0.02, 15m overlapping; 4h up, 1h range (not aligned); class unclear
+10:06 Market state (3m): in the down leg: LH 17459.75 holds, through the LH, closed back; no new low for 36 min; overlap 0.5, efficiency 0.03, 15m overlapping; 4h up, 1h range (not aligned); class unclear
+10:09 Market state (3m): in the down leg: LH 17459.75 holds, through the LH, closed back; no new low for 39 min; overlap 0.55, efficiency 0.05, 15m overlapping; 4h up, 1h range (not aligned); class unclear
+10:12 Market state (3m): in the down leg: LH 17459.75 holds, through the LH, closed back; no new low for 42 min; overlap 0.63, efficiency 0.14, 15m trending down; 4h up, 1h range (not aligned); class unclear
+10:15 Market state (3m): in the down leg: LH 17459.75 holds, through the LH, closed back; no new low for 45 min; overlap 0.59, efficiency 0.18, 15m trending down; 4h up, 1h range (not aligned); class unclear
+10:18 Market state (3m): in the down leg: LH 17459.75 holds, through the LH, closed back; no new low for 48 min; overlap 0.64, efficiency 0.21, 15m trending down; 4h up, 1h range (not aligned); class unclear
+10:21 Market state (3m): in the down leg: LH 17459.75 holds, through the LH, closed back; no new low for 51 min; overlap 0.58, efficiency 0.33, 15m trending down; 4h up, 1h range (not aligned); class unclear
+10:24 Market state (3m): trend down: LH 17439 holds, CHoCH down this bar; overlap 0.62, efficiency 0.26, 15m trending down; 4h up, 1h range (not aligned); class unclear
+10:27 Market state (3m): trend down: LH 17439 holds, CHoCH down 3 min ago; overlap 0.66, efficiency 0.25, 15m trending down; 4h up, 1h range (not aligned); class unclear
+10:30 Market state (3m): trend down: LH 17439 holds, CHoCH down 6 min ago; overlap 0.69, efficiency 0.17, 15m trending down; 4h up, 1h range (not aligned); class unclear
+10:33 Market state (3m): in the down leg: LH 17439 holds, CHoCH down 9 min ago; overlap 0.7, efficiency 0.08, 15m trending down; 4h up, 1h range (not aligned); class unclear
+10:36 Market state (3m): trend down: LH 17439 holds, CHoCH down 12 min ago; overlap 0.75, efficiency 0.15, 15m trending down; 4h up, 1h range (not aligned); class unclear
+10:39 Market state (3m): trend down: LH 17439 holds, CHoCH down 15 min ago; overlap 0.73, efficiency 0.12, 15m trending down; 4h up, 1h range (not aligned); class unclear
+10:42 Market state (3m): trend down: LH 17439 holds, CHoCH down 18 min ago; overlap 0.69, efficiency 0.15, 15m trending down; 4h up, 1h range (not aligned); class unclear
+10:45 Market state (3m): trend down: LH 17439 holds, CHoCH down 21 min ago; overlap 0.7, efficiency 0.13, 15m trending down; 4h up, 1h range (not aligned); class unclear
+10:48 Market state (3m): in the down leg: LH 17439 holds, CHoCH down 24 min ago; overlap 0.69, efficiency 0.09, 15m trending down; 4h up, 1h range (not aligned); class unclear
+10:51 Market state (3m): in the down leg: LH 17439 holds, CHoCH down 27 min ago; overlap 0.69, efficiency 0.03, 15m trending down; 4h up, 1h range (not aligned); class unclear
+10:54 Market state (3m): in the down leg: LH 17439 holds, CHoCH down 30 min ago; overlap 0.71, efficiency 0.05, 15m trending down; 4h up, 1h range (not aligned); class unclear
+10:57 Market state (3m): in the down leg: LH 17439 holds, CHoCH down 33 min ago; overlap 0.68, efficiency 0.01, 15m trending down; 4h up, 1h range (not aligned); class unclear
+11:00 Market state (3m): in the down leg: LH 17439 holds, CHoCH down 36 min ago; overlap 0.68, efficiency 0.04, 15m trending down; 4h up, 1h range (not aligned); class unclear
+11:03 Market state (3m): in the down leg: LH 17439 holds, CHoCH down 39 min ago; overlap 0.63, efficiency 0.04, 15m trending down; 4h up, 1h range (not aligned); class unclear
+11:06 Market state (3m): in the down leg: LH 17439 holds, internal high 17417.75 broken; overlap 0.56, efficiency 0.12, 15m trending down; 4h up, 1h range (not aligned); class unclear
+11:09 Market state (3m): in the down leg: LH 17439 holds, internal high 17417.75 broken; overlap 0.58, efficiency 0, 15m trending down; 4h up, 1h range (not aligned); class unclear
+11:12 Market state (3m): in the down leg: LH 17439 holds, internal high 17417.75 broken; no new low for 30 min; overlap 0.57, efficiency 0.06, 15m overlapping; 4h up, 1h range (not aligned); class unclear
+11:15 Market state (3m): in the down leg: LH 17439 holds, internal high 17417.75 broken; no new low for 33 min; overlap 0.63, efficiency 0.04, 15m overlapping; 4h up, 1h range (not aligned); class unclear
+11:18 Market state (3m): in the down leg: LH 17439 holds, internal high 17417.75 broken; no new low for 36 min; overlap 0.66, efficiency 0.08, 15m overlapping; 4h up, 1h range (not aligned); class unclear
+11:21 Market state (3m): in the down leg: LH 17439 holds, internal high 17417.75 broken; no new low for 39 min; overlap 0.64, efficiency 0.01, 15m overlapping; 4h up, 1h range (not aligned); class unclear
+11:24 Market state (3m): in the down leg: LH 17439 holds, internal high 17417.75 broken; no new low for 42 min; overlap 0.63, efficiency 0.01, 15m overlapping; 4h up, 1h range (not aligned); class unclear
+11:27 Market state (3m): in the down leg: LH 17421 holds, CHoCH down this bar (displaced); overlap 0.57, efficiency 0.09, 15m overlapping; 4h up, 1h range (not aligned); class unclear
+11:30 Market state (3m): trend down: LH 17421 holds, CHoCH down 3 min ago (displaced); overlap 0.59, efficiency 0.2, 15m overlapping; 4h up, 1h range (not aligned); class unclear
+11:33 Market state (3m): trend down: LH 17421 holds, CHoCH down 6 min ago (displaced); overlap 0.62, efficiency 0.33, 15m overlapping; 4h up, 1h range (not aligned); class unclear
+11:36 Market state (3m): trend down: LH 17421 holds, CHoCH down 9 min ago (displaced); overlap 0.63, efficiency 0.41, 15m overlapping; 4h up, 1h range (not aligned); class unclear
+11:39 Market state (3m): trend down: LH 17421 holds, CHoCH down 12 min ago (displaced); displacement up this bar; overlap 0.59, efficiency 0.21, 15m overlapping; 4h up, 1h range (not aligned); class unclear
+11:42 Market state (3m): trend down: LH 17421 holds, CHoCH down 15 min ago (displaced); displacement up 1 bar ago; overlap 0.52, efficiency 0.15, 15m rotating; 4h up, 1h range (not aligned); class unclear
+11:45 Market state (3m): trend down: LH 17421 holds, CHoCH down 18 min ago (displaced); displacement up 2 bars ago; overlap 0.49, efficiency 0.2, 15m rotating; 4h up, 1h range (not aligned); class unclear
+11:48 Market state (3m): in the down leg: LH 17421 holds, CHoCH down 21 min ago (displaced); displacement up 3 bars ago; overlap 0.45, efficiency 0.1, 15m rotating; 4h up, 1h range (not aligned); class unclear
+11:51 Market state (3m): trend down: LH 17421 holds, CHoCH down 24 min ago (displaced); displacement up 4 bars ago; overlap 0.44, efficiency 0.21, 15m rotating; 4h up, 1h range (not aligned); class unclear
+11:54 Market state (3m): in the down leg: LH 17421 holds, CHoCH down 27 min ago (displaced); displacement up this bar; overlap 0.5, efficiency 0.05, 15m rotating; 4h up, 1h range (not aligned); class unclear
+11:57 Market state (3m): in the down leg: LH 17421 holds, CHoCH down 30 min ago (displaced); displacement up 1 bar ago; overlap 0.51, efficiency 0.06, 15m rotating; 4h up, 1h range (not aligned); class unclear
+== 2022-08-11
+09:30 Market state (3m): pullback (long leg 16728.5 -> 16834.5, depth 9%): 3m up leg, HL 16802.25 holds; 15m early; 4h+1h up; class trend-up
+09:33 Market state (3m): pullback (long leg 16728.5 -> 16834.5, depth 40%): 3m down leg, HL 16802.25 broken by a displaced close this bar, the new leg unconfirmed; overlap 0.42, efficiency 0.32, 15m early; 4h+1h up; class trend-up
+09:36 Market state (3m): rotation: pullback (long leg 16728.5 -> 16834.5, depth 29%), 13 bars, 2 midpoint crosses, the up leg weakening; behavior failing (overlap 0.71, efficiency 0.11), 15m early; 4h+1h up; class unclear
+09:39 Market state (3m): rotation: pullback (long leg 16728.5 -> 16834.5, depth 19%), 14 bars, 3 midpoint crosses, the up leg weakening; behavior failing (overlap 0.61, efficiency 0), 15m early; 4h+1h up; class unclear
+09:42 Market state (3m): range: no leg holds, edges 16779.75-16837.25 (travel edge to edge); overlap 0.6, efficiency 0.05, 15m early; 4h+1h up; class trend-up
+09:45 Market state (3m): range: no leg holds, edges 16779.75-16837.25 (travel edge to edge); overlap 0.61, efficiency 0.04, 15m early; 4h+1h up; class trend-up
+09:48 Market state (3m): range: no leg holds, edges 16779.75-16837.25 (travel edge to edge); overlap 0.63, efficiency 0.02, 15m early; 4h+1h up; class trend-up
+09:51 Market state (3m): range: no leg holds, edges 16779.75-16837.25 (travel edge to edge); overlap 0.68, efficiency 0.02, 15m early; 4h+1h up; class trend-up
+09:54 Market state (3m): range: no leg holds, edges 16779.75-16837.25 (travel edge to edge); overlap 0.68, efficiency 0.01, 15m early; 4h+1h up; class trend-up
+09:57 Market state (3m): chop: no leg holds (breaks both ways, a protected break, a failed break); overlap 0.71, efficiency 0.02, failed continuation; 15m overlapping; Day so far rotational; 4h+1h up; class chop
+10:00 Market state (3m): in the up leg: HL 16790.25 holds, CHoCH up this bar (displaced); overlap 0.68, efficiency 0.06, 15m overlapping; 4h+1h up; class trend-up
+10:03 Market state (3m): trend up: HL 16790.25 holds, CHoCH up 3 min ago (displaced); overlap 0.6, efficiency 0.3, 15m overlapping; 4h+1h up; class trend-up
+10:06 Market state (3m): trend up: HL 16790.25 holds, CHoCH up 6 min ago (displaced); overlap 0.65, efficiency 0.21, 15m overlapping; 4h+1h up; class trend-up
+10:09 Market state (3m): trend up: HL 16790.25 holds, CHoCH up 9 min ago (displaced); overlap 0.68, efficiency 0.24, 15m overlapping; 4h+1h up; class trend-up
+10:12 Market state (3m): trend up: HL 16790.25 holds, CHoCH up 12 min ago (displaced); overlap 0.65, efficiency 0.32, 15m trending up; 4h+1h up; class trend-up
+10:15 Market state (3m): trend up: HL 16790.25 holds, CHoCH up 15 min ago (displaced); overlap 0.62, efficiency 0.33, 15m trending up; 4h+1h up; class trend-up
+10:18 Market state (3m): trend up: HL 16790.25 holds, CHoCH up 18 min ago (displaced); overlap 0.57, efficiency 0.34, 15m trending up; 4h+1h up; class trend-up
+10:21 Market state (3m): trend up: HL 16790.25 holds, CHoCH up 21 min ago (displaced); displacement down this bar; overlap 0.53, efficiency 0.26, 15m trending up; 4h+1h up; class trend-up
+10:24 Market state (3m): trend up: HL 16790.25 holds, CHoCH up 24 min ago (displaced); displacement down 1 bar ago; overlap 0.43, efficiency 0.22, 15m trending up; 4h+1h up; class trend-up
+10:27 Market state (3m): trend up: HL 16790.25 holds, CHoCH up 27 min ago (displaced); displacement down 2 bars ago; overlap 0.47, efficiency 0.16, 15m trending up; 4h+1h up; class trend-up
+10:30 Market state (3m): trend up: HL 16790.25 holds, CHoCH up 30 min ago (displaced); displacement down 3 bars ago; overlap 0.52, efficiency 0.12, 15m trending up; 4h+1h up; class trend-up
+10:33 Market state (3m): in the up leg: HL 16790.25 holds, CHoCH up 33 min ago (displaced); displacement down 4 bars ago; overlap 0.51, efficiency 0, 15m trending up; 4h+1h up; class trend-up
+10:36 Market state (3m): in the up leg: HL 16790.25 holds, CHoCH up 36 min ago (displaced); displacement down 5 bars ago; overlap 0.5, efficiency 0.01, 15m trending up; 4h+1h up; class trend-up
+10:39 Market state (3m): weakening up: HL 16790.25 holds; displacement down this bar broke internal low 16847.25; behavior rotating (overlap 0.46, efficiency 0.25), 15m trending up; 4h+1h up; class unclear
+10:42 Market state (3m): weakening up: HL 16790.25 holds; displacement down 1 bar ago broke internal low 16847.25; behavior rotating (overlap 0.47, efficiency 0.28), 15m rotating; 4h+1h up; class unclear
+10:45 Market state (3m): weakening up: HL 16790.25 holds; displacement down 2 bars ago broke internal low 16847.25, no new high for 30 min; behavior failing (overlap 0.47, efficiency 0.43), 15m rotating; 4h+1h up; class unclear
+10:48 Market state (3m): weakening up: HL 16790.25 holds; displacement down 3 bars ago broke internal low 16847.25, no new high for 33 min; behavior failing (overlap 0.48, efficiency 0.39), 15m rotating; 4h+1h up; class unclear
+10:51 Market state (3m): weakening up: HL 16790.25 holds; displacement down 4 bars ago broke internal low 16847.25, no new high for 36 min; behavior failing (overlap 0.49, efficiency 0.28), 15m rotating; 4h+1h up; class unclear
+10:54 Market state (3m): weakening up: HL 16790.25 holds; displacement down 5 bars ago broke internal low 16847.25, no new high for 39 min; behavior failing (overlap 0.51, efficiency 0.25), 15m rotating; 4h+1h up; class unclear
+10:57 Market state (3m): in the up leg: HL 16790.25 holds, internal low 16847.25 broken; displacement down 4 bars ago, no new high for 42 min; overlap 0.53, efficiency 0.2, 15m rotating; 4h+1h up; class trend-up
+11:00 Market state (3m): in the up leg: HL 16790.25 holds, internal low 16847.25 broken; displacement down 5 bars ago, no new high for 45 min; overlap 0.51, efficiency 0.33, 15m rotating; 4h+1h up; class trend-up
+11:03 Market state (3m): trend down: LH 16819.25 holds, BOS down this bar (displaced), CHoCH then BOS, reversal confirmed; overlap 0.43, efficiency 0.46, 15m rotating; 15m up: a pullback in the 15m trend; 4h+1h up; class trend-up
+11:06 Market state (3m): trend down: LH 16819.25 holds, BOS down 3 min ago (displaced), CHoCH then BOS, reversal confirmed; overlap 0.43, efficiency 0.54, 15m rotating; 15m up: a pullback in the 15m trend; 4h+1h up; class trend-up
+11:09 Market state (3m): trend down: LH 16819.25 holds, BOS down 6 min ago (displaced), CHoCH then BOS, reversal confirmed; overlap 0.42, efficiency 0.45, 15m rotating; 15m up: a pullback in the 15m trend; 4h+1h up; class trend-up
+11:12 Market state (3m): trend down: LH 16819.25 holds, BOS down 9 min ago (displaced), CHoCH then BOS, reversal confirmed; overlap 0.45, efficiency 0.38, 15m trending down; 4h+1h up; class unclear
+11:15 Market state (3m): trend down: LH 16819.25 holds, BOS down 12 min ago (displaced), CHoCH then BOS, reversal confirmed; overlap 0.5, efficiency 0.32, 15m trending down; 4h+1h up; class unclear
+11:18 Market state (3m): trend down: LH 16756.75 holds, BOS down this bar, reversal confirmed; overlap 0.51, efficiency 0.39, 15m trending down; 4h+1h up; class unclear
+11:21 Market state (3m): trend down: LH 16756.75 holds, BOS down 3 min ago, reversal confirmed; overlap 0.54, efficiency 0.37, 15m trending down; 4h+1h up; class unclear
+11:24 Market state (3m): trend down: LH 16756.75 holds, BOS down 6 min ago, reversal confirmed; overlap 0.51, efficiency 0.37, 15m trending down; 4h+1h up; class unclear
+11:27 Market state (3m): trend down: LH 16756.75 holds, BOS down 9 min ago, reversal confirmed; displacement up this bar, the last BOS down failed; overlap 0.49, efficiency 0.27, 15m trending down; 4h+1h up; class unclear
+11:30 Market state (3m): trend down: LH 16756.75 holds, BOS down 12 min ago, reversal confirmed; displacement up 1 bar ago, the last BOS down failed; overlap 0.53, efficiency 0.17, 15m trending down; 4h+1h up; class unclear
+11:33 Market state (3m): weakening down: LH 16756.75 holds, reversal confirmed; displacement up this bar tested the LH (a tie), the last BOS down failed; behavior failing (overlap 0.6, efficiency 0.05), 15m trending down; 4h+1h up; class unclear
+11:36 Market state (3m): weakening down: LH 16756.75 holds, reversal confirmed; displacement up 1 bar ago tested the LH (a tie), the last BOS down failed; behavior failing (overlap 0.62, efficiency 0.02), 15m trending down; 4h+1h up; class unclear
+11:39 Market state (3m): weakening down: LH 16756.75 holds, reversal confirmed; displacement up 2 bars ago tested the LH (a tie), the last BOS down failed; behavior failing (overlap 0.64, efficiency 0.09), 15m trending down; 4h+1h up; class unclear
+11:42 Market state (3m): weakening down: LH 16756.75 holds, reversal confirmed; displacement up 3 bars ago tested the LH (a tie), the last BOS down failed; behavior failing (overlap 0.64, efficiency 0.02), 15m trending down; 4h+1h up; class unclear
+11:45 Market state (3m): in the down leg: LH 16756.75 holds, tested the LH (a tie), reversal confirmed; the last BOS down failed; overlap 0.63, efficiency 0.01, 15m trending down; 4h+1h up; class unclear
+11:48 Market state (3m): in the down leg: LH 16756.75 holds, tested the LH (a tie), reversal confirmed; the last BOS down failed; overlap 0.58, efficiency 0.07, 15m trending down; 4h+1h up; class unclear
+11:51 Market state (3m): in the down leg: LH 16756.75 holds, tested the LH (a tie), reversal confirmed; the last BOS down failed; overlap 0.57, efficiency 0.05, 15m trending down; 4h+1h up; class unclear
+11:54 Market state (3m): in the down leg: LH 16756.75 holds, tested the LH (a tie), reversal confirmed; the last BOS down failed; overlap 0.62, efficiency 0.01, 15m trending down; 4h+1h up; class unclear
+11:57 Market state (3m): trend down: LH 16756.75 holds, tested the LH (a tie), reversal confirmed; the last BOS down failed; overlap 0.64, efficiency 0.12, 15m trending down; 4h up, 1h range (not aligned); class unclear
+== 2023-09-21
+09:30 Market state (3m): forming (no RTH structure yet); 4h+1h down; class trend-down
+09:33 Market state (3m): forming (no RTH structure yet); 4h+1h down; class trend-down
+09:36 Market state (3m): forming (no RTH structure yet); 4h+1h down; class trend-down
+09:39 Market state (3m): forming (no RTH structure yet); 4h+1h down; class trend-down
+09:42 Market state (3m): forming (no RTH structure yet); 4h+1h down; class trend-down
+09:45 Market state (3m): forming (no RTH structure yet); 4h+1h down; class trend-down
+09:48 Market state (3m): forming (no RTH structure yet); 4h+1h down; class trend-down
+09:51 Market state (3m): trend down: LH 17649.25 holds; overlap 0.72, efficiency 0.19, 15m early; 4h+1h down; class trend-down
+09:54 Market state (3m): trend down: LH 17649.25 holds; overlap 0.7, efficiency 0.19, 15m early; 4h+1h down; class trend-down
+09:57 Market state (3m): trend down: LH 17649.25 holds; overlap 0.69, efficiency 0.19, 15m trending down; 4h+1h down; class trend-down
+10:00 Market state (3m): trend down: LH 17649.25 holds; overlap 0.65, efficiency 0.26, 15m trending down; 4h+1h down; class trend-down
+10:03 Market state (3m): trend down: LH 17649.25 holds; displacement up this bar; overlap 0.64, efficiency 0.26, 15m trending down; 4h+1h down; class trend-down
+10:06 Market state (3m): trend down: LH 17649.25 holds; displacement up this bar; overlap 0.56, efficiency 0.11, 15m trending down; 4h+1h down; class trend-down
+10:09 Market state (3m): trend down: LH 17649.25 holds; displacement up 1 bar ago; overlap 0.52, efficiency 0.17, 15m trending down; 4h+1h down; class trend-down
+10:12 Market state (3m): trend down: LH 17649.25 holds; displacement up 2 bars ago; overlap 0.47, efficiency 0.11, 15m trending down; 4h+1h down; class trend-down
+10:15 Market state (3m): in the down leg: LH 17649.25 holds; displacement up this bar; overlap 0.47, efficiency 0.01, 15m trending down; 4h+1h down; class trend-down
+10:18 Market state (3m): weakening down: LH 17649.25 holds; displacement up this bar broke internal high 17616; behavior rotating (overlap 0.42, efficiency 0.15), 15m trending down; 4h+1h down; class unclear
+10:21 Market state (3m): weakening down: LH 17649.25 holds; displacement up 1 bar ago broke internal high 17616; behavior rotating (overlap 0.45, efficiency 0.15), 15m trending down; 4h+1h down; class unclear
+10:24 Market state (3m): weakening down: LH 17649.25 holds; displacement up 2 bars ago broke internal high 17616; behavior rotating (overlap 0.42, efficiency 0.11), 15m trending down; 4h+1h down; class unclear
+10:27 Market state (3m): weakening down: LH 17649.25 holds; displacement up 3 bars ago broke internal high 17616; behavior rotating (overlap 0.47, efficiency 0.13), 15m rotating; 4h+1h down; class unclear
+10:30 Market state (3m): weakening down: LH 17649.25 holds; displacement up 4 bars ago broke internal high 17616, no new low for 30 min; behavior failing (overlap 0.46, efficiency 0.13), 15m rotating; 4h+1h down; class unclear
+10:33 Market state (3m): in the down leg: LH 17649.25 holds, internal high 17616 broken; no new low for 33 min; overlap 0.56, efficiency 0.12, 15m rotating; 4h+1h down; class trend-down
+10:36 Market state (3m): weakening down: LH 17649.25 holds; displacement up this bar broke internal high 17633, no new low for 36 min; behavior failing (overlap 0.53, efficiency 0.17), 15m rotating; 4h+1h down; class unclear
+10:39 Market state (3m): weakening down: LH 17649.25 holds; displacement up 1 bar ago broke internal high 17633, no new low for 39 min; behavior failing (overlap 0.59, efficiency 0.17), 15m rotating; 4h+1h down; class unclear
+10:42 Market state (3m): weakening down: LH 17649.25 holds; displacement up 2 bars ago broke internal high 17633, no new low for 42 min; behavior failing (overlap 0.6, efficiency 0.15), 15m overlapping; 4h+1h down; class unclear
+10:45 Market state (3m): weakening down: LH 17649.25 holds; displacement up 3 bars ago broke internal high 17633, no new low for 45 min; behavior failing (overlap 0.65, efficiency 0.02), 15m overlapping; 4h+1h down; class unclear
+10:48 Market state (3m): weakening down: LH 17649.25 holds; displacement up 4 bars ago broke internal high 17633, no new low for 48 min; behavior failing (overlap 0.59, efficiency 0.06), 15m overlapping; 4h+1h down; class unclear
+10:51 Market state (3m): weakening down: LH 17649.25 holds; displacement up 5 bars ago broke internal high 17633, no new low for 51 min; behavior failing (overlap 0.63, efficiency 0.05), 15m overlapping; 4h+1h down; class unclear
+10:54 Market state (3m): in the down leg: LH 17649.25 holds, internal high 17633 broken; no new low for 54 min; overlap 0.59, efficiency 0.12, 15m overlapping; 4h+1h down; class trend-down
+10:57 Market state (3m): in the down leg: LH 17649.25 holds, internal high 17633 broken; no new low for 57 min; overlap 0.56, efficiency 0.02, 15m overlapping; 4h+1h down; class trend-down
+11:00 Market state (3m): rotation down: LH 17649.25 holds, no new low for 60 min; behavior failing (overlap 0.56, efficiency 0.01), 15m overlapping; 4h+1h down; class unclear
+11:03 Market state (3m): rotation down: LH 17649.25 holds, no new low for 63 min; behavior failing (overlap 0.61, efficiency 0.02), 15m overlapping; 4h+1h down; class unclear
+11:06 Market state (3m): rotation down: LH 17649.25 holds, no new low for 66 min; behavior failing (overlap 0.62, efficiency 0.15), 15m overlapping; 4h+1h down; class unclear
+11:09 Market state (3m): rotation down: LH 17649.25 holds, no new low for 69 min; behavior failing (overlap 0.66, efficiency 0.17), 15m overlapping; 4h+1h down; class unclear
+11:12 Market state (3m): rotation down: LH 17649.25 holds, no new low for 72 min; behavior failing (overlap 0.65, efficiency 0.14), 15m overlapping; 4h+1h down; class unclear
+11:15 Market state (3m): rotation down: LH 17616 holds, no new low for 75 min; behavior failing (overlap 0.69, efficiency 0.16), 15m overlapping; 4h+1h down; class unclear
+11:18 Market state (3m): rotation down: LH 17616 holds, no new low for 78 min; behavior failing (overlap 0.7, efficiency 0.06), 15m overlapping; 4h+1h down; class unclear
+11:21 Market state (3m): rotation down: LH 17616 holds, no new low for 81 min; behavior failing (overlap 0.74, efficiency 0.17), 15m overlapping; 4h+1h down; class unclear
+11:24 Market state (3m): rotation down: LH 17597.25 holds, no new low for 84 min; behavior failing (overlap 0.71, efficiency 0.22), 15m overlapping; 4h+1h down; class unclear
+11:27 Market state (3m): rotation down: LH 17597.25 holds, no new low for 87 min; behavior failing (overlap 0.67, efficiency 0.11), 15m overlapping; 4h+1h down; class unclear
+11:30 Market state (3m): rotation down: LH 17597.25 holds, no new low for 90 min; behavior failing (overlap 0.66, efficiency 0.08), 15m overlapping; 4h+1h down; class unclear
+11:33 Market state (3m): rotation down: LH 17597.25 holds, no new low for 93 min; behavior failing (overlap 0.62, efficiency 0.06), 15m overlapping; 4h+1h down; class unclear
+11:36 Market state (3m): rotation down: LH 17597.25 holds, no new low for 96 min; behavior failing (overlap 0.62, efficiency 0.11), 15m overlapping; 4h+1h down; class unclear
+11:39 Market state (3m): rotation down: LH 17597.25 holds, no new low for 99 min; behavior failing (overlap 0.68, efficiency 0.13), 15m overlapping; 4h+1h down; class unclear
+11:42 Market state (3m): rotation down: LH 17597.25 holds, no new low for 102 min; behavior failing (overlap 0.68, efficiency 0.03), 15m overlapping; 4h+1h down; class unclear
+11:45 Market state (3m): rotation down: LH 17597.25 holds, no new low for 105 min; behavior failing (overlap 0.61, efficiency 0.1), 15m overlapping; 4h+1h down; class unclear
+11:48 Market state (3m): rotation down: LH 17597.25 holds, no new low for 108 min; behavior failing (overlap 0.61, efficiency 0.05), 15m overlapping; 4h+1h down; class unclear
+11:51 Market state (3m): rotation down: LH 17597.25 holds, no new low for 111 min; behavior failing (overlap 0.63, efficiency 0.02), 15m overlapping; 4h+1h down; class unclear
+11:54 Market state (3m): rotation down: LH 17597.25 holds, no new low for 114 min; behavior failing (overlap 0.65, efficiency 0.09), 15m overlapping; 4h+1h down; class unclear
+11:57 Market state (3m): rotation down: LH 17602.5 holds, no new low for 117 min; behavior failing (overlap 0.68, efficiency 0.02), 15m overlapping; 4h+1h down; class unclear
+== 2023-09-25
+09:30 Market state (3m): transition down: HL 17441 broken by a displaced close this bar, the new leg unconfirmed; behavior early, 15m early; 4h+1h down; class trend-down
+09:33 Market state (3m): transition down: HL 17441 broken by a displaced close 3 min ago, the new leg unconfirmed; behavior early (overlap 0.86, efficiency 0.16), 15m early; 4h+1h down; class trend-down
+09:36 Market state (3m): range: no leg holds, edges 17411.5-17467.25 (travel edge to edge); overlap 0.65, efficiency 0, 15m early; 4h+1h down; class trend-down
+09:39 Market state (3m): range: no leg holds, edges 17411.5-17489.5 (travel edge to edge); overlap 0.58, efficiency 0.19, 15m early; 4h+1h down; class trend-down
+09:42 Market state (3m): range: no leg holds, edges 17411.5-17496.5 (travel edge to edge); overlap 0.61, efficiency 0.16, 15m early; 4h+1h down; class trend-down
+09:45 Market state (3m): range: no leg holds, edges 17411.5-17507 (travel edge to edge); overlap 0.63, efficiency 0.18, 15m early; 4h+1h down; class trend-down
+09:48 Market state (3m): range: no leg holds, edges 17411.5-17507 (travel edge to edge); overlap 0.69, efficiency 0.19, 15m early; 4h+1h down; class trend-down
+09:51 Market state (3m): range: no leg holds, edges 17411.5-17508 (travel edge to edge); overlap 0.72, efficiency 0.14, 15m early; 4h+1h down; class trend-down
+09:54 Market state (3m): range: no leg holds, edges 17411.5-17522 (travel edge to edge); overlap 0.71, efficiency 0.22, 15m early; 4h+1h down; class trend-down
+09:57 Market state (3m): chop: no leg holds (a protected break, a failed break); overlap 0.73, efficiency 0.16, failed continuation; 15m trending up; 4h+1h down; class chop
+10:00 Market state (3m): chop: no leg holds (a protected break, a failed break); efficiency 0.21, failed continuation; 15m trending up; Day so far rotational; 4h+1h down; class chop
+10:03 Market state (3m): chop: no leg holds (a protected break, a failed break); overlap 0.72, efficiency 0.19, failed continuation; 15m trending up; 4h+1h down; class chop
+10:06 Market state (3m): chop: no leg holds (a protected break, a failed break); overlap 0.72, efficiency 0.07, failed continuation; 15m trending up; Day so far rotational; 4h+1h down; class chop
+10:09 Market state (3m): chop: no leg holds (a protected break, a failed break); overlap 0.75, efficiency 0.03, failed continuation; 15m trending up; Day so far rotational; 4h+1h down; class chop
+10:12 Market state (3m): chop: no leg holds (a protected break, a failed break); overlap 0.75, efficiency 0.03, failed continuation; 15m trending up; Day so far rotational; 4h+1h down; class chop
+10:15 Market state (3m): chop: no leg holds (a protected break, a failed break); overlap 0.71, efficiency 0.01, failed continuation; 15m trending up; 4h+1h down; class chop
+10:18 Market state (3m): chop: no leg holds (a protected break, a failed break); efficiency 0.07, failed continuation; 15m trending up; Day so far rotational; 4h+1h down; class chop
+10:21 Market state (3m): chop: no leg holds (a protected break, a failed break); efficiency 0.07, failed continuation; 15m trending up; Day so far rotational; 4h+1h down; class chop
+10:24 Market state (3m): range: no leg holds, edges 17411.5-17525.5 (fails mid-range); overlap 0.62, efficiency 0.28, 15m trending up; 4h+1h down; class trend-down
+10:27 Market state (3m): range: no leg holds, edges 17411.5-17525.5 (fails mid-range); overlap 0.67, efficiency 0.19, 15m rotating; 4h+1h down; class trend-down
+10:30 Market state (3m): range: no leg holds, edges 17411.5-17525.5 (fails mid-range); overlap 0.68, efficiency 0.08, 15m rotating; 4h+1h down; class trend-down
+10:33 Market state (3m): range: no leg holds, edges 17432.5-17525.5 (fails mid-range); overlap 0.66, efficiency 0.08, 15m rotating; 4h+1h down; class trend-down
+10:36 Market state (3m): range: no leg holds, edges 17444.25-17525.5 (fails mid-range); overlap 0.66, efficiency 0.03, 15m rotating; 4h+1h down; class trend-down
+10:39 Market state (3m): range: no leg holds, edges 17444.25-17525.5 (fails mid-range); overlap 0.68, efficiency 0.06, 15m rotating; 4h+1h down; class trend-down
+10:42 Market state (3m): chop: no leg holds (a failed break); overlap 0.7, efficiency 0.08, failed continuation; 15m overlapping; Day so far rotational, RTH VWAP crosses 6; 4h+1h down; class chop
+10:45 Market state (3m): chop: no leg holds (a failed break); efficiency 0.03, failed continuation; 15m overlapping; Day so far rotational, RTH VWAP crosses 7; 4h+1h down; class chop
+10:48 Market state (3m): chop: no leg holds (a failed break); overlap 0.71, efficiency 0.06, failed continuation; 15m overlapping; Day so far rotational, RTH VWAP crosses 8; 4h+1h down; class chop
+10:51 Market state (3m): chop: no leg holds (a failed break); overlap 0.7, efficiency 0.04, failed continuation; 15m overlapping; Day so far rotational, RTH VWAP crosses 8; 4h+1h down; class chop
+10:54 Market state (3m): chop: no leg holds (a failed break); efficiency 0.06, failed continuation; 15m overlapping; Day so far rotational, RTH VWAP crosses 8; 4h+1h down; class chop
+10:57 Market state (3m): chop: no leg holds (a failed break); efficiency 0.05, failed continuation; 15m trending down; Day so far rotational, RTH VWAP crosses 8; 4h+1h down; class chop
+11:00 Market state (3m): chop: no leg holds (a failed break); overlap 0.74, efficiency 0.07, failed continuation; 15m trending down; Day so far rotational, RTH VWAP crosses 8; 4h+1h down; class chop
+11:03 Market state (3m): chop: no leg holds (a failed break); efficiency 0.05, failed continuation; 15m trending down; Day so far rotational, RTH VWAP crosses 8; 4h+1h down; class chop
+11:06 Market state (3m): chop: no leg holds (a failed break); efficiency 0.06, failed continuation; 15m trending down; Day so far rotational, RTH VWAP crosses 9; 4h+1h down; class chop
+11:09 Market state (3m): rotation up: HL 17446 holds, no new high for 75 min; behavior failing (overlap 0.56, efficiency 0.15), 15m trending down; 4h+1h down; class unclear
+11:12 Market state (3m): rotation up: HL 17446 holds, no new high for 78 min; behavior failing (overlap 0.59, efficiency 0.19), 15m overlapping; 4h+1h down; class unclear
+11:15 Market state (3m): trend up: HL 17446 holds, CHoCH up 6 min ago (displaced); overlap 0.52, efficiency 0.23, 15m overlapping; 4h+1h down; class unclear
+11:18 Market state (3m): trend up: HL 17446 holds, CHoCH up 9 min ago (displaced); overlap 0.56, efficiency 0.33, 15m overlapping; 4h+1h down; class unclear
+11:21 Market state (3m): trend up: HL 17446 holds, CHoCH up 12 min ago (displaced); overlap 0.6, efficiency 0.39, 15m overlapping; 4h+1h down; class unclear
+11:24 Market state (3m): trend up: HL 17446 holds, CHoCH up 15 min ago (displaced); overlap 0.59, efficiency 0.43, 15m overlapping; 4h+1h down; class unclear
+11:27 Market state (3m): trend up: HL 17446 holds, CHoCH up 18 min ago (displaced); displacement down this bar; overlap 0.54, efficiency 0.41, 15m trending up; 4h+1h down; class unclear
+11:30 Market state (3m): trend up: HL 17446 holds, CHoCH up 21 min ago (displaced); displacement down 1 bar ago; overlap 0.58, efficiency 0.38, 15m trending up; 4h+1h down; class unclear
+11:33 Market state (3m): trend up: HL 17446 holds, CHoCH up 24 min ago (displaced); displacement down 2 bars ago; overlap 0.63, efficiency 0.36, 15m trending up; 4h+1h down; class unclear
+11:36 Market state (3m): trend up: HL 17446 holds, CHoCH up 27 min ago (displaced); displacement down 3 bars ago; overlap 0.71, efficiency 0.29, 15m trending up; 4h+1h down; class unclear
+11:39 Market state (3m): trend up: HL 17446 holds, CHoCH up 30 min ago (displaced); displacement down 4 bars ago; overlap 0.68, efficiency 0.16, 15m trending up; 4h+1h down; class unclear
+11:42 Market state (3m): trend up: HL 17446 holds, CHoCH up 33 min ago (displaced); displacement down 5 bars ago; overlap 0.67, efficiency 0.21, 15m trending up; 4h+1h down; class unclear
+11:45 Market state (3m): in the up leg: HL 17446 holds, CHoCH up 36 min ago (displaced); overlap 0.69, efficiency 0.02, 15m trending up; 4h+1h down; class unclear
+11:48 Market state (3m): in the up leg: HL 17446 holds, CHoCH up 39 min ago (displaced); overlap 0.68, efficiency 0.05, 15m trending up; 4h+1h down; class unclear
+11:51 Market state (3m): in the up leg: HL 17446 holds, CHoCH up 42 min ago (displaced); overlap 0.72, efficiency 0.03, 15m trending up; 4h+1h down; class unclear
+11:54 Market state (3m): in the up leg: HL 17446 holds, CHoCH up 45 min ago (displaced); overlap 0.74, efficiency 0.08, 15m trending up; 4h+1h down; class unclear
+11:57 Market state (3m): in the up leg: HL 17446 holds, CHoCH up 48 min ago (displaced); overlap 0.68, efficiency 0.02, 15m trending up; 4h down, 1h range (not aligned); class unclear
+== 2023-12-11
+09:30 Market state (3m): forming (no RTH structure yet); 4h+1h up; class trend-up
+09:33 Market state (3m): forming (no RTH structure yet); 4h+1h up; class trend-up
+09:36 Market state (3m): trend up: HL 18708 holds; overlap 0.63, efficiency 0.44, 15m early; 4h+1h up; class trend-up
+09:39 Market state (3m): trend up: HL 18708 holds; overlap 0.61, efficiency 0.39, 15m early; 4h+1h up; class trend-up
+09:42 Market state (3m): trend up: HL 18708 holds; overlap 0.7, efficiency 0.3, 15m early; 4h+1h up; class trend-up
+09:45 Market state (3m): trend up: HL 18708 holds; overlap 0.66, efficiency 0.38, 15m early; 4h+1h up; class trend-up
+09:48 Market state (3m): trend up: HL 18708 holds; displacement down this bar; overlap 0.71, efficiency 0.29, 15m early; 4h+1h up; class trend-up
+09:51 Market state (3m): trend up: HL 18708 holds; displacement down 1 bar ago; overlap 0.72, efficiency 0.32, 15m early; 4h+1h up; class trend-up
+09:54 Market state (3m): trend up: HL 18708 holds; displacement down this bar; overlap 0.74, efficiency 0.21, 15m early; 4h+1h up; class trend-up
+09:57 Market state (3m): trend up: HL 18708 holds; displacement down 1 bar ago; overlap 0.74, efficiency 0.25, 15m trending up; 4h+1h up; class trend-up
+10:00 Market state (3m): trend up: HL 18708 holds; displacement down 2 bars ago, potential failed opening drive; overlap 0.8, efficiency 0.22, 15m trending up; 4h+1h up; class trend-up
+10:03 Market state (3m): trend up: HL 18764.5 holds, BOS up this bar; displacement down 3 bars ago; overlap 0.78, efficiency 0.26, 15m trending up; 4h+1h up; class trend-up
+10:06 Market state (3m): trend up: HL 18764.5 holds, BOS up 3 min ago; displacement down 4 bars ago; overlap 0.8, efficiency 0.13, 15m trending up; 4h+1h up; class trend-up
+10:09 Market state (3m): trend up: HL 18764.5 holds, BOS up 6 min ago; displacement down 5 bars ago; overlap 0.77, efficiency 0.11, 15m trending up; 4h+1h up; class trend-up
+10:12 Market state (3m): trend up: HL 18764.5 holds, BOS up 9 min ago; overlap 0.81, efficiency 0.15, 15m trending up; 4h+1h up; class trend-up
+10:15 Market state (3m): in the up leg: HL 18764.5 holds, BOS up 12 min ago; displacement down this bar, potential failed opening drive; overlap 0.78, efficiency 0, 15m trending up; 4h+1h up; class trend-up
+10:18 Market state (3m): in the up leg: HL 18764.5 holds, BOS up 15 min ago; displacement down 1 bar ago, potential failed opening drive; overlap 0.76, efficiency 0.08, 15m trending up; 4h+1h up; class trend-up
+10:21 Market state (3m): in the up leg: HL 18764.5 holds, BOS up 18 min ago; displacement down 2 bars ago, potential failed opening drive; overlap 0.77, efficiency 0.01, 15m trending up; 4h+1h up; class trend-up
+10:24 Market state (3m): in the up leg: HL 18764.5 holds, BOS up 21 min ago; displacement down this bar, potential failed opening drive; overlap 0.78, efficiency 0.07, 15m trending up; 4h+1h up; class trend-up
+10:27 Market state (3m): weakening up: HL 18764.5 holds; displacement down this bar broke internal low 18788, potential failed opening drive; behavior overlapping (overlap 0.77, efficiency 0.08), 15m trending up; 4h+1h up; class unclear
+10:30 Market state (3m): weakening up: HL 18764.5 holds; displacement down 1 bar ago broke internal low 18788; behavior overlapping (overlap 0.74, efficiency 0.01), 15m trending up; 4h+1h up; class unclear
+10:33 Market state (3m): weakening up: HL 18764.5 holds; displacement down 2 bars ago broke internal low 18788; behavior rotating (overlap 0.67, efficiency 0.02), 15m trending up; 4h+1h up; class unclear
+10:36 Market state (3m): weakening up: HL 18764.5 holds; displacement down 3 bars ago broke internal low 18788, no new high for 30 min; behavior failing (overlap 0.67, efficiency 0.09), 15m trending up; 4h+1h up; class unclear
+10:39 Market state (3m): weakening up: HL 18764.5 holds; displacement down 4 bars ago broke internal low 18788, no new high for 33 min; behavior failing (overlap 0.65, efficiency 0.12), 15m trending up; 4h+1h up; class unclear
+10:42 Market state (3m): pullback (long leg 18708 -> 18814, depth 15%): 3m up leg, HL 18764.5 holds; overlap 0.66, efficiency 0.06, 15m trending up; 4h+1h up; class trend-up
+10:45 Market state (3m): trend up: HL 18783.75 holds, CHoCH up this bar (displaced); overlap 0.62, efficiency 0.14, 15m trending up; 4h+1h up; class trend-up
+10:48 Market state (3m): trend up: HL 18783.75 holds, CHoCH up 3 min ago (displaced); overlap 0.53, efficiency 0.19, 15m trending up; 4h+1h up; class trend-up
+10:51 Market state (3m): trend up: HL 18783.75 holds, CHoCH up 6 min ago (displaced); overlap 0.49, efficiency 0.18, 15m trending up; 4h+1h up; class trend-up
+10:54 Market state (3m): trend up: HL 18783.75 holds, CHoCH up 9 min ago (displaced); overlap 0.5, efficiency 0.26, 15m trending up; 4h+1h up; class trend-up
+10:57 Market state (3m): trend up: HL 18783.75 holds, CHoCH up 12 min ago (displaced); displacement down this bar; overlap 0.48, efficiency 0.18, 15m rotating; 4h+1h up; class trend-up
+11:00 Market state (3m): trend up: HL 18783.75 holds, CHoCH up 15 min ago (displaced); displacement down 1 bar ago; overlap 0.54, efficiency 0.2, 15m rotating; 4h+1h up; class trend-up
+11:03 Market state (3m): in the up leg: HL 18783.75 holds, CHoCH up 18 min ago (displaced); displacement down this bar; overlap 0.53, efficiency 0.01, 15m rotating; 4h+1h up; class trend-up
+11:06 Market state (3m): in the up leg: HL 18783.75 holds, CHoCH up 21 min ago (displaced); displacement down 1 bar ago; overlap 0.51, efficiency 0.05, 15m rotating; 4h+1h up; class trend-up
+11:09 Market state (3m): in the up leg: HL 18783.75 holds, CHoCH up 24 min ago (displaced); displacement down 2 bars ago; overlap 0.47, efficiency 0.03, 15m rotating; 4h+1h up; class trend-up
+11:12 Market state (3m): transition down: HL 18783.75 broken by a displaced close this bar, the new leg unconfirmed; behavior rotating (overlap 0.52, efficiency 0.13), 15m trending down; 4h+1h up; class unclear
+11:15 Market state (3m): transition down: HL 18783.75 broken by a displaced close 3 min ago, the new leg unconfirmed; behavior rotating (overlap 0.61, efficiency 0.27), 15m trending down; 4h+1h up; class unclear
+11:18 Market state (3m): transition down: HL 18783.75 broken by a displaced close 6 min ago, the new leg unconfirmed; behavior mixed (overlap 0.67, efficiency 0.33), 15m trending down; 4h+1h up; class unclear
+11:21 Market state (3m): weakening up: HL 18783.75 holds; displacement down 3 bars ago through the HL, closed back, no new high for 33 min; behavior failing (overlap 0.65, efficiency 0.25), 15m trending down; 4h+1h up; class unclear
+11:24 Market state (3m): weakening up: HL 18783.75 holds; displacement down 4 bars ago through the HL, closed back, no new high for 36 min; behavior failing (overlap 0.64, efficiency 0.19), 15m trending down; 4h+1h up; class unclear
+11:27 Market state (3m): rotation: pullback (long leg 18708 -> 18839.25, depth 37%), 12 bars, 0 midpoint crosses, the up leg weakening; behavior failing (overlap 0.64, efficiency 0.14), 15m rotating; 4h+1h up; class unclear
+11:30 Market state (3m): pullback (long leg 18708 -> 18839.25, depth 44%): 3m down leg, HL 18783.75 broken by a close this bar, the new leg unconfirmed; overlap 0.62, efficiency 0.19, 15m rotating; 4h+1h up; class trend-up
+11:33 Market state (3m): pullback (long leg 18708 -> 18839.25, depth 58%): 3m down leg, LH 18801.25 holds; overlap 0.66, efficiency 0.21, 15m rotating; 4h+1h up; class trend-up
+11:36 Market state (3m): pullback (long leg 18708 -> 18839.25, depth 38%): 3m down leg, LH 18801.25 holds; overlap 0.69, efficiency 0.06, 15m rotating; 4h+1h up; class trend-up
+11:39 Market state (3m): pullback (long leg 18708 -> 18839.25, depth 46%): 3m down leg, LH 18801.25 holds; overlap 0.73, efficiency 0.06, 15m rotating; 4h+1h up; class trend-up
+11:42 Market state (3m): pullback (long leg 18708 -> 18839.25, depth 41%): 3m down leg, LH 18801.25 holds; overlap 0.73, efficiency 0.06, 15m overlapping; 4h+1h up; class trend-up
+11:45 Market state (3m): pullback (long leg 18708 -> 18839.25, depth 43%): 3m down leg, LH 18801.25 holds; overlap 0.73, efficiency 0.02, 15m overlapping; 4h+1h up; class trend-up
+11:48 Market state (3m): pullback (long leg 18708 -> 18839.25, depth 33%): 3m down leg, LH 18801.25 holds; overlap 0.7, efficiency 0.08, 15m overlapping; 4h+1h up; class trend-up
+11:51 Market state (3m): pullback (long leg 18708 -> 18839.25, depth 33%): 3m down leg, LH 18801.25 holds; overlap 0.77, efficiency 0.04, 15m overlapping; 4h+1h up; class trend-up
+11:54 Market state (3m): pullback (long leg 18708 -> 18839.25, depth 33%): 3m down leg, LH 18801.25 holds; overlap 0.78, efficiency 0.01, 15m overlapping; 4h+1h up; class trend-up
+11:57 Market state (3m): pullback (long leg 18708 -> 18839.25, depth 29%): 3m down leg, LH 18801.25 holds; overlap 0.79, efficiency 0.06, 15m overlapping; 4h+1h up; class trend-up

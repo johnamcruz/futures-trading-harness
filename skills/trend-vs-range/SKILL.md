@@ -1,6 +1,6 @@
 ---
 name: trend-vs-range
-description: Trader-process steps 1-2 - whether each timeframe trends, ranges or is in transition, and whether the trend has declared itself. A read, never a veto.
+description: Trader-process steps 1-2 - whether each timeframe trends, ranges, chops or is in transition, and whether the trend has declared itself. A read, never a veto.
 ---
 
 # Trend vs Range
@@ -35,16 +35,62 @@ belongs behind structure (a swing), not at an arbitrary distance (`invalidation`
 
 - trend: regime `trend-up`/`trend-down`, swings HH/HL (LH/LL), the breaks
   a sequence of BOS that way;
-- range: regime `range`, swings `mixed`, alternating breaks on that
-  timeframe (its last two opposite CHoCHs) or none; a 15m setup the HTF way
+- range (geometry): regime `range`, swings `mixed`, price rotating
+  between a support and a resistance it keeps; a 15m setup the HTF way
   inside an HTF trend is the pullback ending (`pullback-vs-reversal`), not
   a range;
 - transition: regime `transition`, or regime and structure disagree.
 
+Trending: consistent BOS, directional displacement, follow-through. Chop:
+alternating BOS/CHoCH, overlapping candles, failed continuation.
+
+**Chop** (owner's definition; quality, not geometry): price swings back
+and forth with no sustained control either way. The owner: "Use CHoCH as
+structural evidence and overlap, displacement, and failed continuation as
+behavioral evidence"; a CHoCH pair alone is not enough, and chop needs no
+pair. Before calling it chop, his checklist:
+
+- "Are the opposing CHoCHs breaking meaningful swing points?"
+- "Is price overlapping and moving sideways?"
+- "Has the existing trend failed to continue?"
+- "Is price repeatedly reversing rather than making directional progress?"
+- "If price continues making higher highs and higher lows, it may simply
+  be a bullish trend with internal structure changes."
+
+Behavioral evidence (owner): "Candle overlap. Lack of displacement.
+Repeated rejection from the same boundaries. Lack of meaningful higher
+highs or lower lows. Failure to make directional progress." The `chop:`
+line names which were met. The class word is the Market state line's
+(`trade-session`), never this definition's. One CHoCH warns. Structure
+broken both ways with no continuation is chop, not a run of reversals.
+Chop ends on displacement: a displaced 3m break or CISD, a displaced
+close beyond the IB, or a transition.
+
+**Chop is not range.** Chop needs no edges; a range can rotate cleanly.
+A range travels edge to edge with displacement and clean rejections at
+the edges; chop overlaps mid-range and fails before either edge. A range day inside the 4h + 1h side (the line prints
+`range`) is catchable: the turn at the edge the side's way, or the
+breakout with follow-through. The line prints `chop` → sit out, whatever
+the geometry.
+
+**The owner's classes** (the line's state words beside them):
+
+| Classification | Meaning | Response |
+|---|---|---|
+| Trend (`trend`, `in the up leg`) | directional structure and continuation healthy | trend setups allowed |
+| Weakening trend (`weakening`, `rotation`) | countertrend momentum increasing | reduce confidence; wait |
+| Transitioning (`transition`) | original direction failing, new not confirmed | avoid premature entries |
+| Chop (`chop`) | overlap and repeated failed continuation | avoid trend entries |
+| Reversal (`reversal confirmed`) | meaningful structural shift confirmed | evaluate the new direction |
+
+A reversal against the 4h + 1h side is never traded. Frames:
+transitional (old trend weakening, new one unconfirmed) is the frame
+`transition` in your STATE. The class word: the Market state line.
+
 The 3m read sits inside `h1.h4.trend`, `h1.h1.trend` (prop: both its
 way), `m15.frame.trend`;
 `m3.trendRule` wins where they differ. Indicators confirm structure, never
-override it. A 3m range inside a 15m trend is a pause. Side: `htf-to-ltf`.
+override it. Side: `htf-to-ltf`.
 
 **Declared yet?** (`Trend declared?` line; ATR, + your way; census
 hypotheses):
@@ -53,12 +99,13 @@ hypotheses):
   RTH VWAP +1 to +2.5, day's move +3 or more.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
   worse), regime `against`, inside the overnight range (back third worst):
-  wait for it, in the count; size is the verdict's. An unfinished
-  pullback is no chop sign.
+  wait for it, in the count; size is the verdict's.
 
 ## Examples
 
 ```text
+Chop: the line prints `chop: no leg holds (breaks both ways, a failed break)` -> sit out.
+  It prints `trend up: HL 21380.5 holds, BOS up 6 min ago (displaced)` -> trend-up.
 Take: 4h, 1h, 15m up; m3 trend-up (adx 24.10); overnight broke out its way. Read: trend.
   Reads: 1h up, 15m bos up. Priority order: aligned; the count for -> take.
 Skip: m3 transition (adx 19.20); CHoCH down, previous CHoCH up; 15m up. Read: transition.

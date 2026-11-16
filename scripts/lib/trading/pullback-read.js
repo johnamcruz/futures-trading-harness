@@ -34,7 +34,15 @@
  *     against        per frame (15m, 1h) its last structure break (structure-events.js lastBreaks) when it is against
  *                    the leg: { kind, direction, level, barsAgo }, else null
  *     stacked        both frames' last breaks against the leg
+ *     givenBackSince any base close since the extreme at or past the origin (isOpen reads it; the line never does)
+ *     maxDepth       the deepest share of the leg any close since the extreme gave back (the Market state's depth bound;
+ *                    the line prints the current depth)
  *   pullbackLine(p, { level })   the summary's one line (null when absent)
+ *   pullbackWord(p)              the line's few words (a record only)
+ *   givenBack(p)                 the leg given back past its origin: pastOrigin when a boolean, else depth >= 1
+ *   lineOpen(p)                  the printed line reads open: printed (pullbackLine) and not given back at this close
+ *   deadLeg(p)                   given back since the extreme, or the structure-frame swing broken by a close since it
+ *   isOpen(p)                    an open pullback (the Market state's read): lineOpen and not deadLeg
  */
 
 const { pivots, breaksOf, lastBreaks } = require('./structure-events');
@@ -112,6 +120,21 @@ function counterOf(cs, o, iBest) {
   return { bars: cs.length - 1 - iBest, volRatio, volume, rangeRatio: ratio(c => c.h - c.l) };
 }
 
+/** A close since the extreme cs[iBest] at or past the leg's origin (the depth test's raw >= 1, close by close). */
+function givenBackSinceOf(cs, iBest, origin, s) {
+  for (let i = iBest + 1; i < cs.length; i += 1) if (s * cs[i].c <= s * origin) return true;
+  return false;
+}
+
+/** The deepest share of the leg any close since the extreme cs[iBest] gave back (two decimals; the current depth at least). */
+function maxDepthOf(cs, iBest, imp) {
+  const span = imp.best - imp.origin; // signed: positive for a long leg, negative for a short one
+  if (!span) return imp.depth;
+  let worst = -Infinity;
+  for (let i = iBest + 1; i < cs.length; i += 1) worst = Math.max(worst, (imp.best - cs[i].c) / span);
+  return Number.isFinite(worst) ? r2(Math.max(worst, imp.raw === null ? -Infinity : imp.raw)) : imp.depth;
+}
+
 function pullbackRead({ bars, base, prevailing } = {}) {
   const m = /^(\S+) (up|down)$/.exec(String(prevailing || ''));
   if (!m) return null;
@@ -143,13 +166,20 @@ function pullbackRead({ bars, base, prevailing } = {}) {
   return {
     side: s > 0 ? 'long' : 'short', frame: tfH, prevailing: `${m[1]} ${way}`,
     leg: { origin: imp.origin, extreme: imp.best, at: cs[iBest].t, atr: atr > 0 ? r2((s * (imp.best - imp.origin)) / atr) : null },
-    // pastOrigin from the unrounded depth: 0.996 is a depth (shown 100%), never given back.
+    // pastOrigin from the unrounded depth: 0.996 is a depth (shown 100%), never given back. givenBackSince: any close
+    // since the extreme past the origin (the same test), so a leg once given back stays dead when price crosses back.
     depth: imp.depth, pastOrigin: imp.raw !== null && imp.raw >= 1, close: cs[cs.length - 1].c,
+    givenBackSince: givenBackSinceOf(cs, iBest, imp.origin, s),
+    // The deepest retrace any close since the extreme gave back (the Market state's depth bound reads it: sticky).
+    maxDepth: maxDepthOf(cs, iBest, imp),
     swing: { [tfH]: imp.back ? swingOf(imp.back, FRAME, cs, s, tBest) : null, [label(HOUR)]: swingOf(h1Swing, HOUR, cs, s, tBest) },
     counter: counterOf(cs, imp.o, iBest),
     against, stacked: Object.values(against).every(Boolean),
   };
 }
+
+/** A leg given back past its origin: the read's pastOrigin when a boolean, else (an older record) its depth >= 1. */
+const givenBack = p => (isObj(p) ? (typeof p.pastOrigin === 'boolean' ? p.pastOrigin : Number.isFinite(p.depth) && p.depth >= 1) : false);
 
 // The line says only what no other summary line does (the owner: no redundant bytes): the price, the clock and the
 // prevailing side are on their own lines, and that it is a read to weigh is said once, in the skills.
@@ -160,7 +190,7 @@ function pullbackLine(p, { level = x => x } = {}) {
   // No depth number on a leg too small to measure one against, nor once the leg is given back past its origin (the
   // skill's Depth row: past the impulse origin; an older record without pastOrigin: its depth); never another leg.
   const small = fin(p.leg.atr) && p.leg.atr < MIN_LEG_ATR;
-  const given = typeof p.pastOrigin === 'boolean' ? p.pastOrigin : fin(p.depth) && p.depth >= 1;
+  const given = givenBack(p);
   const depth = small ? `leg ${p.leg.atr}x ATR(14), under the ${MIN_LEG_ATR}x floor: no depth`
     : given ? 'the leg given back past its origin' : fin(p.depth) ? `depth ${Math.round(p.depth * 100)}% of the leg` : 'depth unknown';
   // Volume and range only when comparable, and not on a leg given back (its window is stale): no words then (the skill
@@ -185,9 +215,22 @@ function pullbackWord(p) {
   if (p === null) return 'none';
   if (!p || typeof p !== 'object' || !isObj(p.leg)) return null;
   const fin = Number.isFinite;
-  const given = typeof p.pastOrigin === 'boolean' ? p.pastOrigin : fin(p.depth) && p.depth >= 1;
+  const given = givenBack(p);
   const word = fin(p.leg.atr) && p.leg.atr < MIN_LEG_ATR ? 'small leg' : given ? 'leg given back' : fin(p.depth) ? `depth ${Math.round(p.depth * 100)}%` : 'depth unknown';
   return `${word}${p.stacked === true ? ', breaks against stacked' : ''}`;
 }
 
-module.exports = { impulseOf, swingOf, pullbackRead, pullbackLine, pullbackWord };
+/** The printed line reads open: printed (pullbackLine) and its leg not given back at this close (the recognition key's frozen C3). */
+const lineOpen = p => pullbackLine(p) !== null && !givenBack(p);
+
+/**
+ * The leg invalidated for good (round 15): a close since the extreme was past the origin (givenBackSince), or the
+ * leg-defining swing on the read's structure frame was broken by a close since the extreme (its `holds`, which counts
+ * every close since). Sticky within the leg; a new extreme or a new structure-frame break the side's way is a new leg.
+ */
+const deadLeg = p => isObj(p) && (p.givenBackSince === true || (isObj(p.swing) && isObj(p.swing[p.frame]) && p.swing[p.frame].holds === false));
+
+/** An open pullback (the Market state's read): the line reads open and the leg was never invalidated. */
+const isOpen = p => lineOpen(p) && !deadLeg(p);
+
+module.exports = { impulseOf, swingOf, pullbackRead, pullbackLine, pullbackWord, givenBack, lineOpen, deadLeg, isOpen };

@@ -30,15 +30,43 @@ A wick through a swing that closes back inside is a sweep, not a break
 (the `breakout-vs-fakeout` skill).
 
 - BOS: a close beyond the last swing in the trend's direction. In the
-  code, that is the previous break's direction (the first break too).
+  code, that is the previous break's direction (the first break too): a
+  continuation.
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
+  A potential reversal: CHoCH then BOS: confirmed.
+
+**Three layers** (owner): "1. Internal structure: Small swings inside the
+larger market structure. These can change without invalidating the main
+trend. 2. Protected structure: The meaningful swing level protecting the
+current directional trend. A break of this level carries greater
+structural significance. 3. Price behavior: Whether price is trending,
+overlapping, consolidating, or repeatedly failing to continue."
+
+- Internal: the 3m k=2 swings and their BOS/CHoCH. An internal CHoCH
+  against the leg while its protected level holds is pullback or
+  consolidation evidence, never a trend change.
+- Protected: the origin of the move that made the leg's last break its way
+  (the line's `HL` up, `LH` down); a close through it, past a tie, ends
+  the leg. Inside the leg, a CHoCH then a BOS the same way against it
+  confirms the transition too.
+- Each break has a protected swing: a BOS holds until the leg's higher
+  low (lower high) breaks; a CHoCH holds until the low (high) that started
+  the shift breaks. Only a close through it counts; a wick is not.
+- Behavior: `behavior` (rotation/weakening/transition), 15m words.
+- A BOS stays labelled BOS after its protected swing breaks; the Market
+  state line's status (`holds` or `broken by a close`) decides what it
+  means now: a broken protected swing ends that BOS's trend read.
+- Momentum (owner: "Displacement detects emerging pressure. Failed
+  continuation detects loss of directional control."): the line's
+  warnings (`displacement down 2 bars ago broke internal low ...`, `no
+  new high for 30 min`) never end the leg; only its level does.
 
 **Fields**: `m3.lastBreak.last` and `m3.lastBreak.previous`; the same
 under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
 a 5m lane's briefing has it in its `bar` part. Each: `kind` (`BOS` or
 `CHoCH`), `direction` (`up` or `down`), `level`, `barsAgo` (that
-timeframe's candles). The 4h has swings only (`h1.h4.swingPattern`).
+timeframe's candles); the 3m ones also `protected` (`level`, `brokenAt`). The 4h has swings only (`h1.h4.swingPattern`).
 
 **By timeframe.** No one timeframe is the signal; read them top-down.
 
@@ -47,6 +75,8 @@ timeframe's candles). The 4h has swings only (`h1.h4.swingPattern`).
 | 3m, 5m | a candle fact only: never the setup, never a wait (unless a `Pullback` line is printed: `pullback-vs-reversal`) | a candle fact only (its swings are the stop's) |
 | 15m | the working structure continues | the working structure shifting: a deeper pullback, or a reversal starting |
 | 1h (4h swings) | the HTF trend continues | the strongest sign of an HTF trend change, not a reversal by itself: a BOS the new way confirms it |
+
+No single BOS or CHoCH classifies the market.
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
@@ -57,7 +87,7 @@ developing; a 1h CHoCH while the 4h and 1h agree is context.
 - **1 HTF**: a 1h break is the side rule's, a 15m one structure
   (`confluence-counting`).
 - **4 Setup**: a 15m (or higher) BOS the bias's way, or a pullback to a
-  level ending in the 15m setup the bias's way; never a 3m break.
+  level ending in the 15m turn the bias's way; never a 3m break.
 - **9 Manage**: a CHoCH against an open trade on its timeframe or higher
   (15m, 1h) is significant (`invalidation`); a 3m one is noise.
   The exit stays the trail.

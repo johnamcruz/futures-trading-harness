@@ -114,36 +114,73 @@ location, setup, confluence, entry, risk, decision, management) and write
 its PLAN block before your result line; the checks below fill its lines.
 It orders the thinking and adds no filter.
 
-Last line of the PLAN block, every PLAN, an open trade's too: your own read
-from the bars and facts, not the labels copied (a label its last break or
-candle contradicts can be a `transition`, `trend-vs-range`); read it first,
+Last line of the PLAN block, every PLAN, an open trade's too: the frames
+are your own read from the bars and facts, not the labels copied (a label
+its last break or candle contradicts can be a `transition`,
+`trend-vs-range`); the class is the `Market state` line's; read it first,
 write it last; it is recorded; no code decides from it:
 `STATE: 4h <f> | 1h <f> | 15m <f> | frames <agree|disagree> | class <c> | cites <names>`,
 `<f>` is `up`, `down`, `range`, `transition` or `unknown`; `<c>`, the
 market now at this candle, is `trend-up`, `trend-down`, `chop` or
-`unclear`; `<names>`, the facts it rests on, comma list, from `4h-trend`,
+`unclear`, the one the `Market state` line prints; `<names>`, the facts it rests on, comma list, from `4h-trend`,
 `1h-trend`, `15m-trend`, `trend-rule`, `regime`, `day-type`, `day-so-far`,
 `pullback`, `1h-break`, `15m-break`, `3m-break`; `none` when none supports
 it. No other words.
 
 A `Pullback` line printed: your PLAN's `4 Setup` line is the read chain:
-side; 15m pullback; 15m turn (CISD, BOS or reaction at the level; a CISD
-strong or weak); 3m (BOS or
+side; 15m pullback; 15m turn (strong CISD, BOS, CHoCH back or reaction at the level; a weak
+CISD is no turn); 3m (BOS or
 CISD, near value or not); verdict (strong setup: enter, watch or wait)
-(`pullback-vs-reversal`). The setup is the 15m turn: a live 15m CISD, a
-15m BOS or a 15m reaction at the level, the side's way; a 15m BOS far past
-value (no 3m BOS or CISD near it): late, not an entry.
+(`pullback-vs-reversal`). The setup is the 15m turn: a live strong 15m CISD, a
+15m BOS, a 15m CHoCH back or a 15m reaction at the level, the side's way; a live strong 15m
+CISD on the CISD line is the turn even when the last 15m candle line shows
+no pattern; a 15m BOS far past
+value (no 3m BOS or CISD near it): late, not an entry. Close to the level
+is the read: `long; 15m pullback to 21500.00 (stopped at 21502.25, no
+touch); 15m turn: rejected the RTH VWAP up, long-wick; 3m: CISD up, near
+value; strong setup: enter`: no exact touch, no named candle: no wait;
+a 15m rejection of the RTH VWAP or a 15m swing inside the zone (within
+about 0.25 × the 15m ATR of the broken level) is the reaction.
 
 **The decision follows your STATE read** (the head trader's own, the last
 line of its PLAN; taught: the gate and `compose_check` do not read it):
 
-- The class follows your frames: your 4h and 1h both one way → that
-  trend class (a 15m pullback, `range` or `transition` under them doesn't
-  cancel it, nor does your `frames disagree`: never `chop` or `unclear`
-  for it); not both one way → `unclear` (never a trend class, smooth or
-  not), `chop` only when the movement itself is choppy (breaks both ways
-  in `m3.lastBreak` last/previous, the Day so far `rotational`, many RTH
-  VWAP crosses): a frame's `range` or `transition` alone is never `chop`.
+- Write the class the `Market state` line prints after `class`; your own
+  4h/1h/15m reads stay in STATE. No other row, picture or frame read
+  changes it. When your frames differ, say why in the PLAN. Your 15m
+  `range` or `transition` is a frame read: it feeds the setup, not the
+  class.
+
+| class printed | action |
+|---|---|
+| `trend-up`, `trend-down` | setups the side's way (what the line prints picks the setup, below) |
+| `chop` | sit out |
+| `unclear` | no trend trade, never counter |
+
+Under a trend class, the setup by what the line prints (a pullback
+printed first; else its state word):
+
+- A pullback their way (`pullback (long leg` with `4h+1h up`, `short leg`
+  with down, or "15m up: a pullback in the 15m trend", down the mirror):
+  wait for the 15m turn (a live strong 15m CISD, a 15m BOS, a 15m CHoCH
+  back or a 15m reaction at the level); enter on the first 3m BOS or CISD
+  the side's way near value (a 3m CISD is the entry as a 3m BOS is, even
+  after a 3m CHoCH against; `pullback-vs-reversal` steps 4-7). Small
+  overlapping candles inside a printed pullback are a pause, not chop; the
+  class stays the line's.
+- `forming`: no setup yet: wait for the first RTH 3m break.
+- `range`: setups at the range edge or on a breakout, the side's way
+  only, a range day too; a range is not chop.
+- `trend`, their way: setups the side's way. `in the up leg` (down the
+  mirror) the same.
+- `transition`, their way: wait for the first 3m break the side's way.
+
+Chop ends when the line's state word is no longer `chop` (code's rule:
+a displaced 3m break or a displaced 3m CISD, a displaced close beyond
+the IB (complete at 10:30), or the protected level broken with
+displacement). The trend and chop definitions, for reference only:
+`trend-vs-range`.
+
 - A take: `class` on its side (`trend-up` long, `trend-down` short), your
   4h and 1h too (`up` long, `down` short).
 - `compose_check` still runs first (its record is the evidence the pass is

@@ -57,7 +57,15 @@ const PINS = {
     '`range`: neither, and ADX under 18 or 5 or more crosses.',
     '`m3.trendRule` wins where they differ.',
     'the breaks a sequence of BOS that way;',
-    'alternating breaks on that timeframe (its last two opposite CHoCHs) or none;',
+    'price rotating between a support and a resistance it keeps;',
+    // feat/chop-read (owner-approved 2026-11-14): the owner's chop definition; chop is not range.
+    // Round 17 (one authority): the class word is the line's, never the definition's.
+    'The class word is the Market state line\'s (`trade-session`), never this definition\'s. One CHoCH warns.',
+    'Frames: transitional (old trend weakening, new one unconfirmed) is the frame `transition` in your STATE. The class word: the Market state line.',
+    // The owner's trending and chop definitions: their one home since round 17 (the head core points here, reference only).
+    'Trending: consistent BOS, directional displacement, follow-through. Chop: alternating BOS/CHoCH, overlapping candles, failed continuation.',
+    'Structure broken both ways with no continuation is chop, not a run of reversals.',
+    '**Chop is not range.** Chop needs no edges; a range can rotate cleanly.',
     'a 15m setup the HTF way inside an HTF trend is the pullback ending (`pullback-vs-reversal`), not a range;',
   ],
   'pullback-vs-reversal': [
@@ -68,7 +76,12 @@ const PINS = {
     'A 15m CHoCH inside an intact 1h and 4h structure is a pullback. On the 1h, not an HTF reversal: the leg\'s 15m pullback failed (step 8).',
     'CHoCHs stacking up the timeframes (15m, then 1h) are a reversal developing;',
     // feat/pullback-concept (owner-approved 2026-11-14): the pullback to a broken level, BOS or CISD confirms, CHoCH or CISD warns.
-    'Open from the `Pullback` line (steps 6-7 outlive it).',
+    'Start from the `Pullback` line (steps 6-7 outlive it).',
+    // #338's step 4 (the turn) stays intact under feat/chop-read: a live strong CISD or a reaction IS the turn.
+    // The 15m CHoCH back (owner-approved 2026-11-15, the structure audit's skill gap): the earliest valid 15m evidence.
+    // Round 15: a live strong 15m CISD (compose_check counts only a live CISD, weak is dead there).
+    '**The setup**: the 15m turn: a live strong 15m CISD, a 15m BOS, a 15m CHoCH back or a 15m reaction at the level, the side\'s way → the pullback ended on the 15m; no 15m BOS to wait for after a strong CISD, a CHoCH back or a reaction; a 15m CHoCH back: the first 15m break back after the pullback\'s break against (`m15.lastBreak.last` the side\'s way, known at its close), the potential reversal of the pullback, the trend resuming; a later 15m BOS: hold; a live strong 15m CISD on the CISD line is the setup read even when the last 15m candle line shows no pattern (`15m cisd up|down`).',
+    'A 15m rejection of the RTH VWAP or a 15m swing inside the zone (within about 0.25 × the 15m ATR of the broken level) is the reaction; no exact touch of the broken level is needed; the entry still needs the 3m BOS or CISD near value.',
     'a CISD reads as the same: the side\'s way as a BOS, against as a CHoCH, earlier (`cisd`).',
     'A 3m CHoCH back the side\'s way: the 3m counter-move ended; watch for the BOS or CISD; not the entry. No BOS or CISD after it: no setup, pass.',
     '**Entry**: the first 3m BOS or 3m CISD the side\'s way, near value (the `Trend declared?` RTH VWAP or EMA20 within about ±0.5; + is the side\'s way, a short\'s too), the step 4 read true now',
@@ -242,7 +255,17 @@ const PINS = {
   'bos-vs-choch': [
     'Confirmed fractal swings (k=2: a pivot with 2 strictly lower highs or higher lows on each side, confirmed 2 bars later).',
     'A close strictly beyond the last confirmed swing not yet broken; each swing breaks once. Only closes count, on completed candles.',
-    'In the code, that is the previous break\'s direction (the first break too).',
+    'In the code, that is the previous break\'s direction (the first break too)',
+    // The owner's reading (feat/chop-read, 2026-11-14): CHoCH then BOS confirms; CHoCH then CHoCH back a failed reversal.
+    // Round 17: whether a CHoCH pair is chop now is the Market state line's (one authority).
+    // Round 20 (the owner: a CHoCH pair is neither sufficient nor necessary for chop): the pair's reading leaves; the three
+    // layers (internal, protected, behavior) are taught below it.
+    'A potential reversal: CHoCH then BOS: confirmed.',
+    'An internal CHoCH against the leg while its protected level holds is pullback or consolidation evidence, never a trend change.',
+    // Round 17 (q131): the printed BOS keeps its label; the line's status decides what it means now.
+    'A BOS stays labelled BOS after its protected swing breaks; the Market state line\'s status (`holds` or `broken by a close`) decides what it means now: a broken protected swing ends that BOS\'s trend read.',
+    // The owner's invalidation rule (round 15): each break's protected swing, close only.
+    'Each break has a protected swing: a BOS holds until the leg\'s higher low (lower high) breaks; a CHoCH holds until the low (high) that started the shift breaks. Only a close through it counts; a wick is not.',
     'No one timeframe is the signal; read them top-down.',
     '| 3m, 5m | a candle fact only: never the setup, never a wait (unless a `Pullback` line is printed: `pullback-vs-reversal`) | a candle fact only (its swings are the stop\'s) |',
     '| 15m | the working structure continues | the working structure shifting: a deeper pullback, or a reversal starting |',
@@ -312,8 +335,17 @@ test('basics skills: frontmatter, the sections in order, and small', () => {
     // candle-reading carries the reaction-at-a-level read (feat/sweep-candle-control, owner-approved 2026-10-31: "This will
     // provide useful context"): the seven reactions, their priority, the context it is read in (then 969: the owner rule, the reaction rules hold on every timeframe and a higher one's reaction is stronger confirmation; then 1023, owner: rejection relies on candle-reading; the side is the candle's (q30); then 1026, owner: no bare rejection (plain is no rejection read); sweeps need candle-reading too; then 1044, owner: q30 side confusion; side rule first; then 1237 (+193), fix/quiz-side-doji, owner: q29/q30/q33 answered correctly: the side never from the bias, the briefing's side, a stall decides nothing, the four side and trend-rule cases, a paired side example) and their evidence.
     // Then candle-reading 1280 and pullback-vs-reversal 1631 (feat/pullback-concept, owner-approved 2026-11-14: the unlabeled candle
-    // names; the pullback to a broken level, BOS for continuation, CHoCH for reversal, its 3m entry, the examples).
-    assert.ok(words >= 250 && words <= (s === 'candle-reading' ? 1280 : s === 'pullback-vs-reversal' ? 1631 : 650), `${s}: ${words} words`);
+    // names; the pullback to a broken level, BOS for continuation, CHoCH for reversal, its 3m entry, the examples); then
+    // pullback-vs-reversal 1728 (feat/chop-read, owner-approved 2026-11-14: the pause holds one way, chop breaks both ways;
+    // close to the level is a read); then 1762 (owner-approved 2026-11-15: the 15m CHoCH back as a 15m turn); then 1763 (round 15:
+    // a live strong 15m CISD, the word compose_check's live CISD means). bos-vs-choch 700 (round 15, the owner's line: each
+    // break's protected swing, close only; its `protected` field; the current 15m BOS), at the measured need (696);
+    // pullback-vs-reversal 1794 (Fable round 16: the Depth row names when the Market state counts the pullback). Round 17
+    // (one authority for the class word): bos-vs-choch 702 (the BOS keeps its label after its protected swing breaks; the
+    // CHoCH pair's chop is the line's), pullback-vs-reversal 1778 (the pause's class rule replaced by the pointer), both at
+    // the measured need. Round 20 (the owner's three layers, chop checklist, behavioral list and classes quoted, one home
+    // each): bos-vs-choch 871, trend-vs-range 834, at the measured need.
+    assert.ok(words >= 250 && words <= (s === 'candle-reading' ? 1280 : s === 'pullback-vs-reversal' ? 1778 : s === 'bos-vs-choch' ? 871 : s === 'trend-vs-range' ? 834 : 650), `${s}: ${words} words`);
     // The two setups also carry a timeframe table (what the setup means on 3m/5m, 15m and 1h/4h): a little more room
     // (scripts/lib/skill-caps.js, the one source the training loop's probe edits read too).
     const max = skillByteCap(s);
@@ -600,7 +632,9 @@ test('bos-vs-choch: the description is short, and the swings and breaks are the 
   assert.match(se, /kind: prev && prev\.direction !== direction \? 'CHoCH' : 'BOS'/);
   assert.match(se, /if \(direction === 'up'\) hi = null; else lo = null;/);
   const br = read('scripts/lib/trading/briefing.js');
-  assert.match(br, /lastBreak: lastBreaks\(bars\),/);
+  // The 3m breaks with their protected swings (round 15, the owner's invalidation rule; structure-events.js protectedOf).
+  assert.match(br, /lastBreak: withProtected\(bars, lastBreaks\(bars\)\),/);
+  assert.match(se, /function protectedOf\(bars, brk\)/);
   assert.match(br, /lastBreak: atClose\(lastBreaks\(c15\), 15\),/);
   assert.match(br, /lastBreak: atClose\(lastBreaks\(c60\), 60\)/);
   // On a real briefing: the kinds and directions the skill names, knownAt on 15m and 1h, and no 4h break.

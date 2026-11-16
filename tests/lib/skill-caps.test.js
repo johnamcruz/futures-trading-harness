@@ -14,15 +14,15 @@ test('skill caps: the setups 4000 bytes, every other skill 3459 (3400 until feat
   assert.strictEqual(C.skillByteCap(undefined), 3459);
 });
 
-test('skill caps: candle-reading (feat/sweep-candle-control) and pullback-vs-reversal (feat/pullback-concept) have their own caps, owner-approved: they improve context; every other skill keeps its cap', () => {
-  assert.deepStrictEqual({ ...C.PER_SKILL }, { 'candle-reading': 7637, 'pullback-vs-reversal': 9518 });
+test('skill caps: candle-reading (feat/sweep-candle-control), pullback-vs-reversal (feat/pullback-concept), trend-vs-range and bos-vs-choch (feat/chop-read: the owner\'s chop definition) have their own caps, owner-approved: they improve context; every other skill keeps its cap', () => {
+  const OWN = { 'candle-reading': 7637, 'pullback-vs-reversal': 10354, 'trend-vs-range': 5426, 'bos-vs-choch': 5233 };
+  assert.deepStrictEqual({ ...C.PER_SKILL }, OWN);
   assert.ok(Object.isFrozen(C.PER_SKILL));
-  assert.strictEqual(C.skillByteCap('candle-reading'), 7637);
-  assert.strictEqual(C.skillByteCap('pullback-vs-reversal'), 9518);
+  for (const [s, cap] of Object.entries(OWN)) assert.strictEqual(C.skillByteCap(s), cap, s);
   const fs = require('fs');
   const path = require('path');
   for (const s of fs.readdirSync(path.join(__dirname, '..', '..', 'skills'))) {
-    if (s === 'candle-reading' || s === 'pullback-vs-reversal') continue;
+    if (Object.prototype.hasOwnProperty.call(OWN, s)) continue;
     assert.strictEqual(C.skillByteCap(s), C.SETUP_SKILLS.includes(s) ? 4000 : 3459, s);
   }
   // Inherited names are no skill's own cap.
@@ -39,12 +39,15 @@ test('skill caps: a per-skill cap past its pin, or a second skill given its own,
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fth-test-caps-'));
   const at = v => { const f = path.join(dir, `t${Math.random()}.json`); fs.writeFileSync(f, JSON.stringify(v)); return f; };
   try {
-    const PB = { 'pullback-vs-reversal': 9518 };
+    const PB = { 'pullback-vs-reversal': 10354, 'trend-vs-range': 5426, 'bos-vs-choch': 5233 };
     assert.throws(() => T.load('training', at({ ...base, skillCaps: { ...base.skillCaps, perSkill: { 'candle-reading': 7638, ...PB } } })), /perSkill\.candle-reading/);
-    assert.throws(() => T.load('training', at({ ...base, skillCaps: { ...base.skillCaps, perSkill: { 'candle-reading': 7637, 'pullback-vs-reversal': 9519 } } })), /perSkill\.pullback-vs-reversal/);
+    assert.throws(() => T.load('training', at({ ...base, skillCaps: { ...base.skillCaps, perSkill: { 'candle-reading': 7637, ...PB, 'pullback-vs-reversal': 10355 } } })), /perSkill\.pullback-vs-reversal/);
+    assert.throws(() => T.load('training', at({ ...base, skillCaps: { ...base.skillCaps, perSkill: { 'candle-reading': 7637, ...PB, 'trend-vs-range': 5427 } } })), /perSkill\.trend-vs-range/);
+    assert.throws(() => T.load('training', at({ ...base, skillCaps: { ...base.skillCaps, perSkill: { 'candle-reading': 7637, ...PB, 'bos-vs-choch': 5234 } } })), /perSkill\.bos-vs-choch/);
+    assert.throws(() => T.load('training', at({ ...base, skillCaps: { ...base.skillCaps, perSkill: { 'candle-reading': 7637, 'pullback-vs-reversal': 10354, 'bos-vs-choch': 4138 } } })), /perSkill\.trend-vs-range/, 'its own cap stated');
     assert.throws(() => T.load('training', at({ ...base, skillCaps: { ...base.skillCaps, perSkill: { 'candle-reading': 6338, ...PB, cisd: 9000 } } })), /cisd/);
     assert.throws(() => T.load('training', at({ ...base, skillCaps: { ...base.skillCaps, perSkill: { 'candle-reading': 6338 } } })), /perSkill\.pullback-vs-reversal/, 'its own cap stated');
     assert.strictEqual(T.load('training', at({ ...base, skillCaps: { ...base.skillCaps, perSkill: { 'candle-reading': 5000, ...PB } } })).skillCaps.perSkill['candle-reading'], 5000, 'lower is allowed');
-    assert.strictEqual(T.load('training', at({ ...base, skillCaps: { ...base.skillCaps, perSkill: { 'candle-reading': 7637, 'pullback-vs-reversal': 4000 } } })).skillCaps.perSkill['pullback-vs-reversal'], 4000, 'lower is allowed');
+    assert.strictEqual(T.load('training', at({ ...base, skillCaps: { ...base.skillCaps, perSkill: { 'candle-reading': 7637, ...PB, 'pullback-vs-reversal': 4000 } } })).skillCaps.perSkill['pullback-vs-reversal'], 4000, 'lower is allowed');
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

@@ -96,11 +96,13 @@ const { familyRoot, tickOf, levelOnTick } = require('./contracts');
 const { candidateTrendRule } = require('./signal-state');
 const { sideTarget } = require('./order-plan');
 const { roundStepFor, roundStepError } = require('./round-numbers');
-const { pivots, lastBreaks, breaksOf, sweeps, untestedSwings, swingLevels } = require('./structure-events');
+const { pivots, lastBreaks, breaksOf, sweeps, untestedSwings, swingLevels, protectedOf } = require('./structure-events');
+// The 3m breaks with their protected swings (the owner's invalidation rule; the Market state reads them).
+const withProtected = (bars, lb) => Object.fromEntries(Object.entries(lb).map(([k, x]) => [k, x ? { ...x, protected: protectedOf(bars, x) } : x]));
 const { timingOf, timingLine } = require('./ltf-timing');
 const { sideValuesText, causalLevels } = require('./rules');
 const { cisdFacts } = require('./cisd');
-const { briefingCandles, briefingTargets, holdingSwingsAt, briefingRangeTargets, MOVING_LEVEL } = require('./candle-facts');
+const { briefingCandles, briefingTargets, holdingSwingsAt, briefingRangeTargets, MOVING_LEVEL, patternText } = require('./candle-facts');
 const { halfOf } = require('./fib');
 const { levelCloses, MAX_CLOSES } = require('./level-closes');
 const { brokerFieldsAt, brokerFieldsText } = require('./broker-fields');
@@ -110,7 +112,13 @@ const { structure5m, structureLine } = require('./m5-structure');
 const { compressionFrames, compressionLine } = require('./compression');
 const { declaredFacts, declaredLine } = require('./trend-declared');
 const { daySoFar, daySoFarLine, rthVolatility, volatilityText } = require('./day-so-far');
-const { biasLine } = require('./bias-line');
+const { biasLine, RULE: BIAS_RULE } = require('./bias-line');
+const { marketLayers } = require('./market-layers');
+const AN_STATE = require('../tunables').analysis(); // config/analysis.json: marketState, daySoFar.minBars (the chop floor), dayContext.ibMinutes
+const { stateOf, marketStateLine, stateThresholds } = require('./market-state');
+// The Market state line's crosses context threshold: the regime's rotation count (config/analysis.json; a test pins it to the
+// recognition key's frozen crossesChop).
+const STATE_TH = stateThresholds(require('../tunables').analysis());
 const { pullbackRead, pullbackLine } = require('./pullback-read');
 const { GLOBEX_OPEN_MIN, RTH_OPEN_MIN, RTH_CLOSE_MIN } = require('./clock'); // the session boundaries' one home
 
@@ -477,7 +485,7 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
         // Structure events (structure-events.js): the latest break on the trigger bars, sweeps of key liquidity in the last
         // 10 bars (only levels that existed before the sweep), the 1h swings not traded back to, and the 15m and 1h swings
         // against price (a 3m close through one since its candle closed: brokenAt).
-        lastBreak: lastBreaks(bars),
+        lastBreak: withProtected(bars, lastBreaks(bars)),
         sweeps: sweeps(bars, [
           // The session's key levels: the runner's bars only (a frame's sweeps are of its own levels).
           ...(own ? [] : [['prior RTH high', (lv.priorRth || {}).high, 'high', true], ['prior RTH low', (lv.priorRth || {}).low, 'low', true]]),
@@ -719,6 +727,12 @@ function buildBriefing({ symbol, contractId = null, bars: raw, minutes, fineBars
   // bars; the runner's briefing only; null without a counter-move or before the trend rule has its read (its line names
   // the prevailing side then). A presented fact: nothing in the gate, compose_check, order_plan or the trend rule reads it.
   if (!own) fresh.m3.data.pullback = read.rule.ready ? pullbackRead({ bars, base: minutes, prevailing: read.rule.prevailing }) : null;
+  // The Market state's three layers (market-layers.js, round 20): structure, momentum and behavior from these closed bars,
+  // on the chain's entry frame only (the state prints there); market-state.js reads them. Facts left out of the detail
+  // (SUMMARY_FIELDS: the Market state line says them).
+  if (!own && tfLabel(minutes) === BIAS_RULE.chain.entry) {
+    fresh.m3.data.layers = marketLayers({ bars, minutes, setupMinutes: parseInt(BIAS_RULE.chain.setup, 10), closedAt: closedAt.toISOString(), pullback: fresh.m3.data.pullback, p: AN_STATE.marketState, floor: AN_STATE.daySoFar.minBars, ibBars: AN_STATE.dayContext.ibMinutes / minutes });
+  }
   // Same symbol, bar size and contract (a roll to the next month is new prices, never the old month's levels).
   const usable = prev && prev.symbol === symbol && prev.minutes === minutes && (prev.contractId || null) === contractId && Date.parse(prev.closedAt) < closedAt.getTime();
   const sections = {};
@@ -833,6 +847,9 @@ function summaryLines(b, et) {
     // The side the entry rule (BG) allows, from its own check (bias-line.js): the runner's briefing only (a frame's has no
     // session facts, so no declared trend).
     ...(!own && biasLine(b) ? [`- ${biasLine(b)}.`] : []),
+    // The Market state (market-state.js): one present-tense read, the precedence applied once (taught in trade-session's
+    // table); a read, not a filter: no gate, hook, compose or decision code reads it, and it is never a data field.
+    ...(!own && stateOf(b, STATE_TH) ? [`- ${marketStateLine(stateOf(b, STATE_TH))}.`] : []),
     alignment,
     own ? `- VWAP and the session's levels (today, overnight, opening range, IB, profile): each ${SESSION_ELSEWHERE}, one value in every briefing; ${typeof m3.setups === 'string' ? `the room below is this ${tf} bar's own levels` : `the room below and the setups' levels include them (the runner's values), with this ${tf} bar's own`}.`
       : `- VWAP (${vw.applies || '?'}): price ${vw.side || '?'}, ${Number.isFinite(vw.distanceAtr) ? Math.abs(vw.distanceAtr) : '?'} x ${tf} ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP ${vw.rthCrossesLast30 ?? '?'}, the session VWAP ${vw.sessionCrossesLast30 ?? '?'} (the regime's count).`,
@@ -924,7 +941,7 @@ function cisdLine(block, et) {
       : x.displacement === 'weak' ? 'a weak displacement: no zone' : `zone ${x.status}`;
     return `${tf} ${x.dir} at ${x.level} (closed ${et(x.confirmedClose)}, ${x.displacement})${x.sweep ? ` after a sweep of the ${x.sweep.name} ${x.sweep.price}` : ', no key-level sweep'}, ${zone}${x.bounce ? `, this bar bounced ${x.bounce} out of it` : ''}`;
   });
-  return parts.length ? `- CISD (completed candles; a read, not a signal): ${parts.join('; ')}.` : null;
+  return parts.length ? `- CISD (completed candles): ${parts.join('; ')}.` : null;
 }
 
 const target = x => `${x.frame} ${x.price} (${x.points} pts, ${x.ticks} ticks, ${x.R === null ? 'R unknown' : `${x.R}R`})`;
@@ -937,7 +954,7 @@ const targets = list => list.reduce((out, x) => {
 
 // The m3 fields the summary says in full (one line each), left out of the detail whole.
 const CHAIN_FRAMES = (C => C.chainOf(C.SHIPPED))(require('./chain'));
-const SUMMARY_FIELDS = ['swingTargets', 'rangeTargets', 'fvgs', 'structure5m', 'compression', 'declared', 'timing', 'pullback'];
+const SUMMARY_FIELDS = ['swingTargets', 'rangeTargets', 'fvgs', 'structure5m', 'compression', 'declared', 'timing', 'pullback', 'layers'];
 // What the summary's "This bar's close" line says in full, left out of the detail (only present when it happened).
 const SUMMARY_ONLY = { vwap: ['crossed'], today: ['openingRangeCrossed', 'soFar', 'rthVolatility'], location: ['closesBeyondValue', 'backInsideValue'] };
 
@@ -1037,7 +1054,7 @@ function candleLines(m3, et, roomOf = 'R = the reference stop', closedAt = null)
       : `${r} ${name}${rx(name) ? ` (${r === 'touched' && rx(name) === 'breakout' ? 'closed beyond: breakout' : r === 'touched' ? touchedSided(name) : rx(name)})` : ''}`));
     for (const x of extras && Array.isArray(c.confirmed) ? c.confirmed : []) met.push(`confirmed rejection of ${x.text || `${x.name} ${x.price}`}${x.dir ? ` (${x.dir === 'down' ? 'short' : 'long'} side)` : ''}`);
     if (c.moreLevels) met.push(`+${c.moreLevels} more`);
-    const shapeText = [`${c.pattern}${c.dir ? ` ${c.dir}` : ''}`, extras && c.insideStack && c.mother ? `${c.insideStack} in a row inside the ${et(c.mother.t)} candle ${c.mother.l}-${c.mother.h}` : null,
+    const shapeText = [`${patternText(c.pattern)}${c.dir ? ` ${c.dir}` : ''}`, extras && c.insideStack && c.mother ? `${c.insideStack} in a row inside the ${et(c.mother.t)} candle ${c.mother.l}-${c.mother.h}` : null,
       c.closeLocation ? `close ${c.closeLocation} third` : null,
       c.rangeAtr !== null ? `range ${c.rangeAtr} ATR` : null, c.volRatio !== null ? `vol ${c.volRatio}x` : null,
       // On high volume, the net move (absorption's "little progress", composed-reads.js netAtrOf).

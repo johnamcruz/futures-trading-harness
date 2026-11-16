@@ -65,6 +65,13 @@ test('cited vs ignored: ignored = citable fields with a met signal not cited; un
   assert.strictEqual(S.citedVsIgnored({ status: 'absent', cited: [], offList: [] }, ['regime']).ignored, null, 'no cites in the run: nothing is ignored, it is unknown');
 });
 
+test('cited vs ignored: the breaks-both-ways signals (C2 15m-break, C3 3m-break) map to their own cite names, citable', () => {
+  const r = S.citedVsIgnored({ status: 'stated', cited: ['3m-break'], offList: [], dropped: 0 }, ['15m-break', '3m-break']);
+  assert.deepStrictEqual(r.ignored, ['15m-break']);
+  assert.deepStrictEqual(r.uncitable, []);
+  assert.deepStrictEqual(r.citedWithoutSignal, []);
+});
+
 test('first candle each reader names the known class; guess before the evidence candle, on it, or lag after', () => {
   const c = cs([[0, 'unclear', 'unclear', null], [1, 'unclear', 'trend-up', 'trend-up'], [2, 'trend-up', 'trend-up', 'trend-up'], [3, 'trend-up', 'trend-up', 'trend-up']]);
   const r = S.recognise(c, KNOWN, MARGIN);

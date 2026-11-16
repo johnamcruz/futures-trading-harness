@@ -123,7 +123,7 @@ test('layer teaching: every "the setup is the entry" home scopes the pullback en
     assert.match(t, re, file);
   }
   // The read itself names its scope once, and the CISD skill no longer puts a pullback's entry at the next close.
-  assert.match(read('pullback-vs-reversal'), /Open from the `Pullback` line \(steps 6-7 outlive it\)\./);
+  assert.match(read('pullback-vs-reversal'), /Start from the `Pullback` line \(steps 6-7 outlive it\)\./);
   assert.doesNotMatch(read('cisd'), /ends the pullback; the next close is the entry/);
   assert.ok(SCOPE.test(read('trader-process')));
   // The always-on rule reaches every harness: the generated workspace instructions carry the scope.
@@ -133,12 +133,19 @@ test('layer teaching: every "the setup is the entry" home scopes the pullback en
 // The 15m turn is one definition in its three homes (the owner: the 15m turn is a 15m CISD or a 15m BOS the side's way; the
 // reaction at the level too), and a 15m BOS far from value is no entry (the measured late case), stated alike.
 test('layer teaching: the 15m turn and the late 15m BOS are stated alike in pullback-vs-reversal, htf-to-ltf and trade-session', () => {
-  const TURN = 'the 15m turn: a live 15m CISD, a 15m BOS or a 15m reaction at the level, the side\'s way';
+  // A live STRONG 15m CISD in every home (round 15): compose_check counts only a live CISD, and `weak` is dead there
+  // (composed-reads.js DEAD_CISD); the cisd skill: a weak CISD has no zone.
+  const TURN = 'the 15m turn: a live strong 15m CISD, a 15m BOS, a 15m CHoCH back or a 15m reaction at the level, the side\'s way';
   const LATE = 'a 15m BOS far past value (no 3m BOS or CISD near it): late, not an entry';
   for (const s of ['pullback-vs-reversal', 'htf-to-ltf', 'trade-session']) {
     assert.ok(read(s).includes(TURN), `${s}: the 15m turn`);
     assert.ok(read(s).includes(LATE), `${s}: the late 15m BOS`);
   }
+  assert.ok(read('trade-session').includes('wait for the 15m turn (a live strong 15m CISD, a 15m BOS, a 15m CHoCH back or a 15m reaction at the level)'), 'trade-session: the table row');
+  assert.ok(read('trade-session').includes('15m turn (strong CISD, BOS, CHoCH back or reaction at the level; a weak CISD is no turn)'), 'trade-session: the chain sentence');
+  for (const s of ['pullback-vs-reversal', 'htf-to-ltf', 'trade-session']) assert.doesNotMatch(read(s), /a live 15m CISD|a CISD strong or weak/, `${s}: no CISD turn without "strong"`);
+  const readme = flat(fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8'));
+  assert.ok(readme.includes('| Setup | The 15m pullback turns the side\'s way: a live strong 15m CISD, a 15m BOS, a 15m CHoCH back, or a 15m reaction at the level. |'), 'README: the Setup row');
   // The 3m timing names both reads wherever the watch is taught.
   assert.match(read('pullback-vs-reversal'), /watch for the BOS or CISD; not the entry\. No BOS or CISD after it: no setup, pass\./);
 });

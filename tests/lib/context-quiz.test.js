@@ -535,19 +535,16 @@ test('grading: q50-q63, the market-context questions: right and wrong answers pe
     ['q50', 'ANSWER: A rejection: it traded through the low and closed back.', true], ['q50', 'ANSWER: Acceptance: it broke the low.', false],
     ['q51', 'ANSWER: No: no reaction is not a rejection.', true], ['q51', 'ANSWER: Yes, the level rejected price.', false],
     ['q52', 'ANSWER: Acceptance, not rejection: the closes beyond the level hold.', true], ['q52', 'ANSWER: Rejection of the high.', false],
-    ['q54', 'ANSWER: No: a sweep, not a break.', true], ['q54', 'ANSWER: Yes, a BOS down.', false],
-    ['q55', 'ANSWER: CHoCH: an early warning, not a reversal by itself.', true], ['q55', 'ANSWER: Reversal: the trend has turned.', false],
     ['q56', 'ANSWER: A declared trend up.', true], ['q56', 'ANSWER: Range: nothing has declared.', false],
     ['q57', 'ANSWER: Transition: regime and structure disagree.', true], ['q57', 'ANSWER: Trend up.', false],
     ['q58', 'ANSWER: Range: a chop day.', true], ['q58', 'ANSWER: Trend up.', false],
-    ['q59', 'ANSWER: No: a pause inside the trend.', true], ['q59', 'ANSWER: Yes, the market is ranging.', false],
     ['q60', 'ANSWER: A pullback: the CHoCH is inside an intact higher structure.', true], ['q60', 'ANSWER: Reversal.', false],
     ['q61', 'ANSWER: A reversal developing; the 1h CHoCH against is decisive: pass on the long.', true], ['q61', 'ANSWER: Pullback; take the long.', false],
-    ['q55', 'ANSWER: CHoCH: the trend has reversed.', false], ['q56', 'ANSWER: A trend up but not yet declared.', false], ['q56', 'ANSWER: Uptrend, declared.', true],
+    ['q56', 'ANSWER: A trend up but not yet declared.', false], ['q56', 'ANSWER: Uptrend, declared.', true],
     ['q57', 'ANSWER: Still an uptrend on the 15m, with the regime in transition.', false], ['q57', 'ANSWER: Transitional: the CHoCH disagrees with the trend read.', true],
     ['q61', 'ANSWER: Reversal; the long is still valid against the 1h.', false], ['q63', 'ANSWER: It is reversing; the weakening signs confirm it: exit.', false],
     ['q50', 'ANSWER: Not a rejection: a sweep.', false], ['q60', 'ANSWER: The start of a reversal, not a pullback.', false],
-    ['q51', 'ANSWER: Nothing has happened: no rejection yet.', true], ['q52', 'ANSWER: Yes, acceptance: both closes hold above.', true], ['q59', 'ANSWER: Not really; it is a breather inside the trend.', true],
+    ['q51', 'ANSWER: Nothing has happened: no rejection yet.', true], ['q52', 'ANSWER: Yes, acceptance: both closes hold above.', true],
     ['q61', 'ANSWER: Pullback is ruled out; a reversal is developing, so no long.', true],
     ['q62', 'ANSWER: No: depth alone is no edge.', true], ['q62', 'ANSWER: Yes, a 50% retrace is the entry.', false],
     ['q63', 'ANSWER: Weakening, not a reversal without a 15m break.', true], ['q63', 'ANSWER: Yes, a reversal: exit.', false],
@@ -560,11 +557,12 @@ test('summary: correct on all K, answered both ways, the totals, the bar; compar
   for (const x of QUIZ.questions) for (let k = 1; k <= 5; k += 1) rows.push({ id: x.id, k, pass: true });
   for (const x of QUIZ.partB) for (let k = 1; k <= 5; k += 1) rows.push({ id: x.id, k, pass: true });
   const all = Q.summarize(QUIZ, rows, 5);
-  // 88 since q87-q112 less q100 (feat/pullback-concept, closed choices): 88 x 5 runs, one missed = 439.
-  assert.deepStrictEqual([all.partA.allCorrect, all.partA.bothWays, all.partB.allCorrect, all.meetsBar], [88, 0, 8, true]);
+  // 88 since q87-q112 less q100 (feat/pullback-concept, closed choices); 100 since q113-q126 less q120 and q122 (feat/chop-read): 100 x 5
+  // runs, one missed = 499.
+  assert.deepStrictEqual([all.partA.allCorrect, all.partA.bothWays, all.partB.allCorrect, all.meetsBar], [100, 0, 8, true]);
   const one = rows.map(r => (r.id === 'q6' && r.k === 2 ? { ...r, pass: false } : r));
   const s = Q.summarize(QUIZ, one, 5);
-  assert.deepStrictEqual([s.partA.allCorrect, s.partA.bothWays, s.partA.total, s.meetsBar], [87, 1, 439, false]);
+  assert.deepStrictEqual([s.partA.allCorrect, s.partA.bothWays, s.partA.total, s.meetsBar], [99, 1, 499, false]);
   // Too few runs is never correct on all K.
   assert.strictEqual(Q.summarize(QUIZ, rows.filter(r => r.k <= 3), 5).partA.allCorrect, 0);
   const d = Q.compare(all, s).find(x => x.id === 'q6');
@@ -725,6 +723,42 @@ test('grading a choice question: the ANSWER line equal to the answer passes; a h
   // A yes/no choice: the verdict alone.
   const yn = { ...q('q79'), choices: ['yes', 'no'], answer: 'no' };
   for (const [a, want] of [['ANSWER: No', true], ['ANSWER: **no**.', true], ['ANSWER: No, trend evidence', false], ['ANSWER: yes', false], ['ANSWER: nope', false]]) assert.strictEqual(Q.gradeAnswer(QUIZ, yn, a).pass, want, a);
+  // A number is compared by its value (round 17: q127's choice prints 21462.50, the Market state line 21462.5): the same
+  // price in another format passes; another price, a digit more or less, or a word changed beside it still fails.
+  const px = { ...q('q79'), choices: ['holds above 21462.50 (origin)', 'failed below 21478.00', 'chop'], answer: 'holds above 21462.50 (origin)' };
+  for (const [a, want] of [['ANSWER: holds above 21462.5 (origin)', true], ['ANSWER: holds above 21462.500 (origin)', true], ['ANSWER: holds above 21462.50 (origin).', true],
+    ['ANSWER: holds above 21462.25 (origin)', false], ['ANSWER: holds above 21462 (origin)', false], ['ANSWER: holds above 2146.25 (origin)', false], ['ANSWER: holds above 214625 (origin)', false],
+    ['ANSWER: holds below 21462.5 (origin)', false], ['ANSWER: holds above 21462.5', false], ['ANSWER: failed below 21478', false]]) assert.strictEqual(Q.gradeAnswer(QUIZ, px, a).pass, want, a);
+  const fail = { ...px, answer: 'failed below 21478.00' };
+  for (const [a, want] of [['ANSWER: failed below 21478', true], ['ANSWER: failed below 21478.0', true], ['ANSWER: failed below 21478.25', false]]) assert.strictEqual(Q.gradeAnswer(QUIZ, fail, a).pass, want, a);
+  // A leading article is ignored, every item alike (round 18, PREREG addendum 22: q126 and q127's right reads without
+  // their leading "a"): dropped, added or swapped it still matches; a different word, number or a missing clause fails.
+  const art = { ...q('q79'), choices: ['a pullback in the 15m trend: class trend-up', 'a reversal', 'chop'], answer: 'a pullback in the 15m trend: class trend-up' };
+  for (const [a, want] of [['ANSWER: pullback in the 15m trend: class trend-up', true], ['ANSWER: A pullback in the 15m trend: class trend-up.', true],
+    ['ANSWER: the pullback in the 15m trend: class trend-up', true], ['ANSWER: **An pullback in the 15m trend: class trend-up**', true],
+    ['ANSWER: pullback in the 1h trend: class trend-up', false], ['ANSWER: pullback in the 15m trend', false], ['ANSWER: a pullback in the 15m trend: class trend-down', false],
+    ['ANSWER: a reversal', false], ['ANSWER: pullbacks in the 15m trend: class trend-up', false], ['ANSWER: apullback in the 15m trend: class trend-up', false],
+    ['ANSWER: pullback in a 15m trend: class trend-up', false]]) assert.strictEqual(Q.gradeAnswer(QUIZ, art, a).pass, want, a);
+  const bare = { ...art, answer: 'chop' };
+  for (const [a, want] of [['ANSWER: the chop', true], ['ANSWER: chop', true], ['ANSWER: a chop.', true], ['ANSWER: another chop', false], ['ANSWER: theme chop', false]]) assert.strictEqual(Q.gradeAnswer(QUIZ, bare, a).pass, want, a);
+  // A number after the article still by its value.
+  const pxa = { ...px, answer: 'a potential reversal up (above its origin 21462.50)' };
+  for (const [a, want] of [['ANSWER: potential reversal up (above its origin 21462.5)', true], ['ANSWER: potential reversal up (above its origin 21462.25)', false]]) assert.strictEqual(Q.gradeAnswer(QUIZ, pxa, a).pass, want, a);
+  // Free text: the required patterns read the line with or without its leading article; a forbidden one fails on either.
+  const ft = { ...q('q79'), choices: undefined, answer: undefined, required: ['^\\W*breakout\\b'], forbidden: ['^\\W*a\\s+reversal\\b'] };
+  delete ft.choices;
+  for (const [a, want] of [['ANSWER: breakout above 21500', true], ['ANSWER: a breakout above 21500', true], ['ANSWER: the breakout above 21500', true],
+    ['ANSWER: an breakout', true], ['ANSWER: a reversal, then breakout', false], ['ANSWER: fakeout', false]]) assert.strictEqual(Q.gradeAnswer(QUIZ, ft, a).pass, want, a);
+  // A forbidden pattern that matches only the article-dropped line still fails the answer (fail closed on either line).
+  const ftDrop = { ...ft, required: ['\\bbreakout\\b'], forbidden: ['^\\W*reversal\\b'] };
+  for (const [a, want] of [['ANSWER: a reversal then breakout', false], ['ANSWER: breakout, no reversal yet', true]]) assert.strictEqual(Q.gradeAnswer(QUIZ, ftDrop, a).pass, want, a);
+  // No two choices of any item become equal with the article ignored (the matcher never merges two answers).
+  for (const x of [...QUIZ.questions, ...QUIZ.partB].filter(y => y.choices)) {
+    const seen = x.choices.map(c => Q.normChoice(c));
+    assert.strictEqual(new Set(seen).size, seen.length, `${x.id}: ${seen.join(' | ')}`);
+  }
+  // Text without a number reads as before (the cases above), and the F-labels stay distinct.
+  assert.strictEqual(g('q81', 'ANSWER: F3'), false);
   // The result's shape is the regex questions' (quiz-run, quiz-gate and quiz-phase read it): the answer missed, nothing forbidden.
   assert.deepStrictEqual(Q.gradeAnswer(QUIZ, q('q79'), 'ANSWER: trend evidence\nwhy'), { id: 'q79', line: 'trend evidence', fmt: true, pass: false, miss: ['no read yet'], forb: [], unsure: false });
   assert.deepStrictEqual(Q.gradeAnswer(QUIZ, q('q81'), 'F4'), { id: 'q81', line: 'F4', fmt: false, pass: true, miss: [], forb: [], unsure: false });
@@ -772,4 +806,96 @@ test('quizErrors: gate.minChoices (2 or more) and gate.maxChoices (minChoices or
   assert.match(Q.quizErrors({ ...QUIZ, gate: { ...QUIZ.gate, maxChoices: 3 } }).join('\n'), /questions\[\d+\]\.choices: 2 to 3 distinct phrases/);
   // Without the quiz's gate a choice question is refused (never checked against a bound the code makes up).
   assert.deepStrictEqual(Q.questionErrors(q('q79'), { part: 'questions', at: 'question' }), ["question.choices: checked against the quiz file's gate.minChoices and gate.maxChoices (none given)"]);
+});
+
+// Quiz realism (feat/chop-read, PREREG addendum 14): an item's synthetic briefing prints the Market state line the live
+// briefing would, computed by market-state.js stateOf from the item's own printed lines (the Bias line's 4h and 1h, the
+// Pullback line, m3.lastBreak, the Day so far line, the 3m CISD, the initial balance and the price). Part B's bias excerpts
+// hold too few facts for a full state and print none (D3).
+// Quiz realism (round 20b): an item without bar data states its layer facts (`layers`: what its text says, e.g. no leg
+// holds, overlap high, efficiency low, a failed continuation), and the line is built by the same code (market-state.js on
+// m3.layers) so it prints what the item describes; without them the printed breaks alone (never chop).
+test('marketStateOfText with an item\'s layer facts: the layered line, the same code as the live briefing\'s', () => {
+  const head = (t, lines) => [`Briefing lines (synthetic, ${t} ET), flat:`, ...lines].join('\n');
+  const BL = '- Bias: long only (4h up, 1h up; short refused).';
+  const DAY = '- Day so far (23 3m bars; `day-context`): rotational: efficiency 0.05 (x sqrt(bars) 0.24), RTH VWAP crosses 8, range 3.2 x 3m ATR(14), net up.';
+  const PAIR = '- m3.lastBreak: last CHoCH down at 21518.75 (barsAgo 1), previous CHoCH up at 21526.50 (barsAgo 4).';
+  const text = head('10:39', [BL, DAY, PAIR]);
+  const chop = { rthBars: 23, structure: { side: 'down', level: 21526.5, legOK: false }, behavior: { word: 'overlapping', word15: 'overlapping', overlap: 0.74, eff: 0.05 }, chop: { inChop: true, now: true, S: true, B: true, facts: { ov: true, ef: true, fl: true }, evidence: { bothWays: true } } };
+  assert.strictEqual(Q.marketStateOfText(text), 'Market state (3m): range: 3m CHoCH up then CHoCH down (unconfirmed); 4h+1h up; class trend-up', 'no layer facts: the printed breaks alone');
+  assert.strictEqual(Q.marketStateOfText(text, chop), 'Market state (3m): chop: no leg holds (breaks both ways); overlap 0.74, efficiency 0.05, failed continuation; 15m overlapping; Day so far rotational, RTH VWAP crosses 8; 4h+1h up; class chop');
+  const L = Q.layersOf(chop);
+  assert.deepStrictEqual([L.transition, L.stale, L.pbRotation, L.momentum.trigger, L.chop.facts.nd, L.chop.evidence.flip, L.structure.status, L.structure.origin], [false, false, false, false, false, false, 'intact', 21526.5], 'the facts not stated: absent');
+  const brk = { rthBars: 24, structure: { side: 'down', level: 21495, status: 'broken', flip: { barsAgo: 1, disp: false, oldSide: 'up', oldLevel: 21480.25 } } };
+  assert.strictEqual(Q.marketStateOfText(text, brk), 'Market state (3m): range: no leg holds, HL 21480.25 broken 3 min ago; 4h+1h up; class trend-up', 'a broken protected level: the flip\'s facts not stated filled (undisplaced, by a close)');
+  assert.throws(() => Q.layersOf({ behavior: {} }), /structure/);
+  const QUIZ0 = QUIZ;
+  const one = QUIZ0.questions.find(x => x.id === 'q119');
+  assert.deepStrictEqual(Q.questionErrors({ ...one, layers: 'chop' }, { part: 'questions', at: 'q', gate: QUIZ0.gate }), ['q.layers: the layer facts its text states ({ rthBars, structure: { side, level, ... }, behavior, chop, ... })']);
+  assert.deepStrictEqual(Q.questionErrors({ ...one, layers: { behavior: {} } }, { part: 'questions', at: 'q', gate: QUIZ0.gate }), ['q.layers: the layer facts its text states ({ rthBars, structure: { side, level, ... }, behavior, chop, ... })']);
+  // Facts that need another fact the line prints are refused, never a crash or an "undefined" in the line (20b review).
+  const err = layers => Q.questionErrors({ ...one, layers }, { part: 'questions', at: 'q', gate: QUIZ0.gate });
+  const S0 = { side: 'down', level: 21526.5 };
+  assert.deepStrictEqual(err(chop), []);
+  assert.deepStrictEqual(err({ structure: { level: 1 } }), ['q.layers.structure: side up or down and a level']);
+  assert.deepStrictEqual(err({ structure: { ...S0, status: 'broken' } }), ['q.layers.structure.flip: a broken leg or a transition states its flip ({ oldSide, oldLevel, barsAgo })']);
+  assert.deepStrictEqual(err({ structure: S0, transition: true }), ['q.layers.structure.flip: a broken leg or a transition states its flip ({ oldSide, oldLevel, barsAgo })']);
+  assert.deepStrictEqual(err({ structure: { ...S0, status: 'broken', flip: 'x' } }), ['q.layers.structure.flip: a broken leg or a transition states its flip ({ oldSide, oldLevel, barsAgo })']);
+  assert.deepStrictEqual(err({ structure: S0, behavior: { word: 'mixed', overlap: 0.5, eff: 0.4 } }), ['q.layers.behavior: its word and word15']);
+  assert.deepStrictEqual(err({ structure: S0, chop: { inChop: true, facts: { ov: true } } }), ['q.layers.chop.facts: overlap and efficiency need the behavior\'s numbers']);
+  assert.deepStrictEqual(err({ structure: S0, stale: true }), ['q.layers.stale: needs the structure\'s sinceProgress (bars)']);
+  assert.throws(() => Q.layersOf({ structure: { ...S0, status: 'broken' } }), /flip/, 'layersOf refuses what questionErrors refuses');
+});
+
+test('marketStateOfText: the Market state line from an item\'s printed lines', () => {
+  const head = (t, lines) => [`Briefing lines (synthetic, ${t} ET), flat:`, ...lines].join('\n');
+  const BL = '- Bias: long only (4h up, 1h up; short refused).';
+  assert.strictEqual(Q.marketStateOfText('no briefing here'), null);
+  assert.strictEqual(Q.marketStateOfText(head('10:30', [BL])), 'Market state (3m): range: no 3m break printed; 4h+1h up; class trend-up');
+  assert.strictEqual(Q.marketStateOfText(head('10:30', ['- Bias: long only (4h range, 1h up; short refused).'])), 'Market state (3m): range: no 3m break printed; 4h range, 1h up (not aligned); class unclear');
+  assert.strictEqual(Q.marketStateOfText(head('10:30', ['- Bias: no side yet (15m range).'])), 'Market state (3m): range: no 3m break printed; 4h range, 1h range (not aligned); class unclear');
+  assert.strictEqual(Q.marketStateOfText(head('10:30', ['- Bias: no side (4h up, 1h down) → no entry.'])), 'Market state (3m): range: no 3m break printed; 4h up, 1h down (not aligned); class unclear');
+  // Round 17 (q95): an item that prints `m3.lastBreak: none since the RTH open` states its RTH breaks (none), so its clock
+  // is the close, as the live briefing's is: the line equals the live one on the same inputs (09:39 ET, the only 3m breaks
+  // premarket), `forming`. Without that line an item shows less and keeps "no 3m break printed" (round 20: under `range`).
+  const NONE = '- m3.lastBreak: none since the RTH open.';
+  const M = require('../../scripts/lib/trading/market-state');
+  const an = require('../../scripts/lib/tunables').analysis();
+  const th = M.stateThresholds(an); // the briefing's (lineBytes too)
+  const et = hhmm => new Date(Date.parse('2026-01-06T05:00:00.000Z') + (Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3))) * 60000).toISOString();
+  const pre = (kind, direction, level, at) => ({ kind, direction, level, barsAgo: 5, at: et(at) });
+  for (const [t, live] of [['09:39', { last: pre('BOS', 'up', 21440, '09:15'), previous: pre('BOS', 'up', 21420, '08:51') }], ['09:39', { last: null, previous: null }], ['10:42', { last: pre('BOS', 'up', 21440, '09:24'), previous: null }]]) {
+    const b = { minutes: 3, closedAt: et(t), sections: { h1: { data: { h4: { trend: 'up' }, h1: { trend: 'up' } } }, m3: { data: { lastBreak: live } } } };
+    assert.strictEqual(Q.marketStateOfText(head(t, [BL, NONE])), M.marketStateLine(M.stateOf(b, th)), `${t} ${JSON.stringify(live.last)}`);
+  }
+  assert.strictEqual(Q.marketStateOfText(head('09:39', [BL, NONE])), 'Market state (3m): forming (no RTH structure yet); 4h+1h up; class trend-up');
+  assert.strictEqual(Q.marketStateOfText(head('09:39', [BL])), 'Market state (3m): range: no 3m break printed; 4h+1h up; class trend-up');
+  // The live briefing prints this line from the same two functions (briefing.js).
+  assert.match(fs.readFileSync(path.join(__dirname, '../../scripts/lib/trading/briefing.js'), 'utf8'), /marketStateLine\(stateOf\(b, STATE_TH\)\)/);
+  const PBL = '- Pullback (15m, long leg 21462.5 -> 21538.75): depth 54% of the leg; 10 bars since the extreme.';
+  assert.strictEqual(Q.marketStateOfText(head('10:30', [BL, PBL])), 'Market state (3m): pullback (long leg 21462.5 -> 21538.75, depth 54%); 4h+1h up; class trend-up');
+  assert.strictEqual(Q.marketStateOfText(head('10:30', [BL, '- Pullback (15m, long leg 21462.5 -> 21538.75): the leg given back past its origin; 30 bars since the extreme.'])), 'Market state (3m): range: no 3m break printed; 4h+1h up; class trend-up');
+  assert.strictEqual(Q.marketStateOfText(head('10:30', [BL, '- Pullback (15m, long leg 21462.5 -> 21538.75): leg 0.8x ATR(14), under the 1.5x floor: no depth; 4 bars since the extreme.'])), 'Market state (3m): pullback (long leg 21462.5 -> 21538.75, small leg); 4h+1h up; class trend-up');
+  const PAIRL = '- m3.lastBreak: last CHoCH up at 21512.25 (barsAgo 2), previous CHoCH down at 21497.75 (barsAgo 7).';
+  const ROT = '- Day so far (22 3m bars; `day-context`): rotational: efficiency 0.04 (x sqrt(bars) 0.19), RTH VWAP crosses 3, range 3.4 x 3m ATR(14), net up.';
+  const MIX7 = '- Day so far (22 3m bars; `day-context`): mixed up: efficiency 0.1 (x sqrt(bars) 0.47), RTH VWAP crosses 7, range 3.4 x 3m ATR(14), net up.';
+  // Round 20: an item has no layers, so its CHoCH pair is never chop (the owner: the pair alone is not chop).
+  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, ROT, PAIRL])), 'Market state (3m): range: 3m CHoCH down then CHoCH up (unconfirmed); 4h+1h up; class trend-up');
+  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, MIX7, PAIRL])), 'Market state (3m): range: 3m CHoCH down then CHoCH up (unconfirmed); 4h+1h up; class trend-up');
+  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, PBL, ROT, PAIRL])), 'Market state (3m): pullback (long leg 21462.5 -> 21538.75, depth 54%): 3m CHoCH down then CHoCH up; 4h+1h up; class trend-up');
+  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, '- m3.lastBreak: last BOS up at 21516.75 (barsAgo 0), previous BOS up at 21511.25 (barsAgo 2).'])), 'Market state (3m): in the up leg: 3m BOS up then BOS up, 0 min ago; 4h+1h up; class trend-up');
+  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, '- m3.lastBreak: last CHoCH down at 21529.50 (barsAgo 0).'])), 'Market state (3m): range: 3m CHoCH down (unconfirmed); 4h+1h up; class trend-up', 'one break printed: no pair, no RTH claim');
+  // The 15m frame's trend and last break (the quiz's prose for the fields): the early read; the 15m guard.
+  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, '- m15.frame.trend: up.', '- m3.lastBreak: last BOS down at 21506.25 (barsAgo 1), previous CHoCH down at 21512.75 (barsAgo 5).'])), 'Market state (3m): in the down leg: 3m CHoCH down then BOS down, 3 min ago; 15m up: a pullback in the 15m trend; 4h+1h up; class trend-up');
+  // Round 20: the 15m confirm of a 3m pair left with the pair's chop rule (review 6.6: no pair to confirm).
+  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, '- m15.lastBreak: last BOS up at 21500.00 (barsAgo 0).', PAIRL])), 'Market state (3m): range: 3m CHoCH down then CHoCH up (unconfirmed); 4h+1h up; class trend-up');
+  // A confirmed turn: a 3m CISD up closed after the CHoCH's candle (barsAgo 2 at 10:36: opened 10:27, closed 10:30), or a
+  // close beyond the initial balance.
+  const CISD = c => `- CISD (completed candles): 3m bullish at 21515.00 (closed ${c}, strong), no key-level sweep, OTE 21509.25-21511.75 (mid 21510.5), waiting.`;
+  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, ROT, PAIRL, CISD('10:36')])), 'Market state (3m): in the up leg: 3m CHoCH down then CHoCH up, then a 3m CISD up (confirmed); 4h+1h up; class trend-up');
+  assert.match(Q.marketStateOfText(head('10:36', [BL, ROT, PAIRL, CISD('10:30')])), /: range: /, 'closed with the CHoCH\'s own candle');
+  const IB = '- MNQ day: opened 21500; initial balance 21480-21560 (80 points), extended 3.25 up and 0 down: normal variation up.';
+  assert.strictEqual(Q.marketStateOfText(head('11:00', [BL, '- Price 21563.25.', IB, ROT, '- m3.lastBreak: last CHoCH up at 21558.25 (barsAgo 0), previous CHoCH down at 21497.75 (barsAgo 5).'])), 'Market state (3m): in the up leg: 3m CHoCH down then CHoCH up, then a close above the IB high 21560 (confirmed); 4h+1h up; class trend-up');
+  // The RTH pair: a previous break before 09:30 ET does not count.
+  assert.strictEqual(Q.marketStateOfText(head('09:36', [BL, '- m3.lastBreak: last CHoCH up at 21512.25 (barsAgo 0), previous CHoCH down at 21497.75 (barsAgo 4).'])), 'Market state (3m): range: 3m CHoCH up (unconfirmed); 4h+1h up; class trend-up');
 });

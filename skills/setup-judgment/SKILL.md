@@ -7,7 +7,7 @@ description: Use when deciding a cycle, and before any entry - each setup's fact
 
 ## When to Use
 
-- Every decision (`trade-session` step 3); the gate refuses an entry without
+- Every decision (`trade-session` step 3, the head-trader synthesis); the gate refuses an entry without
   it and `trade-plan`.
 
 ## How It Works
@@ -26,8 +26,8 @@ description: Use when deciding a cycle, and before any entry - each setup's fact
 - Tabulate each analyst's bias and confidence. Each read is in its category of the count.
 - Start from the computed regime (the briefing's `m3` `regime`, the same value
   market-snapshot and `strategies_scan` report): trend-up, trend-down, range, or transition,
-  plus volatility. Don't override it with a narrative; if the analysts disagree
-  with it, say why in the plan.
+  plus volatility: a read, not the class (the `Market state` line's). Don't override it
+  with a narrative; if the analysts disagree with it, say why in the plan.
 - **A prop attempt with a policy strategy is running** (the prompt lists
   verdicts, or `combine_status` names a policy strategy): the policy
   strategy's verdict is the only trade there can be. Plan it (`setup:<policy

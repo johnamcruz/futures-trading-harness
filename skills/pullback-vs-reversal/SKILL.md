@@ -19,16 +19,16 @@ hypotheses; a missing field is `unknown`. "Last 10 bars": the prompt's `V`, `(c-
 | Sign | Pullback | Reversal | Field |
 |---|---|---|---|
 | HTF break | with the trend | a CHoCH against it | `m15.lastBreak.last`, `h1.lastBreak.last`; `Pullback` breaks |
-| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; open: Trade read |
+| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; in a trade: the Trade read; the Market state names the pullback only while the leg has never retraced past about 62% since its extreme, was never given back, and its 15m swing holds; the `Pullback` line prints regardless |
 | Swing | the leg's 15m/1h swing holds | a 3m close broke it | `Pullback` swings (closes since the extreme); `m3.htfLevels` `brokenAt` (since the swing formed) |
 | Volume, bars | falling, shrinking | rising, wide against it | `Pullback` volume, range vs the leg; last 10 bars |
 
 **Flat**: the `Pullback` line (price against the prevailing side on the
-15m) holds these pieces; weigh them with the confirmation at a level. A
-trade open: the Trade read governs.
+15m) holds these pieces; weigh them with the confirmation at a level. In a
+trade: the Trade read governs.
 
 **The pullback to a broken level** (15m read, 3m entry; up shown, down
-the mirror). Open from the `Pullback` line (steps 6-7 outlive it). BOS the
+the mirror). Start from the `Pullback` line (steps 6-7 outlive it). BOS the
 side's way confirms, CHoCH against warns; a CISD reads as the same: the
 side's way as a BOS, against as a CHoCH, earlier (`cisd`). Strong
 (`displacement` strong; an engulfing confirming candle, `engulfing`, is
@@ -43,7 +43,8 @@ never the composed setup read (`compose_check` takes a live strong one):
 3. Price pulls back toward it: small counter candles inside the impulse
    candle's range (`N in a row inside the <time> candle`: `compression`'s
    pennant), `Pullback` volume falling, its 15m swing holding. A 15m
-   `range` or `transition` here is the pause, not chop. The label is no
+   `range` or `transition` here is the pause, not chop. The class word
+   is the Market state line's (`trade-session`). The label is no
    evidence of resumption either. The impulse (a 15m `displacement` the
    side's way, or the CISD's `leg`) sets the leg: measure the pullback on
    it (`fib-retracement`, the CISD's `ote`), depth and location only, never
@@ -55,13 +56,20 @@ never the composed setup read (`compose_check` takes a live strong one):
    between; the `engulfing` label and the CISD's `engulfing` compare only
    the prior candle. Printed proxies: the printed `inside the <time> candle <low>-<high>`
    (the impulse candle's), the `Pullback` depth.
-4. **The setup**: the 15m turn: a live 15m CISD, a 15m BOS or a 15m
-   reaction at the level, the side's way → the pullback ended on the 15m;
-   no 15m BOS to wait for after a strong CISD or a reaction; a live strong
-   15m CISD on the CISD line is the setup read even when the last 15m
+4. **The setup**: the 15m turn: a live strong 15m CISD, a 15m BOS, a 15m CHoCH
+   back or a 15m reaction at the level, the side's way → the pullback ended
+   on the 15m; no 15m BOS to wait for after a strong CISD, a CHoCH back or a
+   reaction; a 15m CHoCH back: the first 15m break back after the
+   pullback's break against (`m15.lastBreak.last` the side's way, known at
+   its close), the potential reversal of the pullback, the trend resuming;
+   a later 15m BOS: hold; a live strong 15m CISD on the CISD line is the setup read even when the last 15m
    candle line shows no pattern (`15m cisd up|down`). The level: the
    broken one or a level next to it (the RTH VWAP, a 15m swing; within
    about 0.25 x the 15m ATR, a hypothesis: one zone; `levels-and-reactions`).
+   A 15m rejection of the RTH VWAP or a 15m swing inside the zone (within
+   about 0.25 × the 15m ATR of the broken level) is the reaction; no
+   exact touch of the broken level is needed; the entry still needs the
+   3m BOS or CISD near value.
    Composed as `15m cisd up` (true while live), or that 15m candle's read
    (`15m rejected <level> up`: long-wick, engulfing or confirmed,
    `candle-reading`; a BOS's breaking candle `15m broke <level> up`), true
@@ -84,7 +92,7 @@ never the composed setup read (`compose_check` takes a live strong one):
    hold. After a failed pullback, a later 15m BOS is a new broken level:
    its own pullback and steps 4-6 are the entry, never the BOS bar itself.
 8. A 15m CHoCH or CISD against → this pullback failed, a reversal
-   attempt: wait for a new 15m turn the side's way (step 4); open: the
+   attempt: wait for a new 15m turn the side's way (step 4); in a trade: the
    Trade read (`manage-position`); never counter. A 3m CHoCH or CISD
    against inside it: the watch restarts. Most of the leg given back, or
    its 15m swing broken by a close: against in the count; a candle at the
@@ -92,10 +100,10 @@ never the composed setup read (`compose_check` takes a live strong one):
    with-side read on that leg.
 
 **Close to it is a read.** The sequence is the reference picture, not a
-checklist: depth, the pause's shape, the exact touch of the level, the
+checklist: depth, the pause's shape, how near the level it stopped, the
 candle type and the distance to value weigh in the count
-(`confluence-counting`); no exact touch or no named candle alone is no
-reason to wait (a live strong 15m CISD or a 15m BOS is the read then). Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
+(`confluence-counting`); a stop short of the level inside the zone, or no
+named candle, is no reason to wait (a strong 15m CISD or a 15m BOS is the read). Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
 or CISD against → wait; the entry needs a 3m BOS or CISD the side's way
 and a true 15m setup read the side's way (`compose_check` requires the
 15m read; the 3m timing and the wait lines are yours).
@@ -137,12 +145,12 @@ engulfing the impulse: unmeasured. Taught as the read, no edge shown.
 Take: long (4h, 1h up); 15m pullback to the broken prior RTH high 21500.00, inside candles, V
   falling, swing 21462.50 holds; 15m turn: CISD up, strong (a bullish engulfing); 3m: BOS up,
   RTH VWAP +0.3, near value -> strong setup: enter, a limit at the 3m close 21518.25.
-Watch: long; 15m pullback to 21500.00; 15m turn: CISD up, weak; 3m: CHoCH up, no BOS -> watch.
+Watch: long; 15m pullback to 21500.00; 15m turn: CISD up, weak; 3m: CHoCH up -> watch.
 Wait: long; 15m pullback to 21500.00; 15m turn: none, a 15m CHoCH down -> wait; no short.
 Close: long; the pullback stopped at 21502.25 (no touch); 15m turn: rejected the RTH VWAP 21502.50
   up (long-wick, still the last 15m); 3m: CISD up, RTH VWAP +0.4 -> enter: the lines hold.
-Pause: 4h, 1h up; after the 15m break up, 15m transition, inside candles, swing holds: the
-  pause, not chop -> class trend-up.
+Pause: 4h, 1h up; after the 15m break up, 15m transition, inside candles, swing holds; the
+  Market state line prints the pullback -> class trend-up (the line's).
 Skip: 15m, then 1h CHoCH down, the 1h ranging; 15m swing low broken; wide down bars, rising V:
   reversal attempt. A long: the 1h CHoCH against is decisive -> pass.
 Loser: long at 21502.25, stop 21493.75 (8.50 pts = 34 ticks, $17.00 on 1 MNQ); a 15m close

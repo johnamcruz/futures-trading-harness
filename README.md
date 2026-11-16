@@ -45,8 +45,8 @@ rest on.
 | Step | Read | Action |
 |---|---|---|
 | Side | The 4h and the 1h both trend one way. | Trade only that way; never counter it. |
-| Market | A 15m pullback, `range` or `transition` under a 4h and 1h that agree is a pause, not chop. Chop is choppy movement (breaks both ways without follow-through), not range geometry. | Pause: look for the setup. Chop: sit out. |
-| Setup | The 15m pullback turns the side's way: a live 15m CISD, a 15m BOS, or a 15m reaction at the level. | The setup is on. |
+| Market | The briefing's `Market state` line: what the 3m market is doing, computed once by code on its RTH breaks: chop (a 3m CHoCH then a CHoCH back, a failed reversal; not inside a pullback read, not when a current 15m BOS confirms the way it ends), trend up or down (a BOS whose protected swing holds, the pair a current 15m BOS confirms, or a CHoCH confirmed by a 3m CISD or a close beyond the initial balance), forming before the first RTH break, else ranging; the `Pullback` read and the 4h and 1h beside it, then the class code computes (`; class trend-up`). A BOS is continuation; a CHoCH is a potential reversal. A read, not a filter: no gate reads it. | The class word is the one the line prints, and only it: `chop` → `chop`, sit out; `(not aligned)` → `unclear`, no trade; a pullback their way, `ranging` or a trend their way → their trend class, setups their way (a pullback: wait for the 15m turn); `forming` → their trend class, no setup yet; a trend against them → `unclear`, no trade. |
+| Setup | The 15m pullback turns the side's way: a live strong 15m CISD, a 15m BOS, a 15m CHoCH back, or a 15m reaction at the level. | The setup is on. |
 | Entry | The first 3m BOS or CISD the side's way, near VWAP or the EMA20. | Compose on that confirming 3m bar: a limit at its close. Never a limit back at the broken level, and never a chase. |
 | Manage | A later 15m BOS the side's way. | Hold. |
 | Manage | A 15m CHoCH or CISD against. | This pullback failed. Flat: wait for a new 15m turn. In a trade: `manage-position` acts. Never counter. |
@@ -58,7 +58,11 @@ The model states its read as one chain, for example: "4h and 1h up; 15m
 pulling back to the broken level; 15m CISD up confirmed by a bullish
 engulfing candle; 3m BOS up near VWAP: a strong setup, enter."
 
-The full sequence is in
+The state table is in
+[skills/trade-session](skills/trade-session/SKILL.md) (step 3), the state's code in
+`scripts/lib/trading/market-state.js`, and the
+owner's chop definition in [skills/trend-vs-range](skills/trend-vs-range/SKILL.md).
+The full pullback sequence is in
 [skills/pullback-vs-reversal](skills/pullback-vs-reversal/SKILL.md), and the
 evidence behind it is in
 [docs/research/pullback-read-evidence.md](docs/research/pullback-read-evidence.md).
