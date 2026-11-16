@@ -205,6 +205,8 @@ test('one basis: the held best reaches the Trade read and the Manage read even w
   const read = tradeReadText(t, { bars: BARS, base: 3, tickSize: 0.25, exit: PLAN.afterTarget });
   assert.match(read, /: best 21530; /);
   assert.match(read, /warning giveback \(0\.5R behind the best\): 21525 /, '21530 - 0.5 x 10');
+  // The record's own numbers are the held trade's, not the window's (the bars alone give a lower best).
+  assert.strictEqual(t.mfeR, 2.98);
 });
 
 test('several working stops: the line and the sentence name the same one rule (the loosest is the exposure) and say how many', () => {
