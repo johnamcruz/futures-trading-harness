@@ -154,7 +154,7 @@ function limitOutcome({ bars, tfMs, side, entry, stop, target, fromMs, expiresMs
  * inside bar i; on that bar only what follows the fill counts, and its OHLC can't tell what that was, so the worse is
  * taken: the stop is hit when the bar reaches it (filled at the stop with the expected slippage, never at the bar's
  * open, which came before the fill) and the target never is. Every later bar: the stop first (the stop's fill, or the
- * open when the bar gapped through it), then the target, then the end of day (the session's change, or the bar closing
+ * open when the bar gapped through it, each less the expected slippage), then the target, then the end of day (the session's change, or the bar closing
  * at eodMs). Returns { exitPrice, exitMs (the exit bar's close), reason: stop | target | eod, maeR, mfeR }, or null when
  * the bars end first. maeR (<= 0) and mfeR (>= 0): the worst and best move from the fill while held, in R of `risk`,
  * measured as tripOutcome measures a real trade's (only the outcome takes the worse case): the bars held whole (a fill
@@ -190,7 +190,9 @@ function bracketExit({ bars, i, partial = false, tfMs, side, fill, risk, targetD
     const fillBar = partial && j === i;
     if (tradingDayKey(new Date(b.ms)) !== day) return out(last.c, last, 'eod');
     const stopFill = stopPx - s * SLIPPAGE_TICKS * tick;
-    if (s > 0 ? b.l <= stopPx : b.h >= stopPx) return out(fillBar ? stopFill : s > 0 ? Math.min(stopFill, b.o) : Math.max(stopFill, b.o), b, stopPx === initial ? 'stop' : 'trail');
+    // A gap through the stop fills at the open less the same slippage (the backtester's broker, the attempt simulator and
+    // the live broker alike: tests/lib/exit-parity.test.js), never at the open itself.
+    if (s > 0 ? b.l <= stopPx : b.h >= stopPx) return out(fillBar ? stopFill : (s > 0 ? Math.min(stopPx, b.o) : Math.max(stopPx, b.o)) - s * SLIPPAGE_TICKS * tick, b, stopPx === initial ? 'stop' : 'trail');
     if (!fillBar && !after && targetPx !== null && (s > 0 ? b.h >= targetPx : b.l <= targetPx)) return out(targetPx, b, 'target');
     // Held the whole bar (no exit inside it, the fill before it): both extremes count, as tripOutcome's bars inside.
     if (!fillBar) {
@@ -528,4 +530,4 @@ function replaceDecisions(file, runId, lines, { allowEmpty = false } = {}) {
   return { removed: old.length - kept.length, added: lines.length };
 }
 
-module.exports = { VERSION, replaceDecisions, BRACKETS, exitHash, exitRecord, FRAME, limitOutcome, bracketExit, tripOutcome, tripExcursion, legsOf, settledDay, frameOf, buildDecisions, appendDecisions, readDecisions, logFile, gradeOf };
+module.exports = { VERSION, replaceDecisions, BRACKETS, exitHash, exitRecord, FRAME, limitOutcome, bracketExit, swingsFor, tripOutcome, tripExcursion, legsOf, settledDay, frameOf, buildDecisions, appendDecisions, readDecisions, logFile, gradeOf };

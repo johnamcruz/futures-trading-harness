@@ -151,10 +151,11 @@ test('arming parity: tier 1 arms where live arms for the same plan (scenario 1: 
   const tier1Exit = (bars, target) => limitOutcome({ bars, tfMs: 180000, side: 'long', entry: plan.entry.price, stop: plan.stop.price, target, fromMs: t0, expiresMs: t0 + P.validBars * 180000, tick, plan: plan1 });
   // A peak a tick short of the named target (past the 2R mark 21595.75): live never arms, and tier 1 neither (stopped
   // out); armed at the 2R mark instead, tier 1 would have trailed out in profit.
+  // With the rulebook's early lock (lock_at_r) both have locked by then, unarmed: out at the same lock stop.
   const short = path(21597.75);
-  assert.deepStrictEqual([liveExit(short).reason, tier1Exit(short, tier1).exitReason], ['stop', 'stop']);
-  assert.strictEqual(tier1Exit(short, tier1).exitPrice, liveExit(short).stop - SLIPPAGE_TICKS * tick, 'the original stop, the simulation\'s slippage beyond it');
-  assert.strictEqual(tier1Exit(short, 21595.75).exitReason, 'trail');
+  assert.deepStrictEqual([liveExit(short).reason, liveExit(short).armed, tier1Exit(short, tier1).exitReason], ['trail', false, 'trail']);
+  assert.strictEqual(tier1Exit(short, tier1).exitPrice, liveExit(short).stop - SLIPPAGE_TICKS * tick, 'the lock stop, the simulation\'s slippage beyond it');
+  assert.ok(tier1Exit(short, 21595.75).exitPrice > tier1Exit(short, tier1).exitPrice, 'armed at the 2R mark instead, it would have locked higher');
   // The peak at the named target: both arm, and both trail out at the same stop (the lock or trail the arming set).
   const reached = path(21598);
   const l = liveExit(reached);

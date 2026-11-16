@@ -108,10 +108,10 @@ const RISK_KEYS = ['stop', 'min_rr', 'max_risk_usd', 'stop_min', ...COMPOSED_RIS
 // A composed record's validity in base bars after its bar's close (the record's own window; the gate's briefing-age
 // check is on the cycle bar, a separate bound). Above 2 a record can outlive its setup's 15m candle (STRATEGY.md).
 const MAX_VALID_BARS = 5; // a ceiling on STRATEGY.md valid_bars (accepted 1 to 5); the shipped value is the document's
-const EXIT_KEYS = ['target_r', 'target', 'trail_activate_r', 'trail_giveback_r', 'max_bars', 'mode', 'lock_giveback_r', 'trail_by', 'trail_r', 'swing_tf', 'ratchet'];
+const EXIT_KEYS = ['target_r', 'target', 'trail_activate_r', 'trail_giveback_r', 'max_bars', 'mode', 'lock_giveback_r', 'trail_by', 'trail_r', 'swing_tf', 'ratchet', 'lock_at_r', 'lock_to_ticks', 'warning_giveback_r'];
 /** A policy strategy's exit modes and its after-target keys (its rulebook's exit; trading/rulebook.js EXIT_MODES). */
 const POLICY_EXIT_MODES = ['target', 'target_then_trail', 'trail'];
-const AFTER_TARGET_KEYS = ['lock_giveback_r', 'trail_by', 'trail_r', 'swing_tf', 'ratchet'];
+const AFTER_TARGET_KEYS = ['lock_giveback_r', 'trail_by', 'trail_r', 'swing_tf', 'ratchet', 'lock_at_r', 'lock_to_ticks', 'warning_giveback_r'];
 const MAX_FILE_BYTES = 256 * 1024;
 const has = (obj, k) => Object.prototype.hasOwnProperty.call(obj, k);
 
@@ -173,11 +173,15 @@ function exitErrors(x) {
     // The after-target trail (exit mode target_then_trail, trading/exit-trail.js): every key, valid, in that mode only.
     const after = AFTER_TARGET_KEYS.filter(k => x[k] !== undefined);
     if (x.mode === 'target_then_trail') {
-      for (const k of ['lock_giveback_r', 'trail_r']) req(typeof x[k] === 'number' && x[k] > 0 && x[k] <= 50, `exit.${k}: a number of R above 0`);
+      // The early lock's R and the warning giveback (both optional: the rulebook's `off` is left out) checked as the rest.
+      for (const k of ['lock_giveback_r', 'trail_r', ...['lock_at_r', 'warning_giveback_r'].filter(o => x[o] !== undefined)]) req(typeof x[k] === 'number' && x[k] > 0 && x[k] <= 50, `exit.${k}: a number of R above 0`);
       req(['r', 'structure'].includes(x.trail_by), 'exit.trail_by: r or structure');
       req(x.trail_by !== 'structure' || Object.hasOwn(SWING_TFS, x.swing_tf), `exit.swing_tf: one of ${Object.keys(SWING_TFS).join(', ')} (a structure trail's swings)`);
       // The ratchet: opt in (the rulebook's `ratchet: on`); off, or left out (the rulebook's `off` is), is today's lock.
       req([undefined, 'off', 'on'].includes(x.ratchet), 'exit.ratchet: on or off (left out: off)');
+      // The early lock (the rulebook's lock_at_r, lock_to_ticks): both or neither; its ticks a whole number, not negative.
+      req((x.lock_at_r === undefined) === (x.lock_to_ticks === undefined), 'exit: lock_at_r and lock_to_ticks go together');
+      if (x.lock_to_ticks !== undefined) req(Number.isInteger(x.lock_to_ticks) && x.lock_to_ticks === Math.abs(x.lock_to_ticks), 'exit.lock_to_ticks: a whole number of ticks, not negative');
     } else if (after.length) errors.push(`exit.${after[0]}: only for exit mode target_then_trail`);
     req(x.target_r !== undefined || x.target !== undefined || x.trail_activate_r !== undefined || x.mode === 'target' || x.mode === 'target_then_trail', 'exit: needs target_r, target, or trail_activate_r and trail_giveback_r');
     if (x.target_r !== undefined && x.trail_activate_r !== undefined) {

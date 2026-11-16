@@ -90,8 +90,18 @@ test('a policy\'s exit mode: the shipped policy keeps each trade\'s own stop and
   for (const r of ['on', 'off']) assert.deepStrictEqual(pol({ mode: 'target_then_trail', lock_giveback_r: 0.5, trail_by: 'r', trail_r: 1, ratchet: r }), [], r);
   for (const r of [true, 'yes', 1]) assert.ok(pol({ mode: 'target_then_trail', lock_giveback_r: 0.5, trail_by: 'r', trail_r: 1, ratchet: r }).some(e => /exit.ratchet: on or off/.test(e)), String(r));
   assert.ok(pol({ mode: 'target', ratchet: 'on' }).some(e => /exit.ratchet: only for exit mode target_then_trail/.test(e)));
+  // The early lock: both keys or neither, in target_then_trail only; the warning giveback R; carried into the plan only when set.
+  const ttt = x => pol({ mode: 'target_then_trail', lock_giveback_r: 0.5, trail_by: 'r', trail_r: 1, ...x });
+  assert.deepStrictEqual(ttt({ lock_at_r: 1, lock_to_ticks: 2, warning_giveback_r: 0.5 }), []);
+  assert.ok(ttt({ lock_at_r: 1 }).some(e => /exit: lock_at_r and lock_to_ticks go together/.test(e)));
+  assert.ok(ttt({ lock_at_r: 1, lock_to_ticks: 1.5 }).some(e => /exit.lock_to_ticks: a whole number of ticks, not negative/.test(e)));
+  assert.ok(ttt({ lock_at_r: 0, lock_to_ticks: 2 }).some(e => /exit.lock_at_r: a number of R above 0/.test(e)));
+  assert.ok(ttt({ warning_giveback_r: 0 }).some(e => /exit.warning_giveback_r: a number of R above 0/.test(e)));
+  assert.ok(pol({ mode: 'target', lock_at_r: 1, lock_to_ticks: 2 }).some(e => /exit.lock_at_r: only for exit mode target_then_trail/.test(e)));
   const plan = x => require('../../scripts/lib/trading/evaluator').exitPlan({ risk: { min_rr: 2 }, exit: { mode: 'target_then_trail', lock_giveback_r: 0.5, trail_by: 'r', trail_r: 1, ...x } }).afterTarget;
   assert.deepStrictEqual([plan({ ratchet: 'on' }).ratchet, 'ratchet' in plan({}), 'ratchet' in plan({ ratchet: 'off' })], [true, false, false], 'on carried as true; off left out (the plan and its hash as before)');
+  assert.deepStrictEqual([plan({ lock_at_r: 1, lock_to_ticks: 2 }).lockAtR, plan({ lock_at_r: 1, lock_to_ticks: 2 }).lockToTicks, 'lockAtR' in plan({}), 'warningGivebackR' in plan({})], [1, 2, false, false], 'the lock carried only when set (the plan and its hash as before without it)');
+  assert.strictEqual(plan({ warning_giveback_r: 0.5 }).warningGivebackR, 0.5);
   assert.ok(pol({ mode: 'trail' }).some(e => /mode trail needs trail_activate_r and trail_giveback_r/.test(e)));
   assert.ok(pol({ mode: 'own' }).some(e => /exit.mode: target, target_then_trail, trail/.test(e)));
   assert.ok(pol({}).some(e => /exit: mode target or target_then_trail .*or trail_activate_r and trail_giveback_r/.test(e)));

@@ -33,6 +33,9 @@ policies:                       # each policy strategy that trades this account 
       trail_r: 1                # target_then_trail: R behind the best price (trail_by r; with structure only when no swing's stop is under the close, over it for a short)
       swing_tf: 15m             # target_then_trail with trail_by structure: the swings the stop trails behind
       ratchet: off              # target_then_trail: on lifts the lock to the best R reached less lock_giveback_r; off (opt in only): the lock above
+      lock_at_r: 1              # target_then_trail: once the best price reached this many R (before the target too) ...
+      lock_to_ticks: 2          # ... the stop is at least the entry plus this many ticks (covers the stop's slippage); off with lock_at_r: no early lock
+      warning_giveback_r: 0.5   # target_then_trail, taught: on a warning the model may tighten to this many R behind the best price (no code moves it)
     multipliers: []             # enforced size multipliers folded into the verdict: none yet
 enforced: [daily_loss_soft, loss_streak_stop, sizing, exit, multipliers, target_stop, consistency_stop, one_position, hard_stops, trend_rule, trend_fade, entry_rule]
 taught: [room, mtf_read, skip_rules, confluence, secondary_context, halving]
@@ -137,6 +140,39 @@ each trade from its recorded path, prop/attempts.js exitAs):
 
   A swing trail farther in profit than the ratchet still wins. With `off`
   the stop stays at 14518.25 past the target until the trail passes it.
+  The early lock (`lock_at_r` 1, `lock_to_ticks` 2; target_then_trail only,
+  both set or both `off`; the owner, 2026-11-15: "We can't let green trades
+  turn red"): once the best price (closed bars' extremes) has reached
+  `lock_at_r`, before the target too, the stop is at least the entry plus
+  `lock_to_ticks` ticks, so a breakeven exit still fills at or over the entry
+  with 2 ticks of slippage (keep it at least `stop_slippage_ticks`). It
+  never loosens a tighter stop, and past the target the +0.5R lock and the
+  swing trail stand above it as before. The bar that first sets it does not
+  close the trade at market when its close is beyond the new stop: the stop
+  rests from that close, as the runner places it live; a close at or through
+  it closes the trade at that close (a stop above a long's market can't
+  rest). "Green never red" holds bar by bar: a gap through the resting stop,
+  or a refused or late modify (the next bar through it closes at market),
+  can still exit under it. Worked on an MNQ long (entry 21500.00, 1R 10
+  points = 40 ticks, $20.00 a micro; tick 0.25, $0.50 a tick; the target at
+  2R, 21520.00):
+
+  | Bar | Best | Stop | If stopped (1 tick slippage) |
+  |---|---|---|---|
+  | high 21509.75 | +0.975R | 21490.00 (the plan's) | -41 ticks, -$20.50 a micro |
+  | high 21510.00, low 21499.00, close 21508.00 | +1.000R | 21500.50 (rests: the close is over it) | +1 tick, +$0.50 a micro |
+  | the same bar closing at 21500.25 | +1.000R | 21500.50 | out at the close 21500.25: +1 tick, +$0.50 a micro |
+  | high 21520.00 (the target) | +2.000R | 21505.00 (the target's R less `lock_giveback_r`) | +19 ticks, +$9.50 a micro |
+
+  Measured before it shipped (docs: the entry/exit study and its
+  independent review, 2026-11-15; post hoc, the lock value chosen after
+  both halves were read): on today's mechanical entries the trades that
+  reached +1R and closed red fell from 70 / 86 to 7 / 11 (tuning /
+  hold-out), the 30-session pass rate moved 11.9% / 9.0% -> 6.6% / 9.6%,
+  and trades of +4R or more 6.5% / 5.1% -> 5.5% / 3.5%. `warning_giveback_r`
+  (0.5, taught, no code moves a stop by it) is the stop the model may
+  tighten to on a warning (`manage-position`): that many R behind the best
+  price; the open trade's manage read shows the level each cycle.
 - `trail`: hold the stop until `trail_activate_r`, then trail
   `trail_giveback_r` behind the best price, in place of the target. Kept only
   as a tunable: our research found this tight trail cut the edge.

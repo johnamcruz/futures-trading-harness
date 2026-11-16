@@ -245,3 +245,98 @@ test('liveTarget: a composed entry\'s target is its plan\'s price (the gate\'s s
   const s = liveTarget({ rec: { targetTicks: 78, composed: { entry: 14979.5, target: 14960 } }, entry: 14981.5, sign: -1, tick: 0.25, orders: [{ id: 11, contractId: 'MNQ', type: 1, side: 0, size: 1, limitPrice: 14962 }], contractId: 'MNQ' });
   assert.deepStrictEqual([s.price, s.cancel.map(o => o.id)], [14960, [11]]);
 });
+
+// The early lock (the rulebook's lock_at_r, lock_to_ticks; the entry/exit PR): once the best price reaches lockAtR the
+// stop moves to the entry plus lockToTicks ticks (breakeven covered against the stop's slippage), before the target.
+const LOCK = (over = {}) => AFTER({ lockGivebackR: 1.5, trailBy: 'structure', swingMinutes: 15, trailR: 1, lockAtR: 1, lockToTicks: 2, ...over });
+
+test('afterTargetStep lock: at +lockAtR the stop moves to the entry plus lockToTicks ticks, before the target; never before', () => {
+  // Short of +1R (peak 0.975R): nothing moves.
+  const short = afterTargetStep(LONG(), { h: 109.75, l: 101, c: 108 }, LOCK(), 0.25);
+  assert.deepStrictEqual([short.stop, short.locked, short.close], [90, false, null]);
+  // The bar reaching +1R (110): the stop goes to 100 + 2 ticks = 100.5; not armed (the target is 120).
+  const at = afterTargetStep(LONG(), { h: 110, l: 104, c: 109 }, LOCK(), 0.25);
+  assert.deepStrictEqual([at.stop, at.locked, at.armed, at.close], [100.5, true, false, null]);
+  // Locked stays locked from the peak (peakR carried): a later bar lower never loosens it, and it holds the lock.
+  const later = afterTargetStep({ ...LONG(), stop: at.stop, peakR: at.peakR }, { h: 106, l: 101, c: 102 }, LOCK(), 0.25);
+  assert.deepStrictEqual([later.stop, later.locked, later.close], [100.5, true, null]);
+  // A stop already tighter than the lock (the model tightened it) is kept.
+  assert.strictEqual(afterTargetStep(LONG({ stop: 103 }), { h: 110, l: 104, c: 109 }, LOCK(), 0.25).stop, 103);
+  // The short mirror: entry 100, 1R 10; at 90 the stop is 100 - 0.5 = 99.5.
+  const s = afterTargetStep({ sign: -1, entry: 100, risk: 10, stop: 110, peakR: 0, armed: false, target: 80 }, { h: 96, l: 90, c: 91 }, LOCK(), 0.25);
+  assert.deepStrictEqual([s.stop, s.locked, s.close], [99.5, true, null]);
+  // Lock off (no keys: today's plan): nothing before the target, as before.
+  assert.strictEqual(afterTargetStep(LONG(), { h: 110, l: 104, c: 109 }, AFTER({ lockGivebackR: 1.5 }), 0.25).stop, 90);
+  // No target known: the lock still applies (it doesn't need the target).
+  assert.strictEqual(afterTargetStep(LONG({ target: null }), { h: 110, l: 104, c: 109 }, LOCK(), 0.25).stop, 100.5);
+  // A lock on an off-tick entry is snapped to the tick on the safe side (a long's down, a short's up).
+  assert.strictEqual(afterTargetStep(LONG({ entry: 100.1, stop: 90.1 }), { h: 110.1, l: 104, c: 109 }, LOCK(), 0.25).stop, 100.5);
+  assert.strictEqual(afterTargetStep({ sign: -1, entry: 99.9, risk: 10, stop: 109.9, peakR: 0, armed: false, target: 80 }, { h: 96, l: 89.9, c: 91 }, LOCK(), 0.25).stop, 99.5);
+});
+
+test('afterTargetStep lock bar: the new lock stop RESTS when the bar closes beyond it (no market close); closes at the close only when the close is through it', () => {
+  // The bar opened under the entry (98), touched +1R (110) and closed at +0.8R (108): the stop rests at 100.5, open.
+  const rest = afterTargetStep(LONG(), { o: 98, h: 110, l: 97, c: 108 }, LOCK(), 0.25);
+  assert.deepStrictEqual([rest.stop, rest.close], [100.5, null], 'no market close at the lock bar');
+  // A close exactly at the lock stop is not beyond it: out at the close.
+  const at = afterTargetStep(LONG(), { o: 98, h: 110, l: 97, c: 100.5 }, LOCK(), 0.25);
+  assert.deepStrictEqual([at.stop, at.close], [100.5, { price: 100.5, reason: 'lock' }]);
+  // A close through it (99): out at the close (a stop above the market can't rest).
+  const thru = afterTargetStep(LONG(), { o: 98, h: 110, l: 97, c: 99 }, LOCK(), 0.25);
+  assert.deepStrictEqual([thru.stop, thru.close], [100.5, { price: 99, reason: 'lock' }]);
+  // Short mirror: rests above a close under 99.5; a close through it closes.
+  const S = { sign: -1, entry: 100, risk: 10, stop: 110, peakR: 0, armed: false, target: 80 };
+  assert.deepStrictEqual(afterTargetStep(S, { o: 102, h: 103, l: 90, c: 92 }, LOCK(), 0.25).close, null);
+  assert.deepStrictEqual(afterTargetStep(S, { o: 102, h: 103, l: 90, c: 101 }, LOCK(), 0.25).close, { price: 101, reason: 'lock' });
+  // Only the lock rests: a bar that arms the target too (+2R) and sets a stop past the lock (the 1R fallback, peak 2.1R:
+  // 111) through its own low closes at its close, the trail's rule, unchanged.
+  const both = afterTargetStep(LONG(), { o: 101, h: 121, l: 100, c: 118 }, LOCK(), 0.25);
+  assert.deepStrictEqual([both.stop, both.armed, both.close], [111, true, { price: 118, reason: 'trail' }]);
+  // Once rested, a later bar through it is no lock-bar move: the callers fill it as a resting stop (no close here).
+  const next = afterTargetStep({ ...LONG(), stop: 100.5, peakR: 1 }, { o: 104, h: 105, l: 100, c: 101 }, LOCK(), 0.25);
+  assert.deepStrictEqual([next.stop, next.close], [100.5, null]);
+});
+
+test('afterTargetStep lock with the target: the shipped +0.5R floor at 2R and the swing trail still apply above the lock', () => {
+  let t = LONG();
+  const step = bar => { const r = afterTargetStep(t, bar, LOCK(), 0.25, bar.swing ?? null); t = { ...t, stop: r.stop, peakR: r.peakR, armed: r.armed }; return r; };
+  assert.strictEqual(step({ h: 111, l: 104, c: 110 }).stop, 100.5);
+  // 2R reached: the target's lock (2R - 1.5R = +0.5R: 105) and, with no swing yet, the 1R fallback (peak 2R - 1R: 110).
+  assert.strictEqual(step({ h: 120, l: 112, c: 119 }).stop, 110);
+  // A swing low confirmed at 116: the stop a tick under it.
+  assert.strictEqual(step({ h: 124, l: 118, c: 123, swing: 116 }).stop, 115.75);
+});
+
+test('afterTargetStep lock property: on random paths the stop never loosens; once locked every exit is at the lock or better but for a gap or the lock bar closing through it', () => {
+  const r = rng(11);
+  for (let n = 0; n < 400; n += 1) {
+    const sign = r() < 0.5 ? 1 : -1;
+    const risk = 2 + Math.floor(r() * 40) * 0.25;
+    const entry = 20000;
+    let t = { sign, entry, risk, stop: entry - sign * risk, peakR: 0, armed: false, target: entry + sign * 2 * risk };
+    let px = entry;
+    let locked = false;
+    const lockStop = entry + sign * 0.5;
+    for (let k = 0; k < 120; k += 1) {
+      const o = Math.round((px + (r() - 0.5) * risk * 0.8) * 4) / 4;
+      const c = Math.round((o + (r() - 0.5) * risk * 0.8) * 4) / 4;
+      const bar = { o, h: Math.max(o, c) + Math.round(r() * risk) / 4, l: Math.min(o, c) - Math.round(r() * risk) / 4, c };
+      // The resting stop first (as every caller fills it), at the stop or a worse open.
+      if (sign > 0 ? bar.l <= t.stop : bar.h >= t.stop) {
+        const fill = sign > 0 ? Math.min(bar.o, t.stop) : Math.max(bar.o, t.stop);
+        if (locked) assert.ok(sign * (fill - lockStop) >= 0 || sign * (bar.o - t.stop) < 0, `locked: a stop fill ${fill} at or past the lock ${lockStop}, or a gap`);
+        break;
+      }
+      const s = afterTargetStep(t, bar, LOCK({ trailBy: 'r' }), 0.25);
+      assert.ok(sign * (s.stop - t.stop) >= 0, 'never looser');
+      if (s.locked) assert.ok(sign * (s.stop - lockStop) >= 0, 'locked: the stop at the lock or tighter');
+      if (s.close) {
+        assert.ok(s.close.reason === 'trail' || sign * (bar.c - s.stop) <= 0, 'a lock-bar close only with the close through the stop');
+        break;
+      }
+      locked = s.locked;
+      t = { ...t, stop: s.stop, peakR: s.peakR, armed: s.armed };
+      px = c;
+    }
+  }
+});

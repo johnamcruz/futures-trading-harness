@@ -30,7 +30,7 @@ const { SWING_TFS } = require('./exit-trail');
 const { entryRuleErrors } = require('./entry-rule');
 
 /** The exit keys every policy entry states (its sizing keys: combine.js SIZING_KEYS, each key the sizing reads). */
-const EXIT_KEYS = Object.freeze(['mode', 'trail_activate_r', 'trail_giveback_r', 'lock_giveback_r', 'trail_by', 'trail_r', 'swing_tf', 'ratchet']);
+const EXIT_KEYS = Object.freeze(['mode', 'trail_activate_r', 'trail_giveback_r', 'lock_giveback_r', 'trail_by', 'trail_r', 'swing_tf', 'ratchet', 'lock_at_r', 'lock_to_ticks', 'warning_giveback_r']);
 /**
  * How a policy's trades exit (every key stated; a key the mode doesn't use is `off`):
  * - `target`: at each trade's own stop and target (a compose record's brackets, a rules component's own exit), with
@@ -40,7 +40,11 @@ const EXIT_KEYS = Object.freeze(['mode', 'trail_activate_r', 'trail_giveback_r',
  *   trails behind it (trail_by structure; trail_r behind the best price only with no swing whose stop is on the protective side of the close) or
  *   trail_r behind the best price (trail_by r)
  *   (trading/exit-trail.js); `ratchet: on` (opt in; `off` is the default, today's lock) lifts the lock with the trade:
- *   the best R reached, at least the target's, less lock_giveback_r;
+ *   the best R reached, at least the target's, less lock_giveback_r; the early lock (lock_at_r and lock_to_ticks, both
+ *   set or both off): once the best price has reached lock_at_r the stop is at least the entry plus lock_to_ticks ticks,
+ *   before the target too (the bar that sets it rests the stop when it closes beyond it); warning_giveback_r (taught,
+ *   no code moves a stop by it): the stop the model may tighten to on a warning, that many R behind the best price
+ *   (trading/manage-read.js shows the level);
  * - `trail`: the trail replaces the trade's own target (hold its stop until trail_activate_r, then trail_giveback_r
  *   behind the best price).
  */
@@ -136,6 +140,9 @@ const EXIT_VALUE = {
   trail_by: [x => x === OFF || TRAIL_BY.includes(x), `${TRAIL_BY.join(' or ')}, or ${OFF}`],
   swing_tf: [x => x === OFF || Object.hasOwn(SWING_TFS, x), `one of ${Object.keys(SWING_TFS).join(', ')}, or ${OFF}`],
   ratchet: [x => x === OFF || x === 'on', `on, or ${OFF} (the lock stays at the target's R less lock_giveback_r)`],
+  lock_at_r: EXIT_RULE,
+  lock_to_ticks: [x => x === OFF || (Number.isInteger(x) && x === Math.abs(x)), `a whole number of ticks over the entry, not negative, or ${OFF} (no early lock)`],
+  warning_giveback_r: EXIT_RULE,
 };
 
 /**
@@ -159,12 +166,14 @@ function exitErrors(x, at) {
   const offIn = (k, why) => { if (on(k)) out.push(`${at}.exit.${k}: ${OFF} in mode ${x.mode} (${why})`); };
   const trail = ['trail_activate_r', 'trail_giveback_r'];
   const after = ['lock_giveback_r', 'trail_by', 'trail_r', 'swing_tf'];
+  const only = ['ratchet', 'lock_at_r', 'lock_to_ticks', 'warning_giveback_r'];
   if (on(trail[0]) !== on(trail[1])) out.push(`${at}.exit: trail_activate_r and trail_giveback_r are both ${OFF} or both R (a trail needs both)`);
+  if (on('lock_at_r') !== on('lock_to_ticks')) out.push(`${at}.exit: lock_at_r and lock_to_ticks are both ${OFF} or both set (the early lock needs both)`);
   if (x.mode === 'trail') {
     for (const k of trail) need(k, 'the trail is how every trade exits');
-    for (const k of [...after, 'ratchet']) offIn(k, 'only target_then_trail trails after the target');
+    for (const k of [...after, ...only]) offIn(k, 'only target_then_trail trails after the target');
   } else if (x.mode === 'target') {
-    for (const k of [...after, 'ratchet']) offIn(k, 'only target_then_trail trails after the target');
+    for (const k of [...after, ...only]) offIn(k, 'only target_then_trail trails after the target');
   } else {
     for (const k of trail) offIn(k, 'it trails only once the target is reached');
     need('lock_giveback_r', 'the stop locks at the target\'s R less it');
