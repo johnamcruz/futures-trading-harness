@@ -1268,7 +1268,7 @@ A wick through a swing that closes back inside is a sweep, not a break
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
   CHoCH then BOS the same way: a confirmed transition; a reversal once a
-  close goes through the protected level.
+  close goes through the old leg's protected level.
 
 **Three layers** (owner): "1.
   Internal structure: Small swings inside the
@@ -2654,7 +2654,7 @@ A wick through a swing that closes back inside is a sweep, not a break
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
   CHoCH then BOS the same way: a confirmed transition; a reversal once a
-  close goes through the protected level.
+  close goes through the old leg's protected level.
 
 **Three layers** (owner): "1.
   Internal structure: Small swings inside the
@@ -4040,7 +4040,7 @@ A wick through a swing that closes back inside is a sweep, not a break
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
   CHoCH then BOS the same way: a confirmed transition; a reversal once a
-  close goes through the protected level.
+  close goes through the old leg's protected level.
 
 **Three layers** (owner): "1.
   Internal structure: Small swings inside the
@@ -5417,7 +5417,7 @@ A wick through a swing that closes back inside is a sweep, not a break
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
   CHoCH then BOS the same way: a confirmed transition; a reversal once a
-  close goes through the protected level.
+  close goes through the old leg's protected level.
 
 **Three layers** (owner): "1.
   Internal structure: Small swings inside the
@@ -6891,7 +6891,7 @@ A wick through a swing that closes back inside is a sweep, not a break
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
   CHoCH then BOS the same way: a confirmed transition; a reversal once a
-  close goes through the protected level.
+  close goes through the old leg's protected level.
 
 **Three layers** (owner): "1.
   Internal structure: Small swings inside the
@@ -8362,7 +8362,7 @@ A wick through a swing that closes back inside is a sweep, not a break
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
   CHoCH then BOS the same way: a confirmed transition; a reversal once a
-  close goes through the protected level.
+  close goes through the old leg's protected level.
 
 **Three layers** (owner): "1.
   Internal structure: Small swings inside the
@@ -9754,7 +9754,7 @@ A wick through a swing that closes back inside is a sweep, not a break
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
   CHoCH then BOS the same way: a confirmed transition; a reversal once a
-  close goes through the protected level.
+  close goes through the old leg's protected level.
 
 **Three layers** (owner): "1.
   Internal structure: Small swings inside the
@@ -11146,7 +11146,7 @@ A wick through a swing that closes back inside is a sweep, not a break
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
   CHoCH then BOS the same way: a confirmed transition; a reversal once a
-  close goes through the protected level.
+  close goes through the old leg's protected level.
 
 **Three layers** (owner): "1.
   Internal structure: Small swings inside the
@@ -12611,7 +12611,7 @@ A wick through a swing that closes back inside is a sweep, not a break
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
   CHoCH then BOS the same way: a confirmed transition; a reversal once a
-  close goes through the protected level.
+  close goes through the old leg's protected level.
 
 **Three layers** (owner): "1.
   Internal structure: Small swings inside the
@@ -14010,7 +14010,7 @@ A wick through a swing that closes back inside is a sweep, not a break
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
   CHoCH then BOS the same way: a confirmed transition; a reversal once a
-  close goes through the protected level.
+  close goes through the old leg's protected level.
 
 **Three layers** (owner): "1.
   Internal structure: Small swings inside the
@@ -15310,7 +15310,7 @@ A wick through a swing that closes back inside is a sweep, not a break
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
   CHoCH then BOS the same way: a confirmed transition; a reversal once a
-  close goes through the protected level.
+  close goes through the old leg's protected level.
 
 **Three layers** (owner): "1.
   Internal structure: Small swings inside the

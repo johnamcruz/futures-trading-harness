@@ -280,7 +280,7 @@ test('context quiz: the chop-read questions (q114-q133, less q115, q116, q117, q
     ['q130', 'lookup', ['bos-vs-choch'], 'the trend holds: no close below the protected HL 21480.25', /a BOS holds until the leg's higher low \(lower high\) breaks/g],
     ['q131', 'lookup', ['bos-vs-choch'], 'invalidated: the close below the protected HL ended the up trend (a potential reversal, unconfirmed)', /a BOS holds until the leg's higher low \(lower high\) breaks/g],
     ['q132', 'lookup', ['bos-vs-choch'], 'failed: the potential reversal up is invalidated', /a CHoCH holds until the low \(high\) that started the shift breaks/g],
-    ['q133', 'lookup', ['bos-vs-choch'], 'a confirmed transition up: the CHoCH up was followed by a BOS up', /CHoCH then BOS the same way: a confirmed transition; a reversal once a close goes through the protected level/g],
+    ['q133', 'lookup', ['bos-vs-choch'], 'a confirmed transition up: the CHoCH up was followed by a BOS up', /CHoCH then BOS the same way: a confirmed transition; a reversal once a close goes through the old leg's protected level/g],
     // Top-down: the 3m CHoCH pair the 15m BOS confirms is the 15m continuation (owner, 2026-11-15).
     ['q128', 'head', undefined, "trend-up: the 3m CHoCH pair is the 15m BOS up (continuation); long setups the side's way", /`trend`, their way: setups the side's way\./g],
     // The 15m CHoCH back the side's way is a 15m turn (owner-approved 2026-11-15).

@@ -63,7 +63,7 @@ test('round 20c: CHoCH then BOS confirms a transition; only a close through the 
   for (const [f, t] of [['bos-vs-choch', bc], ['trend-vs-range', tv]]) {
     assert.doesNotMatch(t, /CHoCH then BOS: confirmed|confirms the transition too|CHoCH then BOS[^.]{0,40}reversal confirmed/, `${f}: no CHoCH then BOS reversal`);
   }
-  assert.match(tv, /`CHoCH then BOS: transition confirmed` prints under `trend` or `in the leg`, never the `transition` state: the new leg, its old protected level unbroken; a reversal once a close goes through that level\./, 'a reversal only through the old level');
+  assert.match(tv, /`CHoCH then BOS: transition confirmed` prints under `trend`, `in the leg` or `weakening`, never the `transition` state: the new leg, its old protected level unbroken; a reversal once a close goes through that level\./, 'a reversal only through the old level');
 });
 
 test('round 20c: TRAINING.md and README state the round-20 Market state (three layers, chop = structural AND behavioral evidence, the classes, the pullback guard); no CHoCH-pair chop', () => {

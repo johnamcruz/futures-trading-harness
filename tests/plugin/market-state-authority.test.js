@@ -175,9 +175,13 @@ const CLASS_MAP = [
   /\b(?:is|are)\s+(?:a|an|the)\s+`?(?:chop|unclear)`?\s+(?:market|day|session|read|tape)\b/i,
   /\b(?:sit(?:s|ting)?\s+out|skip(?:s|ped)?|pass(?:es)?|stand(?:s)?\s+aside)\s+as\s+(?:a\s+)?`?(?:chop|unclear)`?(?![\w-])/i,
   // The follow-up review: "a chop day / market / session" in any frame, "treat ... as <word>", "signals / indicates <word>".
-  /(?:^|[\s:(])`?chop`?\s+(?:market|day|session|tape)\b/i,
+  /(?:^|[\s:(])`?chop`?[\s-]+(?:market|day|session|tape)\b/i,
   /\btreat(?:s|ed|ing)?\s+(?:[\w`+-]+\s+){0,4}?as\s+(?:a\s+)?`?(?:chop|unclear)`?(?![\w-])/i,
-  /\b(?:signals?|signal(?:s|led)|indicates?|indicated)\s+`?(?:chop|unclear)`?(?![\w-])/i,
+  /\b(?:signal(?:s|l?ed|ling)?|indicat(?:es?|ed|ing))\s+`?(?:chop|unclear)`?(?![\w-])/i,
+  // The second round: "it's <word>", ": <word>," and "call / consider / make <it|the day> <word>".
+  /\bit(?:'s| is)\s+`?(?:chop|unclear)`?(?![\w-])/i,
+  /:\s*`?(?:chop|unclear)`?\s*,/i,
+  /\b(?:call|calls|called|consider|considers|considered|makes?|made)\s+(?:it|the\s+(?:day|market|session))\s+`?(?:chop|unclear)`?(?![\w-])/i,
 ];
 const ALLOWED = [
   // The table: the one authority (trade-session step 3). Round 19: the table alone, and each kept bullet sentence exactly
@@ -269,9 +273,11 @@ test('market state authority: the scan catches a competing row or sentence (it f
     'The 15m range: write class `unclear`.', 'A CHoCH pair is the chop session.', 'Overlap: skip as `unclear`.',
     // The follow-up review's misses.
     "It's a chop day.", 'Two failed breaks make a chop day.', 'Treat the day as chop.', 'Overlapping bars signal chop.', 'Overlapping bars indicate chop.',
-    'You are in a chop market.', 'A CHoCH pair: chop day, sit out.'])
+    'You are in a chop market.', 'A CHoCH pair: chop day, sit out.', 'It reads as a chop-day.',
+    'Overlapping bars signaled chop.', 'Then it\'s chop.', 'Two failed breaks: chop, sit out.', 'Indicating chop.', 'Call the day chop.', 'Consider it chop.', 'This makes the day chop.'])
     assert.ok(scanText(s).length > 0, s);
-  for (const s of ['Chop ends on displacement.', 'A range day is a trend day for the side.', 'Sit out.', 'Write the class the line prints.'])
+  // A plural noun phrase names days, it maps no condition (README: "real trend legs and chop days").
+  for (const s of ['Real trend legs and chop days, candle by candle.', 'Chop ends on displacement.', 'A range day is a trend day for the side.', 'Sit out.', 'Write the class the line prints.'])
     assert.deepStrictEqual(scanText(s), [], s);
   for (const row of ['| 15m range | `unclear`: no trade |', '| 15m range | class `unclear` |', '| 3m CHoCH pair | chop, sit out |']) assert.strictEqual(scanText(row).length, 1, row);
   // The restored #338 sentence is allowed exactly: a near-variant is not blanked, and the scan still catches it.

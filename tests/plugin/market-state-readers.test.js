@@ -65,11 +65,12 @@ const STATE_FIELDS = [
   ['lastBreak...protected', /lastBreak\b[\w.[\]'"]*\.protected\b|\.protected\.(?:brokenAt|level)\b|\.(?:last|previous)\.protected\b/],
   // The review's bypasses: destructuring or bracket access, and the class word matched in the printed text.
   ['layers (any access: destructured, bracketed, a variable)', /\blayers\b/],
-  ['{ protected } =', /\{[^{}]*\bprotected\b[^{}]*\}\s*=/],
+  ['protected (destructured, bracketed, as a key or string)', /\bprotected\s*:|['"`]protected['"`]/],
   ['class <word>', /\bclass \(?`?(?:chop|unclear|trend-(?:up|down))\b/],
 ];
-// Comments name the fields freely (a reader is code): block and line comments are dropped before the scan.
-const code = t => t.replace(/\/\*[^]*?\*\//g, ' ').replace(/(^|[^:\\])\/\/[^\n]*/g, '$1');
+// Comments name the fields freely (a reader is code): a block comment opening its line and a line comment opening its
+// line, or after code and a space, are dropped before the scan; a "//" or "/*" inside a string or regex never starts one.
+const code = t => t.replace(/^[ \t]*\/\*[^]*?\*\//gm, ' ').replace(/^[ \t]*\/\/[^\n]*/gm, '').replace(/([;,{}()]\s+)\/\/ [^\n]*/g, '$1');
 const FIELD_READERS = ['scripts/lib/trading/market-state.js', 'scripts/lib/trading/market-layers.js', 'scripts/lib/trading/structure-layers.js', 'scripts/lib/trading/briefing.js',
   'scripts/lib/learning/recognition/key.js', 'scripts/lib/eval/context-quiz.js'];
 const DECIDES = /(^hooks\/|^scripts\/hooks\/|gate|gateway|compose|entry-rule|order-plan|decision|verdict|phase2|autotrader|runner)/;
@@ -95,7 +96,8 @@ test('round 20c: the field scan catches a reader that never requires market-stat
     "const classOf = s => (/; class (\\S+)\\./.exec(String(s)) || [])[1];",
     'const { layers } = b.sections.m3.data;', 'const x = m3["layers"];', 'const { chop } = layers; if (chop.now) refuse();', 'if (/class (chop|unclear)$/.exec(summary)) refuse();',
     'if (line.endsWith("class chop")) refuse();', 'const pr = lb.last.protected; if (pr.brokenAt) refuse();', 'const { protected: pr } = lb.last;',
-    'const r = m3.layers.pbRotation;', 'const c = MS.classWordOf(s);', "const lvl = b.sections.m3.data.lastBreak.last.protected.level;", 'if (last.protected.brokenAt) refuse();',
+    'const r = m3.layers.pbRotation;', 'const { last: { protected: pr } } = lb;', "const pr = lb.last['protected'];", "const k = 'protected'; const pr = lb.last[k];",
+    "const sep = '//'; if (b.sections.m3.data.layers.chop.now) refuse();", 'const u = `x${1}//`; if (s.inChop) refuse();', "const g = 'scripts/*.js'; const c = m3.layers.chop; const h = '*/';", 'const c = MS.classWordOf(s);', "const lvl = b.sections.m3.data.lastBreak.last.protected.level;", 'if (last.protected.brokenAt) refuse();',
   ];
   for (const s of planted) assert.ok(fieldsIn(s).length > 0, s);
   for (const s of ['// the gate never reads m3.layers or "; class chop"', '/* layers.inChop is the briefing\'s */ const a = 1;', 'const classes = {}; classes[k] = 1;', 'const { lastBreaks, protectedOf } = require("./structure-events");', 'player.layer = 1;'])
