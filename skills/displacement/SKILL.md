@@ -71,14 +71,14 @@ body 2.1x prior; leg 4 bars, efficiency 0.74, overlap 0.31.
 ```
 
 - `holding`: no close back through the broken level since the break.
-  `closed back below X`: a close back through it since (`, back above it
+  `closed back below X`: the latest close back through it (`, back above it
   since` when the last close is past it again). For a breakout trade that
   close is `breakout`'s failure; the break's structure ends only at its
   protected swing.
 - `cleared`: how far the break's close went past the level, in ATR.
 - FVG: `open` (not traded into), `filled to Z` (traded into, not
   through: the `fair-value-gaps` partly filled), `traded through` (the gap
-  is gone), `no FVG` (the move left none), `no FVG yet` (the break
+  is gone: the `fair-value-gaps` filled), `no FVG` (the move left none), `no FVG yet` (the break
   candle's own gap needs the next candle).
 - `from protected low Y`: this break's own protected swing, where its move
   started (`a sweep of` a key level when the leg swept one; each break has

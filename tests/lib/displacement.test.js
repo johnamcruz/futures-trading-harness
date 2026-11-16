@@ -150,10 +150,23 @@ test('breakQuality: the FVG with one meaning each: open, filled to (traded into,
   // The gap's edge exactly reached (low 106.5 at bar 9) is still open: traded into means past the edge.
   const edge = ROWS.slice(0, 9).concat([[108.5, 108.75, 106.5, 107]]);
   assert.strictEqual(q(9, { rows: edge }).fvg.state, 'open');
+  // The far edge exactly reached (low 103.25) is filled to it, not traded through.
+  const far = ROWS.slice(0, 9).concat([[108.5, 108.75, 103.25, 104]]);
+  assert.deepStrictEqual([q(9, { rows: far }).fvg.state, q(9, { rows: far }).fvg.to], ['filled to', 103.25]);
+  // The mirror, a break down: the near edge exactly reached is open, the far edge filled to, past it traded through.
+  const mirror = rows => rows.map(([o, h, l, c]) => [200 - o, 200 - l, 200 - h, 200 - c]);
+  const qd = (at, rows) => { const cs = mk(mirror(rows)); return D.breakQuality({ candles: cs, brk: SE.breaksOf(cs).find(b => b.direction === 'down'), atr: flatAtr(cs.length), at, minutes: 3 }); };
+  assert.strictEqual(qd(9, edge).fvg.state, 'open');
+  assert.deepStrictEqual([qd(9, far).fvg.state, qd(9, far).fvg.to], ['filled to', 96.75]);
+  assert.strictEqual(qd(11, ROWS).fvg.state, 'filled');
   // Not back to back (a feed gap between bars 7 and 8): no FVG across it.
   const gapped = mk(ROWS.slice(0, 9)).map((c, i) => (i === 8 ? { ...c, t: new Date(T0 + 9 * 180000).toISOString() } : c));
   const gb = SE.breaksOf(gapped).find(b => b.direction === 'up');
   assert.strictEqual(D.breakQuality({ candles: gapped, brk: gb, atr: flatAtr(9), at: 8, minutes: 3 }).fvg, null);
+  // A feed gap between the first and the middle candle (bars 6 and 7) breaks it too.
+  const gap67 = mk(ROWS.slice(0, 9)).map((c, i) => (i >= 7 ? { ...c, t: new Date(T0 + (i + 1) * 180000).toISOString() } : c));
+  const g67 = SE.breaksOf(gap67).find(b => b.direction === 'up');
+  assert.strictEqual(D.breakQuality({ candles: gap67, brk: g67, atr: flatAtr(9), at: 8, minutes: 3 }).fvg, null);
   // Without an ATR given, the candles' own ATR(14) (no throw).
   assert.ok(D.breakQuality({ candles: mk(ROWS), brk: setup().brk, at: 8 }));
 });
@@ -165,6 +178,14 @@ test('breakQuality: holding until a close back through the level, then closed ba
   // Back above 105 after closing back under it: the first close back is kept, and the line says it is back above now.
   const back = ROWS.slice(0, 11).concat([[104.75, 106.5, 104.5, 106.25]]);
   assert.deepStrictEqual(q(11, { rows: back }).status, { closedBack: { at: mk(ROWS)[10].t, closedAt: mk(ROWS)[11].t, barsAgo: 1 }, reclaimed: true });
+  assert.match(D.breakLine({ entry: { tf: '3m', brk: { kind: 'BOS', direction: 'up', level: 105, barsAgo: 4, quality: q(11, { rows: back }) }, minutes: 3 } }), /: displaced, closed back below 105 3 min ago, back above it since;/);
+  assert.match(D.breakLine({ entry: { tf: '3m', brk: { kind: 'BOS', direction: 'up', level: 105, barsAgo: 4, quality: q(11) }, minutes: 3 } }), /: displaced, closed back below 105 3 min ago;/);
+  // A close exactly at the level is neither past it nor back through it: not reclaimed.
+  const tie = ROWS.slice(0, 11).concat([[104.75, 105.5, 104.5, 105]]);
+  assert.strictEqual(q(11, { rows: tie }).status.reclaimed, false);
+  // Back under again after a reclaim: the latest close back, its own age.
+  const again = back.concat([[106.25, 106.5, 104, 104.25]]);
+  assert.deepStrictEqual(q(12, { rows: again }).status, { closedBack: { at: mk(again)[12].t, closedAt: new Date(T0 + 13 * 180000).toISOString(), barsAgo: 0 }, reclaimed: false });
   // A wick back under 105 that closes above it is no close back: still holding.
   const wick = ROWS.map((r, i) => (i === 9 ? [108.5, 108.75, 104.75, 106.25] : r));
   assert.deepStrictEqual(q(9, { rows: wick }).status, { holding: true });
@@ -262,7 +283,7 @@ test('breakLine: recency from config (recentEntry candles, recentSetup 15m candl
   assert.match(sb, /15m CHoCH up 21412\.25 \(closed \?\): displaced, closed back below 21412\.25 at 10:45;/);
   assert.doesNotMatch(sb, /this bar|min ago/);
   const noTime = { ...setupBrk, quality: { ...setupBrk.quality, status: { closedBack: { at: 'x', closedAt: null, barsAgo: 0 } } } };
-  assert.doesNotMatch(D.breakLine({ setup: { tf: '15m', brk: noTime } }, { p }), /NaN|min ago|this bar/, 'no time given: none printed');
+  assert.match(D.breakLine({ setup: { tf: '15m', brk: noTime } }, { p }), /closed back below 21412\.25;/, 'no time given: none printed');
   assert.doesNotMatch(both, /3m BOS/, 'the stale 3m break is not printed');
   assert.strictEqual(D.breakLine({ entry: { tf: '3m', brk: null, minutes: 3 }, setup: { tf: '15m', brk: { ...setupBrk, barsAgo: 3 }, minutes: 15 } }, { p }), null);
   assert.strictEqual(D.breakLine({ entry: { tf: '3m', brk: { kind: 'BOS', direction: 'up', level: 1, barsAgo: 0 }, minutes: 3 } }, { p }), null, 'no quality: nothing to print');

@@ -45,7 +45,7 @@
  *                                            high, at, state 'open' | 'filled to' (to: how far) | 'filled' (traded
  *                                            through, kept: printed `traded through`) } or null), fvgPending (the break's
  *                                            own candle is the last: its gap needs the next candle), status { holding }
- *                                            | { closedBack { at, closedAt, barsAgo }, reclaimed } (the first close back
+ *                                            | { closedBack { at, closedAt, barsAgo }, reclaimed } (the latest close back
  *                                            through the level; reclaimed: the last close is past the level again) }
  *   invalidationQuality(candles, brk, prot, atr, p)   the strength of the close that broke the break's protected swing
  *                                            (prot.brokenAt), the break's opposite way: { displaced, why, barsAgo }, or null
@@ -134,7 +134,10 @@ function breakQuality({ candles, brk, atr = ind.atr(candles), at = candles.lengt
     .filter(x => Date.parse(x.back) >= Date.parse(cs[o].t)) : [];
   let closedBack = null;
   const closeOf = c => (minutes ? new Date(Date.parse(c.t) + minutes * 60000).toISOString() : null);
-  for (let j = i + 1; j < cs.length && !closedBack; j += 1) if (dir * (cs[j].c - brk.level) < 0) closedBack = { at: cs[j].t, closedAt: closeOf(cs[j]), barsAgo: cs.length - 1 - j };
+  // The latest close back through the level (a close through it after one that was not), so its age is the current spell's.
+  for (let j = i + 1; j < cs.length; j += 1) {
+    if (dir * (cs[j].c - brk.level) < 0 && dir * (cs[j - 1].c - brk.level) >= 0) closedBack = { at: cs[j].t, closedAt: closeOf(cs[j]), barsAgo: cs.length - 1 - j };
+  }
   return {
     ...s,
     cleared: Number.isFinite(a) && a > 0 ? r2(dir * (cs[i].c - brk.level) / a) : null,

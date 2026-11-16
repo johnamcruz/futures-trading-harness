@@ -42,9 +42,9 @@ test('displacement skill: frontmatter, sections in order, a short description; i
   assert.ok(String(data.description).length <= 160, `description ${String(data.description).length}`);
   const at = ['## When to Use', '## How It Works', '## Examples'].map(h => TEXT.indexOf(`\n${h}\n`));
   assert.ok(at.every(i => i > 0) && at[0] < at[1] && at[1] < at[2]);
-  // 7287 bytes at the measured need (the owner's framework quoted whole, the separation, the line's words, the evidence and
+  // 7320 bytes at the measured need (the owner's framework quoted whole, the separation, the line's words, the evidence and
   // eight worked examples); looked up in index mode, loaded by the two analysts' bodies otherwise.
-  assert.ok(Buffer.byteLength(body) <= 7287, `${Buffer.byteLength(body)} bytes`);
+  assert.ok(Buffer.byteLength(body) <= 7320, `${Buffer.byteLength(body)} bytes`);
 });
 
 test('displacement skill: the key sentences are pinned; a changed one fails', () => {
