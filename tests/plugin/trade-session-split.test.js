@@ -595,10 +595,10 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // Then feat/displacement (the owner's one strength rule for BOS, CHoCH, CISD and the invalidating close: the `displacement`
 // skill in the two analysts' index, embedded in full mode, one index line otherwise; bos-vs-choch's Fields name the last
 // break's `quality` and the 15m last break's `protected`), at the measured need: the market-structure analyst 110750 ->
-// 118341 full, 48148 -> 48429 index; the trend-momentum analyst 69294 -> 76963 full, 44279 -> 44560 index; every other
+// 118394 full, 48148 -> 48429 index; the trend-momentum analyst 69294 -> 77016 full, 44279 -> 44560 index; every other
 // role falls or stays.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 118341, 'news-calendar-analyst': 10868, 'risk-manager': 95294, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9400, 'trend-momentum-analyst': 76963, 'volume-liquidity-analyst': 50521 },
+  full: { 'market-structure-analyst': 118394, 'news-calendar-analyst': 10868, 'risk-manager': 95294, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9400, 'trend-momentum-analyst': 77016, 'volume-liquidity-analyst': 50521 },
   index: { 'market-structure-analyst': 48429, 'news-calendar-analyst': 10868, 'risk-manager': 81182, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9400, 'trend-momentum-analyst': 44560, 'volume-liquidity-analyst': 35153 },
 };
 

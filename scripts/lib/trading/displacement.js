@@ -53,7 +53,8 @@
  *                                            tie: true } when every close through it is within the tie (printed `holds
  *                                            (tested, a tie)`, as the state says holds); or null
  *   qualityOf(candles, lb, { minutes, levels, atr, p })   lastBreaks' { last, previous } with `quality` on last (and on
- *                                            last.protected once it is broken)
+ *                                            last.protected once a close goes through it; its brokenAt then the first
+ *                                            close past the tie, null on a tie)
  *   breakLine({ entry, setup }, { p, et })   the summary's Break quality line (entry: { tf, brk, minutes }, setup the same
  *                                            with brk.knownAt), each printed while its break is at most recentEntry /
  *                                            recentSetup candles old; cut to lineBytes: body, then leg, then the setup
@@ -173,7 +174,10 @@ function qualityOf(candles, lb, { minutes = cisd.stepMinutes(candles), levels = 
   const last = lb.last;
   const quality = breakQuality({ candles, brk: last, atr, minutes, levels, p });
   const inv = last.protected ? invalidationQuality(candles, last, last.protected, atr, p, minutes) : null;
-  return { ...lb, last: { ...last, ...(quality ? { quality } : {}), ...(inv ? { protected: { ...last.protected, quality: inv } } : {}) } };
+  // brokenAt follows the tie too, so the detail's field says what the line says: the first close past the tie, or null
+  // (still holding) when every close through the level is a tie.
+  const at = inv && !inv.tie ? candles[candles.length - 1 - inv.barsAgo].t : null;
+  return { ...lb, last: { ...last, ...(quality ? { quality } : {}), ...(inv ? { protected: { ...last.protected, brokenAt: at, quality: inv } } : {}) } };
 }
 
 const minsAgo = (n, m) => (n === 0 ? 'this bar' : `${n * m} min ago`);

@@ -82,9 +82,10 @@ body 2.1x prior; leg 4 bars, efficiency 0.74, overlap 0.31.
   candle's own gap needs the next candle).
 - `from protected low Y`: this break's own protected swing, where its move
   started (`a sweep of` a key level when the leg swept one; each break has
-  one: `bos-vs-choch`). `holds` (`holds (tested, a tie)`: a close within
-  the Market state's tie), or `broken by a displaced close` /
-  `broken by a weak close (why)`: broken either way. A BOS's broken swing
+  one: `bos-vs-choch`). `broken by a displaced close` or `broken by a weak
+  close (why)`: broken either way; the close decides, not its strength.
+  `holds`: not broken (`holds (tested, a tie)`: a close only at the level,
+  within the tie). A BOS's broken swing
   ends that BOS's read; a CHoCH's means the shift failed. The Market
   state's leg level is its own (the Market state line).
 - `body` (against the prior 10 candles) and `leg` (efficiency 1 = no

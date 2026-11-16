@@ -257,12 +257,22 @@ test('the tie at the protected level (the Market state\'s, structure-layers.js):
   assert.deepStrictEqual([state.status, state.level], ['intact', 100.25], 'the state: the level holds');
   const lb = D.qualityOf(c, { last: { ...bos, protected: prot }, previous: null }, { minutes: 3, atr });
   assert.match(D.breakLine({ entry: { tf: '3m', brk: { ...lb.last, barsAgo: 5 }, minutes: 3 } }), /from protected low 100\.25: holds \(tested, a tie\);/);
+  assert.strictEqual(lb.last.protected.brokenAt, null, 'the detail\'s brokenAt follows the tie: still holding');
+  // The tie reads the closing candle's own ATR (atr[k], as structure-layers.js): 6 at bar 12 alone is a tie, 1 at bar 12
+  // alone (0.05 < 0.25) is a break.
+  const own = v => Array.from({ length: 13 }, (_, i) => (i === 12 ? v : 7 - v));
+  assert.deepStrictEqual(D.invalidationQuality(c, bos, prot, own(6), D.PARAMS), { tie: true });
+  assert.strictEqual(D.invalidationQuality(c, bos, prot, own(1), D.PARAMS).tie, undefined);
+  // Scope: here the BOS is handed in as the last break. On these bars alone the tied close is also a k=2 close under the
+  // swing low 100.25, so lastBreaks' last is a CHoCH down (k=2 breaks have no tie, as on main); the tie governs the
+  // protected status this line prints, not which break is the last.
   // Bar 13 closes at 99.5, 0.75 under it: past the tie. The state flips; the line reads that close (body 0.5 of 1.0: wicks; range 1 < 6: small).
   const c2 = mk([...ROWS, [100, 100.25, 99.25, 99.5]]);
   const a2 = new Array(14).fill(6);
   const p2 = SE.protectedOf(c2, bos);
   assert.strictEqual(p2.brokenAt, c2[12].t);
   assert.deepStrictEqual(D.invalidationQuality(c2, bos, p2, a2, D.PARAMS, 3), { displaced: false, why: ['wicks', 'small'], barsAgo: 0, closedAt: new Date(T0 + 14 * 180000).toISOString() });
+  assert.strictEqual(D.qualityOf(c2, { last: { ...bos, protected: p2 }, previous: null }, { minutes: 3, atr: a2 }).last.protected.brokenAt, c2[13].t, 'brokenAt: the first close past the tie');
   assert.strictEqual(SL.structureSeries(c2, SL.rthBreaks(c2, 0, a2, MS), 0, a2, MS)[13].status, 'broken', 'the state: broken at the same close');
   // A down break mirrors it: the tie is the close above a protected high by no more than the tie.
   const dn = { direction: 'down' };
