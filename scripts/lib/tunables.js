@@ -152,7 +152,9 @@ const REPLAY = {
     maxContracts: int(1), maxDailyLoss: nonneg(), warmupBars: int(0), auditJumpAtr: pos(), auditTop: int(1),
     walkForward: { trainMonths: int(1), testMonths: int(1), minTrades: int(1) },
   },
-  scorecard: { giveBackMinMfeR: nonneg(), giveBackShare: frac() },
+  // maxMissingStopShare: the share of managed cycles without a STOP line above which the run's report alarms
+  // (replay/stop-lines.js; the Position-line PR's keep rule uses the same 2%).
+  scorecard: { giveBackMinMfeR: nonneg(), giveBackShare: frac(), maxMissingStopShare: frac() },
 };
 
 const RUNNER = {
