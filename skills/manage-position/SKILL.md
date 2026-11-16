@@ -45,7 +45,7 @@ description: Use when a position is open - its stop, the plan's management, the 
 - **A composed trade** (`setup:trade_lifecycle`, in an attempt
   `setup:prop_portfolio`): the runner's code floor (`trade-plan`) moves the
   stop; let it work. You tighten on top of it, never looser.
-- **Every managed cycle, one line**: `STOP <price|hold>: <reason>`, the
+- **Every managed cycle, one line** (before the CYCLE RESULT line): `STOP <price|hold>: <reason>`, the
   reason's first word protected-swing, choch-against,
   displacement-against, weakening or hold. Missing = hold, a logged
   process failure. Tighter than the working stop → `modify_order` the
@@ -58,7 +58,7 @@ description: Use when a position is open - its stop, the plan's management, the 
     the room): protected-swing.
   - 15m CHoCH against (the Trade read's `reversal: 15m CHoCH`) →
     `warning_giveback_r` behind the best (the Manage read's warning
-    giveback), the turned structure's level; not an exit: choch-against.
+    giveback); not an exit: choch-against.
   - A displaced 15m candle against (the Break quality line's word, a read),
     or weakening (2+ signs; an HTF flip alone is one) → the same giveback:
     a warning, never an exit. Weakening and stalling at a key level or
@@ -90,6 +90,7 @@ trade_lifecycle long +3.0R, 15m BOS up, protected swing 21517.00, working 21505.
   -> STOP 21516.75: protected-swing; modify_order the stop to 21516.75
 trade_lifecycle long +1.6R, 15m CHoCH down, protected swing holds, warning giveback 21511.50
   -> STOP 21511.50: choch-against; modify_order (not an exit)
-trade_lifecycle long +1.4R, Manage read: protected swing BROKEN by a close -> close_position
+trade_lifecycle long +1.4R, Manage read: protected swing BROKEN by a close
+  -> STOP hold: hold (out at market); close_position
 trade_lifecycle long +1.2R, warning giveback 21499.75, working 21500.50 -> STOP hold: hold (not tighter)
 ```

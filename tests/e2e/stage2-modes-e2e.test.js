@@ -105,7 +105,7 @@ function assertClean(w, runId, out, { refused = [] } = {}) {
   const expected = l => refused.length > 0 && /order gate refused the entry|past the profit target|gate refusal/.test(l);
   const bad = re => [...out.split('\n'), ...steps.split('\n')].filter(l => re.test(l) && !expected(l));
   // "warning" as a word: the trail plan's warningGivebackR key (the rulebook's taught warning giveback) is no warning.
-  assert.deepStrictEqual(bad(/\b(ERROR|error:|WARN|warning\b|refused|FAIL\b)/), [], 'no error, refusal or warning in the output or the steps');
+  assert.deepStrictEqual(bad(/\b(ERROR|error:|WARN|warnings?\b|refused|FAIL\b)/), [], 'no error, refusal or warning in the output or the steps');
   const gateLog = path.join(home, 'logs', 'gate-log.jsonl');
   const gated = fs.existsSync(gateLog) ? fs.readFileSync(gateLog, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l)) : [];
   assert.strictEqual(gated.filter(e => e.decision !== 'allowed').length, refused.length, 'the gate refused only what the test expects');

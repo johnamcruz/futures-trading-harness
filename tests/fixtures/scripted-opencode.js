@@ -53,7 +53,7 @@ function stepsFor(script, bar, w) {
       // `review`: the trade's review journaled after it (its result and setup tags), as the head trader writes one.
       ...(step.review ? [{ broker: 'journal_add', args: { kind: 'review', contractId: 'MNQ', tags: [`result:${step.review.result}`, `setup:${step.review.setup}`, ...(step.review.r !== undefined ? [`r:${step.review.r}`] : [])], text: `${step.side} out: ${step.review.result}` } }] : []),
       // The managed cycle's STOP line (manage-position: every managed cycle states one, here before the exit).
-      { result: 'CYCLE RESULT: managed - out\nSTOP hold: hold (out at market this cycle)' },
+      { result: 'STOP hold: hold (out at market this cycle)\nCYCLE RESULT: managed - out' },
     ];
   }
   return [...D.roundSteps(w, { lookups: C.roleLookups(w) }), ...D.entryLoads(w).map(x => ({ load: x })), { result: `CYCLE RESULT: no-trade - ${step.why || 'pass'}` }];

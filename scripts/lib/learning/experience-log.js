@@ -86,7 +86,10 @@ const BRACKETS = Object.freeze({ plan: null, mode: 'brackets' });
 const stable = v => (Array.isArray(v) ? `[${v.map(stable).join(',')}]` : v && typeof v === 'object'
   ? `{${Object.keys(v).filter(k => v[k] !== undefined).sort().map(k => `${JSON.stringify(k)}:${stable(v[k])}`).join(',')}}` : JSON.stringify(v === undefined ? null : v));
 /** The hash of an exit plan (its mode and parameters): what each experience line and an index name it by. */
-const exitHash = exit => crypto.createHash('sha256').update(stable({ mode: exit.mode, plan: exit.plan || null })).digest('hex');
+// The taught warning giveback (warningGivebackR: shown to the model, read by no exit step) moves no stop: it is left out of
+// the hash, so an index built under a plan without it stays the same plan's.
+const hashedPlan = plan => (plan && plan.afterTarget && 'warningGivebackR' in plan.afterTarget ? { ...plan, afterTarget: (({ warningGivebackR: _taught, ...rest }) => rest)(plan.afterTarget) } : plan);
+const exitHash = exit => crypto.createHash('sha256').update(stable({ mode: exit.mode, plan: hashedPlan(exit.plan) || null })).digest('hex');
 /** An exit as a run's manifest records it at seed time (replay/driver.js): { mode, plan, hash }. */
 const exitRecord = exit => ({ mode: exit.mode, plan: exit.plan || null, hash: exitHash(exit) });
 const round = (x, d = 4) => (x === null || !Number.isFinite(x) ? null : Number(x.toFixed(d)));

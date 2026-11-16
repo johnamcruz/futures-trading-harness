@@ -694,3 +694,13 @@ test('trip excursion: tripOutcome\'s one definition of MAE and MFE, with the bar
   assert.deepStrictEqual(E.tripExcursion({ ...x, risk: 0 }), none);
   assert.deepStrictEqual(E.tripExcursion({ ...x, side: 'flat' }), none);
 });
+test('exitHash: the taught warning giveback (warningGivebackR, read by no exit step) is no part of the hashed plan; the shipped rulebook\'s exit hashes as main\'s', () => {
+  const { exitHash: hash } = require('../../scripts/lib/learning/experience-log');
+  const plan = { targetR: null, afterTarget: { lockGivebackR: 1.5, trailBy: 'structure', trailR: 1, swingMinutes: 15 } };
+  const taught = { ...plan, afterTarget: { ...plan.afterTarget, warningGivebackR: 0.5 } };
+  assert.strictEqual(hash({ mode: 'target_then_trail', plan: taught }), hash({ mode: 'target_then_trail', plan }));
+  assert.notStrictEqual(hash({ mode: 'target_then_trail', plan: { ...plan, afterTarget: { ...plan.afterTarget, lockAtR: 1, lockToTicks: 2 } } }), hash({ mode: 'target_then_trail', plan }), 'the early lock moves stops: hashed');
+  const shipped = require('../../scripts/lib/eval/goal-trades').shippedOf(path.resolve(__dirname, '..', '..'), {}).exit;
+  // main b5d33d662's shipped exit hash: an experience index built under main's plan stays usable.
+  assert.strictEqual(hash(shipped), 'e2221a60e6cf170b06d4884e2370813baeef3024b67799b5d91af74df4b3a16e');
+});

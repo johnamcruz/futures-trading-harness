@@ -144,6 +144,7 @@ test('CORE: the composed bar\'s reads the gate requires (SITUATIONAL taught in t
   // Then 85157 (feat/entry-exit, the owner's exit direction 2026-11-15): trade-lifecycle's management row names the early
   // lock (lock_at_r, lock_to_ticks) and the STOP line each managed cycle (+39, the measured need); then 85264 with its stop row's
   // trigger stop forms (`stop 3m bos`, `stop 3m cisd`: +107, owner-approved 2026-11-15).
+  // The row then says the early lock is off (the owner, 2026-11-15: the shipped exit stays the default), within the pin.
   assert.ok(Buffer.byteLength(prompt) <= 85264, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
   // Only the head trader's prompt grows: no other role's prompt embeds trade-lifecycle (the risk manager's embeds
   // confluence-counting and invalidation as before; its prompt is unchanged, pinned in trade-session-split.test.js).
