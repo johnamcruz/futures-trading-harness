@@ -243,7 +243,20 @@ const ENFORCED = {
     const component = { exit: { target_r: 3 }, risk: { min_rr: 2 } };
     const plan = () => tradeExitPlan(policy(root), component);
     if (mode !== 'trail') assert.strictEqual(plan().targetR, 3, 'the trade\'s own target is kept');
-    if (mode === 'target_then_trail') assert.deepStrictEqual(plan().afterTarget, { lockGivebackR: POLICY.exit.lock_giveback_r, trailBy: POLICY.exit.trail_by, trailR: POLICY.exit.trail_r, swingMinutes: POLICY.exit.trail_by === 'structure' ? { '5m': 5, '15m': 15, '1h': 60 }[POLICY.exit.swing_tf] : null });
+    const on = k => POLICY.exit[k] !== undefined && POLICY.exit[k] !== 'off';
+    if (mode === 'target_then_trail') {
+      assert.deepStrictEqual(plan().afterTarget, {
+        lockGivebackR: POLICY.exit.lock_giveback_r, trailBy: POLICY.exit.trail_by, trailR: POLICY.exit.trail_r, swingMinutes: POLICY.exit.trail_by === 'structure' ? { '5m': 5, '15m': 15, '1h': 60 }[POLICY.exit.swing_tf] : null,
+        ...(on('lock_at_r') ? { lockAtR: POLICY.exit.lock_at_r, lockToTicks: POLICY.exit.lock_to_ticks } : {}),
+        ...(on('warning_giveback_r') ? { warningGivebackR: POLICY.exit.warning_giveback_r } : {}),
+      });
+      // The early lock reaches the step every caller runs: a long from 100, 1R 10, at +lock_at_r the stop leaves 90.
+      if (on('lock_at_r')) {
+        const { afterTargetStep } = require('../../scripts/lib/trading/exit-trail');
+        const s = afterTargetStep({ sign: 1, entry: 100, risk: 10, stop: 90, peakR: 0, armed: false, target: 120 }, { h: 100 + 10 * POLICY.exit.lock_at_r, l: 100, c: 100 + 10 * POLICY.exit.lock_at_r }, plan(), 0.25);
+        assert.strictEqual(s.stop, 100 + POLICY.exit.lock_to_ticks * 0.25);
+      }
+    }
     edit(root, t => withExitBlock(t, exitBlock({ mode: 'trail', trail_activate_r: 2, trail_giveback_r: 1 })));
     assert.deepStrictEqual([plan().targetR, plan().trailActivateR, plan().trailGivebackR, plan().afterTarget], [null, 2, 1, undefined], policy(root).errors.join());
     edit(root, t => withExitBlock(t, exitBlock({ mode: 'target', trail_activate_r: 2, trail_giveback_r: 1 })));

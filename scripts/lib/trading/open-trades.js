@@ -20,6 +20,7 @@
 
 const { contractRoot, entryTime } = require('./journal');
 const { tradeRead, tradeReadLine } = require('./trade-read');
+const { manageRead, manageReadLine } = require('./manage-read');
 const { levelOnTick } = require('./contracts');
 // The gate's reading of "stop <price>": a unit (40 ticks, 2R) is not a price; thousands separators are.
 const { STOP_PRICE } = require('./order-gate');
@@ -84,13 +85,21 @@ function openTrades({ positions = [], orders = [], entries = [], barsFor = () =>
 }
 
 /**
- * The open trade's read facts as one line (trade-read.js), from its contract's closed bars (`base`-minute bars); a
- * failure is said in the line, never dropped.
+ * The open trade's read facts as one line (trade-read.js) and its manage read (manage-read.js: the levels its STOP line
+ * is set from), from its contract's closed bars (`base`-minute bars); a failure is said in the line, never dropped.
  */
 function tradeReadText(t, { bars, base, tickSize = null, exit = null }) {
   try {
     const level = tickSize ? x => levelOnTick(x, tickSize) : undefined;
-    return tradeReadLine(tradeRead({ side: t.side, entry: t.entry, openedAt: t.openedAt, bars, base, tick: tickSize, exit }), level ? { level } : {});
+    const read = tradeReadLine(tradeRead({ side: t.side, entry: t.entry, openedAt: t.openedAt, bars, base, tick: tickSize, exit }), level ? { level } : {});
+    // The levels the managed cycle's STOP line is set from (manage-read.js); a failure is said, never dropped.
+    let manage;
+    try {
+      manage = manageReadLine(manageRead({ side: t.side, entry: t.entry, risk: t.risk, stop: t.stop, openedAt: t.openedAt, bars, base, tick: tickSize, exit }), level ? { level } : {});
+    } catch (err) {
+      manage = `Manage read: unavailable (${err.message}).`;
+    }
+    return `${read} ${manage}`;
   } catch (err) {
     return `Trade read: unavailable (${err.message}).`;
   }

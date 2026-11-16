@@ -837,6 +837,8 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     latestPrice: symbol => { try { return require('./trading/late-entry').readPrice(home, symbol); } catch (_err) { return null; } },
     // The latest 1m price kept during a trade cycle for the gate's [late-entry] (runner.js watchPrice), on every harness.
     recordPrice: (symbol, rec, opts) => require('./trading/late-entry').recordPrice(home, symbol, rec, opts),
+    // The position's resting stop as the broker confirms it, for the hook's [modify-stop] (trading/resting-stop.js).
+    recordStop: rec => require('./trading/resting-stop').recordStop(home, rec),
     analystFrames: frames,
     // One record per timeframe (signal-state.js): each lane's bar records its own.
     recordSignals: (item, results) => writeSignals(home, laneSignals(cfg, item, results, now())),

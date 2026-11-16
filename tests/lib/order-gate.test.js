@@ -3322,6 +3322,22 @@ test('trade_lifecycle: scenario 1 goes (an active strategy); a paper copy of it 
   assert.match(r.violations[0].message, /status "paper"; only active strategies may place live entries/);
 });
 
+test('trade_lifecycle with a trigger stop (stop 3m bos): the gate takes the BOS\'s protected swing on the decision bar; a stale or broken trigger\'s record is refused; no trigger read needed for the other stop forms', () => {
+  const brk = over => ({ lastBreak: { last: { kind: 'BOS', direction: 'up', level: 21535, swingAt: '2026-10-07T13:30:00.000Z', at: LC.BAR, barsAgo: 0, protected: { side: 'low', level: 21529, at: '2026-10-07T13:45:00.000Z', brokenAt: null }, ...over }, previous: null } });
+  const reads = LC.READS.map(r => (r.step === 'stop' ? { ...r, read: 'stop 3m bos 21529', why: 'the 3m BOS up\'s protected low' } : r));
+  // The stop a tick beyond 21529 (21528.75): 11.50 points = 46 ticks from 21540.25.
+  const ord = LC.order({ stopLossBracket: { ticks: 46, type: 'stop' }, rationale: 'setup:trade_lifecycle long, the 15m rejection with the 1h trend, stop 21528.75, target 21598.00' });
+  const ok = lcEval(lcHome({ reads, b: LC.briefing({ m3: brk() }) }), ord);
+  assert.deepStrictEqual(ok.violations, [], JSON.stringify(ok.violations));
+  assert.strictEqual(ok.composed.stop, 21528.75);
+  for (const over of [{ barsAgo: 1 }, { protected: { side: 'low', level: 21529, brokenAt: LC.CLOSE } }, { kind: 'CHoCH' }]) {
+    const r = lcEval(lcHome({ reads, b: LC.briefing({ m3: brk(over) }) }), ord);
+    assert.ok(r.violations.some(v => v.check === 'composed-reads' || v.check === 'composed-record'), `${JSON.stringify(over)}: ${JSON.stringify(checks(r))}`);
+  }
+  // The shipped forms stand without any trigger read (no entry gate): scenario 1's `stop 15m low` goes.
+  assert.deepStrictEqual(lcEval(lcHome()).violations, []);
+});
+
 test('trade_lifecycle: phase 2\'s cut ([composed-reads], owner-approved 2026-10-22): record 8, phase 2 at 1, only 1 goes; phase 2 at or over the record\'s, only the record\'s; no phase 2, equality; exits unaffected', () => {
   // Record 8 at $55.50 a contract ($444): the registry's trade_lifecycle under a $1000 cap.
   const wide = LC_REGISTRY.map(x => (x.name === 'trade_lifecycle' ? { ...x, risk: { ...x.risk, max_risk_usd: 1000 } } : x));
@@ -4864,4 +4880,26 @@ test('BG, modify_order: a reprice of a working policy entry is held to BG on thi
   for (const input of [{ orderId: 9, stopPrice: 21530 }, { orderId: 10, limitPrice: 21600 }, { orderId: 77, stopPrice: 21530, reason: '[protect] tighten' }]) {
     assert.deepStrictEqual(mod(home('down', 'down', 'down', null), input), [], JSON.stringify(input));
   }
+});
+
+test('[modify-stop]: a modify_order looser than the runner\'s confirmed resting stop is refused by the hook, whatever its reason; equal, tighter and unrecorded orders pass; never skippable', () => {
+  const RS = require('../../scripts/lib/trading/resting-stop');
+  const home = require('../helpers').tmpDir();
+  RS.recordStop(home, { contractId: 'MNQ', sign: 1, stopOrderId: 9, restingStop: 21500.5, at: '2026-10-07T14:30:00.000Z' });
+  RS.recordStop(home, { contractId: 'MNQ', sign: -1, stopOrderId: 21, restingStop: 21600, at: '2026-10-07T14:30:00.000Z' });
+  const all = new Set(require('../../scripts/lib/trading/config').GATE_CHECKS || []);
+  const cfg = { ...config, home, skipChecks: new Set([...all, 'modify-stop', 'modify-protection']) };
+  const NOW = new Date('2026-10-07T14:35:00.000Z');
+  const mod = input => evaluateModify({ input, config: cfg, now: NOW }).violations.map(v => v.check);
+  assert.deepStrictEqual(mod({ orderId: 9, stopPrice: 21500.25, reason: '[protect] trail' }), ['modify-stop'], 'looser by a tick, [protect] or not, every check skipped');
+  assert.deepStrictEqual(mod({ orderId: 9, stopPrice: 21490 }), ['modify-stop']);
+  assert.deepStrictEqual(mod({ orderId: 9, stopPrice: 21500.5 }), [], 'equal: a no-op');
+  assert.deepStrictEqual(mod({ orderId: 9, stopPrice: 21512.25, reason: 'STOP 21512.25: protected-swing' }), [], 'tighter');
+  assert.deepStrictEqual(mod({ orderId: 21, stopPrice: 21600.25 }), ['modify-stop'], 'a short raised');
+  assert.deepStrictEqual(mod({ orderId: 21, stopPrice: 21580 }), []);
+  assert.deepStrictEqual(mod({ orderId: 33, stopPrice: 1 }), [], 'no record: the gateway judges it');
+  assert.match(evaluateModify({ input: { orderId: 9, stopPrice: 21400 }, config: cfg, now: NOW }).violations[0].message, /looser than the resting stop 21500\.5/);
+  assert.deepStrictEqual(evaluateModify({ input: { orderId: 9, stopPrice: 21400 }, config: cfg, now: new Date('2026-10-09T14:35:00.000Z') }).violations, [], 'an earlier day\'s record: the gateway judges it');
+  // The check reads the record, not the request: a home without the file passes it to the gateway.
+  assert.deepStrictEqual(evaluateModify({ input: { orderId: 9, stopPrice: 1 }, config: { ...config, home: require('../helpers').tmpDir() } }).violations, []);
 });

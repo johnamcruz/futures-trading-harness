@@ -488,6 +488,21 @@ test('a protective stop may move toward the market only', () => {
   assert.deepStrictEqual(run({ orderId: 9, trailPrice: 21470 }, long1, [{ ...sellStop, type: 5, stopPrice: null }]), ['modify-protection'], 'unknown level: refuse');
 });
 
+test('the composed bracket stop under the model\'s per-cycle trail: looser refused, equal passes as a no-op, tighter passes, a stop moved through the market is never refused for want of a price read (none is made)', () => {
+  const { evaluateModifyAccount } = require('../../scripts/lib/trading/account-gate');
+  // A long's bracket stop at the early lock (entry 21500, +2 ticks).
+  const sellStop = { id: 9, contractId: CONTRACT, side: 1, type: 4, size: 1, stopPrice: 21500.5 };
+  const run = input => checks(evaluateModifyAccount({ input: { orderId: 9, ...input }, positions: long1, orders: [sellStop], config }));
+  assert.deepStrictEqual(run({ stopPrice: 21500.25 }), ['modify-protection'], 'a tick looser');
+  assert.deepStrictEqual(run({ stopPrice: 21500.5 }), [], 'equal: a no-op, allowed');
+  assert.deepStrictEqual(run({ stopPrice: 21512.25, reason: 'STOP 21512.25: protected-swing' }), [], 'tighter');
+  assert.deepStrictEqual(run({ stopPrice: 99999 }), [], 'past the market: the gateway reads no price for it (the broker refuses or fills it; the skill says close_position)');
+  // Mutation guard: the comparison is the stop's side (a short's buy stop: down is tighter).
+  const buyStop = { ...sellStop, side: 0, stopPrice: 21599.5 };
+  const short = input => checks(evaluateModifyAccount({ input: { orderId: 9, ...input }, positions: [{ contractId: CONTRACT, type: 2, size: 1 }], orders: [buyStop], config }));
+  assert.deepStrictEqual([short({ stopPrice: 21599.75 }), short({ stopPrice: 21599.5 }), short({ stopPrice: 21590 })], [['modify-protection'], [], []]);
+});
+
 test('the target-then-trail ratchet\'s stop moves (one jump of several R toward the market, no reason) are accepted by the gateway and the hook', () => {
   const { evaluateModify } = require('../../scripts/lib/trading/order-gate');
   // The 2026-10-24 replay's short from 14530.5 (1R 24.5 points): its buy stop at +0.5R (14518.25) to +3.2R (14452).

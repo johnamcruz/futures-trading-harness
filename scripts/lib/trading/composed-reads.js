@@ -67,8 +67,12 @@
  *                                           and target (trade-lifecycle.js planOf)          up long, down short
  *   stop <source> <price>                   step stop only: <tf> low|high (a completed candle), [<tf>] swing
  *                                           low|high (m3.swings, m3.liquidity, m3.htfLevels), <tf> box low|high (a
- *                                           live box's far side: m3.compression.<tf>.box), or <level>; the
- *                                           source's price within one tick of <price>    below price long
+ *                                           live box's far side: m3.compression.<tf>.box), <tf> bos (the BOS's
+ *                                           protected swing: m3 / m15 / h1 lastBreak.last.protected, a BOS on the
+ *                                           decision bar, unbroken) or <tf> cisd (a live CISD's leg origin, confirmed
+ *                                           on the decision bar), the trigger's own side (triggerStopPrices; no
+ *                                           <tf> choch), or <level>; the source's price within one tick of <price>
+ *                                                                                         below price long
  *   target 2r                               step target only: the 2R mark, TRUE only when the briefing names no target
  *                                           the side's way (targetsAhead: past the running extreme the trade extends
  *                                           and the levels within roomIgnoreR of the entry by the stop read's R, at most
@@ -358,6 +362,45 @@ function towardRef(p, ref, tick) {
 }
 
 /**
+ * A trigger stop's price (the entry/exit PR): the invalidation of the read that triggered the entry, whatever its
+ * timeframe, only for a trigger on the decision bar (its candle closed with the base bar the briefing is on).
+ * `<tf> bos`: the last break on that timeframe (m3 for the base bars, m15, h1), a BOS still standing, its protected swing
+ * (structure-events.js protectedOf: the swing the owner's rule names) not broken by a close; `<tf> cisd`: the CISD on
+ * that timeframe (m3.cisd), live, its leg origin (cisd.js: a close beyond it voids it). `<tf> choch`: no such stop (a
+ * CHoCH alone is not an entry; a CHoCH then BOS is the BOS's). Returns sourcePrices' shape, with `bad` (a reason it is
+ * FALSE) and `trigger` (the side the trigger points: its stop must be on it).
+ */
+function triggerStopPrices(b, base, tf, kind) {
+  const m3 = data(b, 'm3') || {};
+  if (kind === 'choch') return { field: `${tf} choch`, prices: [], bad: `no stop ${tf} choch: a CHoCH alone is not an entry (a CHoCH then BOS: stop ${tf} bos, the BOS's protected swing)` };
+  const decided = candleClose(m3, base);
+  if (kind === 'cisd') {
+    const field = `m3.cisd.${tf}.leg.origin`;
+    const x = isObj(m3.cisd) ? m3.cisd[tf] : undefined;
+    if (typeof x === 'string' && /^none/.test(x)) return { field, prices: [], bad: `no ${tf} CISD in these bars` };
+    if (!isObj(x)) return { field, prices: [], why: `the ${tf} CISD is unknown` };
+    const trigger = x.dir === 'bullish' ? 'long' : x.dir === 'bearish' ? 'short' : null;
+    if (DEAD_CISD.has(x.status)) return { field, prices: [], bad: `the ${tf} CISD is ${x.status}: no live trigger` };
+    const at = Date.parse(x.confirmedClose);
+    if (!(Number.isFinite(at) && at === decided)) return { field, prices: [], bad: `the ${tf} CISD was confirmed ${x.confirmedClose || 'at an unknown time'}, not on the decision bar (closed ${Number.isFinite(decided) ? new Date(decided).toISOString() : 'unknown'}): the stop is the invalidation of this bar's trigger` };
+    const origin = isObj(x.leg) ? num(x.leg.origin) : null;
+    return { field, prices: origin === null ? [] : [origin], trigger, label: `the ${x.dir} ${tf} CISD's leg origin (a ${x.dir} trigger)` };
+  }
+  const section = tf === base ? 'm3' : tf === '15m' ? 'm15' : tf === '1h' ? 'h1' : null;
+  const field = `${section || tf}.lastBreak.last.protected`;
+  const s = section ? data(b, section) : null;
+  const lb = s && isObj(s.lastBreak) ? s.lastBreak.last : undefined;
+  if (!isObj(lb)) return { field, prices: [], why: `the ${tf} structure break is unknown or none` };
+  if (String(lb.kind).toLowerCase() !== 'bos') return { field, prices: [], bad: `the last ${tf} break is a ${lb.kind} ${lb.direction}, not a BOS (a CHoCH alone is not an entry)` };
+  const trigger = lb.direction === 'up' ? 'long' : lb.direction === 'down' ? 'short' : null;
+  if (!isObj(lb.protected) || num(lb.protected.level) === null) return { field, prices: [], why: `the ${tf} BOS carries no protected swing in this briefing` };
+  if (lb.protected.brokenAt) return { field, prices: [], bad: `the ${tf} BOS's protected swing ${lb.protected.level} was broken by a close at ${lb.protected.brokenAt}` };
+  const fresh = section === 'm3' ? lb.barsAgo === 0 : Date.parse(lb.knownAt) === decided;
+  if (!fresh) return { field, prices: [], bad: section === 'm3' ? `the ${tf} BOS closed ${lb.barsAgo} bar(s) before the decision bar: the stop is the invalidation of this bar's trigger` : `the ${tf} BOS was known at ${lb.knownAt || 'an unknown time'}, not on the decision bar: the stop is the invalidation of this bar's trigger` };
+  return { field, prices: [num(lb.protected.level)], trigger, label: `a BOS ${lb.direction}: its protected swing` };
+}
+
+/**
  * The prices a stop or target source names (a source the briefing doesn't hold: none): { field, prices, why?, spent?,
  * note? } (why: what the briefing says instead; spent: the briefing holds it and says it is no target; note: how a
  * price was put on the tick).
@@ -367,6 +410,8 @@ function sourcePrices(kind, source, b, base, { tick = 0.25, ref = null } = {}) {
   const w = source.split(' ');
   const candles = isObj(m3.candles) ? m3.candles : {};
   if (kind === 'stop') {
+    const trig = /^(\S+) (bos|cisd|choch)$/.exec(source);
+    if (trig && TFS.has(trig[1])) return triggerStopPrices(b, base, trig[1], trig[2]);
     if (w.length === 2 && TFS.has(w[0]) && ['low', 'high'].includes(w[1])) {
       const c = candles[w[0]];
       return { field: `m3.candles.${w[0]}.${w[1] === 'low' ? 'l' : 'h'}`, prices: isObj(c) && !c.unavailable && num(c[w[1] === 'low' ? 'l' : 'h']) !== null ? [c[w[1] === 'low' ? 'l' : 'h']] : [] };
@@ -802,8 +847,9 @@ function checkRead(p, b, { tick = 0.25, side = null, riskPts = null } = {}) {
         if (ahead.length) return res(false, `the briefing names ${ahead[0].read.replace(/^target /, '')} ${side === 'long' ? 'above' : 'below'} price ${ref}: the target is the first named level at the minimum R or more; the 2R mark only with none named`, { field: 'm3 targets', value: ahead[0].price });
         return res(true, `no named level ${side === 'long' ? 'above' : 'below'} price ${ref}: the target is the 2R mark (the plan's entry plus the minimum R times its stop)`, { field: 'm3 targets', value: '2r', price: null, dir: side, mark: true });
       }
-      const { field, prices, why, spent, note = '' } = sourcePrices(p.kind, p.source, b, base, { tick, ref });
+      const { field, prices, why, spent, bad, trigger, label, note = '' } = sourcePrices(p.kind, p.source, b, base, { tick, ref });
       if (spent) return res(false, spent, { field });
+      if (bad) return res(false, bad, { field });
       if (!prices.length) return res('unchecked', why || `the briefing has no ${p.source} for a ${p.kind}`, { field });
       const hit = prices.find(x => within(x, p.price, tick));
       if (hit === undefined) return res(false, `${p.source} is ${prices.join(', ')}${note}, not ${p.price} (within one tick, ${tick})`, { field, value: prices[0] });
@@ -811,6 +857,8 @@ function checkRead(p, b, { tick = 0.25, side = null, riskPts = null } = {}) {
       // A box's stop is its far side: its low under a long, its high over a short (never the near edge).
       const edge = p.kind === 'stop' ? /^\S+ box (low|high)$/.exec(p.source) : null;
       if (edge && dir && edge[1] !== (dir === 'long' ? 'low' : 'high')) return res(false, `${p.source} is the near side of the box for a ${dir}: the stop is beyond its far side (${dir === 'long' ? 'low' : 'high'})`, { field, value: hit });
+      // A trigger's stop is on its own side: a BOS up's protected low (a CISD bullish's origin) is a long's.
+      if (trigger !== undefined && dir !== trigger) return res(false, `${p.source}: ${label} is a ${trigger}'s stop, and ${hit} is ${dir ? `a ${dir}'s` : 'at the price'}`, { field, value: hit });
       return res(true, `${p.source} is ${hit}${note}; price ${ref}`, { field, value: hit, price: hit, dir });
     }
     default:

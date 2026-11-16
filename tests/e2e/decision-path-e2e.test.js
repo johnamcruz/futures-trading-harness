@@ -458,7 +458,8 @@ test('decision path, position open: a stop move, a partial close, the stop cut t
   ]);
   const said = r.ctx.calls.map(c => [c.tool, c.ok]);
   assert.deepStrictEqual(said, [['modify_order', true], ['modify_order', false], ['place_order', false], ['partial_close_position', true], ['modify_order', true], ['place_order', true], ['close_position', true]], JSON.stringify(r.ctx.calls.map(c => c.text.slice(0, 300))));
-  assert.match(r.ctx.calls[1].text, /\[modify-protection\]/);
+  // The loosened stop: refused by the tighten-only check against the runner's confirmed resting stop ([modify-stop]).
+  assert.match(r.ctx.calls[1].text, /\[modify-stop\] stopPrice \S+ is looser than the resting stop/);
   assert.strictEqual(D.position(w), null, 'flat');
   // The new entry: refused by the entry checks the exits never meet (the transcript can't be read, a position is open).
   const decisions = D.gateLog(w).filter(g => g.tool === 'place_order').slice(1);
@@ -467,7 +468,7 @@ test('decision path, position open: a stop move, a partial close, the stop cut t
   // The gate's log: the only risk-reducing call held is the loosened stop, by its own rule.
   const entry = g => g.tool === 'place_order' && !/^\s*\[(exit|protect)\]/i.test(String(g.rationale || ''));
   const held = D.gateLog(w).filter(g => g.decision === 'blocked' && !entry(g));
-  assert.deepStrictEqual(held.flatMap(g => g.violations.map(v => v.check)), ['modify-protection']);
+  assert.deepStrictEqual(held.flatMap(g => g.violations.map(v => v.check)), ['modify-stop']);
   assert.strictEqual(r.state.history.at(-1).action, D.RESULT_ACTION.managed);
 });
 

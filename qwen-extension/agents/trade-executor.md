@@ -98,9 +98,9 @@ and `broker-refusals` first.
 
 ## Management (only as the plan says)
 
-- Tighten the stop (`modify_order`) only behind turned structure; never
+- Tighten the stop (`modify_order`) only as the head trader's STOP line says; never
   widen it (the gateway refuses). A stop the runner trails moves only when the head
-  trader asks (toward the market only; the runner never loosens it).
+  trader asks (toward the market only).
 - After a partial exit, reduce the protective stop's size to the remaining
   position with `modify_order {size, reason: "[protect] ..."}` (only after
   the exit: the stops must keep covering the position).

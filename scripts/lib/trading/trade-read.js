@@ -43,7 +43,8 @@
  *   trail         the level the runner's own structure trail stands behind (exit-trail.js swingSeries on the trade's
  *                 exit plan's swing timeframe, `exit.swingMinutes`, as the runner reads it; null with a trail by R or no
  *                 plan given, `trailBy` 'r' or 'none'): the last confirmed swing low (a short: high) and the stop just beyond it (a tick, snapped as the
- *                 runner snaps it, when the tick is known): the tightest a tighten may go, never tighter
+ *                 runner snaps it, when the tick is known): the code floor's fractal swing (the manage read, manage-read.js,
+ *                 names the 15m BOS protected swing a tighten stands behind)
  *
  *   tradeRead({ side, entry, openedAt, bars, base, tick, exit })   the facts above, or { unavailable } with why
  *   tradeReadLine(read, { level })                     one line for the managed cycle's prompt (level: a price as shown)
@@ -215,7 +216,7 @@ function tradeRead({ side, entry, openedAt, bars, base, tick = null, exit = null
   const reversal = brk ? `${tfH} ${brk.kind} ${brk.direction}` : displacement ? `${tfH} displacement through the swing` : null;
 
   // The runner's own structure trail level, read as the runner does (exit-trail.js swingSeries on the policy's swing_tf
-  // candles, its default k): the tightest a tighten may go. `exit`: the trade's exit plan's afterTarget (trailBy,
+  // candles, its default k): the code floor's swing. `exit`: the trade's exit plan's afterTarget (trailBy,
   // swingMinutes), as the runner holds it; none known, or a trail by R, has no swing level.
   const how = exit && exit.trailBy === 'structure' && exit.swingMinutes ? 'structure' : exit && exit.trailBy ? 'r' : 'none';
   let trail = null;
@@ -251,7 +252,7 @@ function tradeReadLine(t, { level = r2 } = {}) {
   const trail = t.trailBy === 'structure' && t.trail
     ? (t.trail.swing === null ? `no confirmed ${t.trail.minutes}m swing (the runner's trail has no level yet)` : `the last confirmed ${t.trail.minutes}m swing ${level(t.trail.swing)} (stop ${level(t.trail.stop)}, the runner's trail level)`)
     : t.trailBy === 'r' ? 'no swing level: the runner trails this trade by R behind the best price' : 'no swing level: the runner holds no structure trail for this trade';
-  return `Trade read (closed bars since entry; pullback-vs-reversal): best ${level(t.extreme.best)}; ${failed}; ${pushes}; ${depth}; close vs RTH VWAP ${t.vwap.rth === null ? 'n/a' : sAtr(t.vwap.distAtr)}, vs EMA20 ${sAtr(t.ema20.distAtr)} (+ the trade's way); structure against since entry: ${brk}; ${tf} displacement against: ${disp}; compression against: ${comp}; HTF bias at entry ${biasText(b.entry)}, now ${biasText(b.now)} (${flip}). Weakening signs: ${t.signs.length} of ${SIGNS.length}${t.signs.length ? ` (${t.signs.join(', ')})` : ''}, ${TR.minSigns} needed; reversal: ${t.reversal || 'none'}; tighten at most to ${trail}.`;
+  return `Trade read (closed bars since entry; pullback-vs-reversal): best ${level(t.extreme.best)}; ${failed}; ${pushes}; ${depth}; close vs RTH VWAP ${t.vwap.rth === null ? 'n/a' : sAtr(t.vwap.distAtr)}, vs EMA20 ${sAtr(t.ema20.distAtr)} (+ the trade's way); structure against since entry: ${brk}; ${tf} displacement against: ${disp}; compression against: ${comp}; HTF bias at entry ${biasText(b.entry)}, now ${biasText(b.now)} (${flip}). Weakening signs: ${t.signs.length} of ${SIGNS.length}${t.signs.length ? ` (${t.signs.join(', ')})` : ''}, ${TR.minSigns} needed; reversal: ${t.reversal || 'none'}; the code floor's trail: ${trail}.`;
 }
 
 module.exports = { SIGNS, tradeRead, tradeReadLine, biasOf };

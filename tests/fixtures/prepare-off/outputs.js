@@ -137,7 +137,7 @@ async function runDay(day, { extra = {}, runPrepare = null, headRun = null, befo
     if (beforePass) beforePass(bar, w);
     const filled = day !== 'no-fill' && bar === D.NEXT_BAR;
     if (filled) exchange.handle(w.state, 'place_order', { accountId: 7, contractId: D.MNQ_ID, side: 'buy', type: 'market', size: 1, stopLossBracket: { ticks: 40 } }, {});
-    const script = filled ? [{ result: 'CYCLE RESULT: managed - the open long' }] : day === 'entry' && bar === D.FIRED_BAR ? D.entryCycle(w) : D.passCycle(w, 'nothing to take');
+    const script = filled ? [{ result: 'STOP hold: hold (the open long)\nCYCLE RESULT: managed - the open long' }] : day === 'entry' && bar === D.FIRED_BAR ? D.entryCycle(w) : D.passCycle(w, 'nothing to take');
     // (`headRun(w, script)`: the branch's own: the head trader's runs played by another stand-in, prepare ahead "on".)
     // (Its last run's env stands for the scripted model's: the pass's env as main records it, for the normalizer too.)
     let headEnv = null;

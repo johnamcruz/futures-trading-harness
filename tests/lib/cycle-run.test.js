@@ -361,3 +361,20 @@ test('cycle run: phase 2 at the compose (`overlap`): made with the head trader\'
   const n = await runWith('CYCLE RESULT: planned - trade_lifecycle long 1\n', null);
   assert.strictEqual(n.h.made, null);
 });
+
+test('cycle run: the result carries stopText, the STOP-led lines of the head\'s own text read from its stdout (never the stderr-torn output, a subagent\'s report or its STATE line); end of day carries none', async () => {
+  const home = tmpDir();
+  const said = text => JSON.stringify({ type: 'assistant', message: { role: 'assistant', model: 'm', content: [{ type: 'text', text }] } });
+  const role = JSON.stringify({ type: 'assistant', parent_tool_use_id: 't1', message: { role: 'assistant', model: 'm', content: [{ type: 'text', text: 'STOP 1: a role\'s report' }] } });
+  const head = said('STATE: up leg\nSTOP 21495: protected-swing 15m BOS up\nCYCLE RESULT: managed - held');
+  const stdout = [role, head, JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'CYCLE RESULT: managed - held' })].join('\n');
+  // A stderr chunk torn into the head's line: the mixed output cannot be parsed there, the stdout copy can.
+  const output = [role, `${head.slice(0, 50)}warning: on stderr\n${head.slice(50)}`, JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'CYCLE RESULT: managed - held' })].join('\n');
+  const cfg = validateConfig({ harness: 'claude', premarketAt: '', symbols: ['MNQ'] });
+  const context = { action: 'trade', symbols: [{ symbol: 'MNQ', bar: { t: '2026-10-07T14:00:00.000Z' } }] };
+  const d = deps(home, async () => ({ ok: true, timedOut: false, code: 0, output, stdout }));
+  const r = await runCycle(cfg, 'trade', 'p', {}, { timeoutMs: 10000, context }, d.deps);
+  assert.strictEqual(r.stopText, 'STOP 21495: protected-swing 15m BOS up');
+  const e = await runCycle(cfg, 'eod', 'p', {}, { timeoutMs: 10000, context: { action: 'eod', symbols: [] } }, deps(tmpDir(), async () => ({ ok: true, timedOut: false, code: 0, output: stdout, stdout })).deps);
+  assert.ok(!('stopText' in e), 'end of day: none');
+});

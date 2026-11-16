@@ -46,6 +46,7 @@
 const fs = require('fs');
 const path = require('path');
 const { tradingDayKey } = require('./trading/clock');
+const { STOP_START } = require('./trading/stop-line');
 const { REQUIRED_FOR_ENTRY, REQUIRED_FOR_COMPOSED, REQUIRED_AT_ENTRY, skillName } = require('./trading/skills-loaded');
 const { cycleFactChecks } = require('./trading/fact-claims');
 const { resolveClock } = require('./trading/harness-now');
@@ -421,6 +422,18 @@ function headOwnText(output) {
   return fm.final || (fm.structured ? '' : String(output || ''));
 }
 
+/**
+ * The STOP-led lines of the head trader's own text (headOwnText; trading/stop-line.js STOP_START), joined: all a managed
+ * cycle's STOP line needs, so the runner never receives the rest of that text (its STATE line among it). '' with none.
+ */
+function stopLineText(output) {
+  try {
+    return headOwnText(output).split('\n').filter(l => STOP_START.test(l)).join('\n');
+  } catch (_err) {
+    return '';
+  }
+}
+
 /** The head trader's STATE line from its own text (headOwnText), scored against the cycle bar's briefing (trading/state-read.js). Never throws. */
 function cycleStateRecord({ home, harness, output, context, now }) {
   try {
@@ -442,4 +455,4 @@ function cycleExperienceLookups(transcript) {
   }
 }
 
-module.exports = { toolCalls, summarize, writeCycleLog, amendCycleLog, cycleLookups, cycleExperienceLookups, headOwnText, cycleClock, gateOrders, RISK_REDUCING };
+module.exports = { toolCalls, summarize, writeCycleLog, amendCycleLog, cycleLookups, cycleExperienceLookups, headOwnText, stopLineText, cycleClock, gateOrders, RISK_REDUCING };

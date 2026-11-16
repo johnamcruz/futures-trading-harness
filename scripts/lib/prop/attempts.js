@@ -204,7 +204,8 @@ function runAttempt(days, ctx) {
  * at the path's end, out at its last close. Mode `target`: the trade's own target (trade.ownExit) and its own trail,
  * or the policy's trail on top when it has one; mode `target_then_trail`: the original stop until the trade's own
  * target, then no exit there but the lock and the swing or R trail at each close (trading/exit-trail.js
- * afterTargetStep, the runner's and the backtester's rule, on the recorded swing levels: trade.swingPath);
+ * afterTargetStep, the runner's and the backtester's rule, on the recorded swing levels: trade.swingPath), with the
+ * rulebook's early lock (lock_at_r, lock_to_ticks) before the target when it sets one;
  * mode `trail`: the policy's trail, no target. moveTicks and
  * troughTicks are worked out again (a component's time stop is not replayed). A trade without a path or a stop, or an
  * exit without a mode, is kept as recorded.
@@ -263,7 +264,12 @@ function afterTargetExit(t, exit, slipTicks) {
   const minutes = exit.trail_by === 'structure' ? SWING_TFS[exit.swing_tf] : null;
   if (!(exit.lock_giveback_r > 0 && exit.trail_r > 0) || !['r', 'structure'].includes(exit.trail_by) || (exit.trail_by === 'structure' && !minutes)) return t;
   if (![undefined, 'off', 'on'].includes(exit.ratchet)) return t;
-  const plan = { afterTarget: { lockGivebackR: exit.lock_giveback_r, trailBy: exit.trail_by, trailR: exit.trail_r, swingMinutes: minutes, ...(exit.ratchet === 'on' ? { ratchet: true } : {}) } };
+  // The early lock: both keys or neither (as the rulebook states them); in this frame a tick is 1, so lock_to_ticks is
+  // the lock's ticks over the entry as it is live.
+  const [lockAt, lockTo] = [exit.lock_at_r, exit.lock_to_ticks].map(v => (v === 'off' ? undefined : v));
+  const lock = lockAt !== undefined || lockTo !== undefined;
+  if (lock && !(Number.isFinite(lockAt) && lockAt && lockAt === Math.abs(lockAt) && Number.isInteger(lockTo) && lockTo > 0)) return t;
+  const plan = { afterTarget: { lockGivebackR: exit.lock_giveback_r, trailBy: exit.trail_by, trailR: exit.trail_r, swingMinutes: minutes, ...(exit.ratchet === 'on' ? { ratchet: true } : {}), ...(lock ? { lockAtR: lockAt, lockToTicks: lockTo } : {}) } };
   const swings = minutes && t.swingPath ? t.swingPath[exit.swing_tf] || [] : [];
   const trade = { sign: 1, entry: 0, risk: t.stopTicks, stop: -t.stopTicks, peakR: 0, armed: false, target: own.targetTicks > 0 ? own.targetTicks : null };
   let low = 0;

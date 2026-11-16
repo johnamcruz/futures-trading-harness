@@ -60,20 +60,40 @@ function swingSeries(bars, minutes, k = 2) {
 /**
  * One closed bar of a trade after its fill under a target-then-trail plan.
  * trade { sign (1 long, -1 short), entry, risk (price, 1R), stop, peakR, armed, target (price, or null: never arms) }
- * bar { h, l, c }; plan.afterTarget { lockGivebackR, trailBy ('r' | 'structure'), trailR, ratchet (true: on) }; swing: the structure
- * level on the trade's side at this bar's close (a long's swing low, a short's swing high), or null; a swing whose stop
- * (a tick beyond it) is not on the protective side of the bar's close counts as none.
- * Returns { stop, peakR, armed, close: null | { price, reason: 'trail' }, fellBack (structure with no usable swing: the R trail) },
- * and wrongSide: true when it fell back because the swing given was on the wrong side of the close (not for want of one).
+ * bar { h, l, c }; plan.afterTarget { lockGivebackR, trailBy ('r' | 'structure'), trailR, ratchet (true: on), lockAtR,
+ * lockToTicks (the early lock: both set or both left out) }; swing: the structure level on the trade's side at this bar's
+ * close (a long's swing low, a short's swing high), or null; a swing whose stop (a tick beyond it) is not on the
+ * protective side of the bar's close counts as none.
+ *
+ * The early lock (the rulebook's lock_at_r, lock_to_ticks): once the best price (closed bars' extremes, this bar's
+ * included) has reached lockAtR, the stop is at least the entry plus lockToTicks ticks (snapped to the tick on the safe
+ * side), whether or not the target is armed; it never loosens a tighter stop. The bar that first sets the stop at that
+ * lock level does not close the trade at market when its close is beyond the new stop (the stop rests from that close,
+ * as the runner places it live); only a close at or through it closes the trade at the close (reason 'lock': a stop on
+ * the wrong side of the market can't rest). Every other newly set stop already traded through by its bar closes the
+ * trade at the close (reason 'trail'), as before.
+ * Returns { stop, peakR, armed, locked, close: null | { price, reason: 'trail' | 'lock' }, fellBack (structure with no
+ * usable swing: the R trail) }, and wrongSide: true when it fell back because the swing given was on the wrong side of
+ * the close (not for want of one).
  */
 function afterTargetStep(trade, bar, plan, tick, swing = null) {
   const { sign, entry, risk } = trade;
   const a = plan.afterTarget;
   const fav = sign > 0 ? bar.h : bar.l;
+  const unfav = sign > 0 ? bar.l : bar.h;
   const peakR = Math.max(trade.peakR || 0, (sign * (fav - entry)) / risk);
   const target = Number.isFinite(trade.target) ? trade.target : null;
   const armed = Boolean(trade.armed) || (target !== null && sign * (fav - target) >= 0);
-  if (!armed || !a) return { stop: trade.stop, peakR, armed, close: null, fellBack: false };
+  const lockLevel = a && lockOn(a) && peakR >= a.lockAtR ? snapStop(entry + sign * a.lockToTicks * tick, sign, tick) : null;
+  const locked = lockLevel !== null;
+  const base = locked ? (sign > 0 ? Math.max(trade.stop, lockLevel) : Math.min(trade.stop, lockLevel)) : trade.stop;
+  const through = s => s !== trade.stop && (sign > 0 ? unfav <= s : unfav >= s);
+  // The lock bar: the stop newly at the lock level rests when the close is beyond it; a close at or through it, out there.
+  const lockBar = s => (s === lockLevel && through(s) ? (sign * (bar.c - s) > 0 ? null : { price: bar.c, reason: 'lock' }) : undefined);
+  if (!armed || !a) {
+    const lb = lockBar(base);
+    return { stop: base, peakR, armed, locked, close: lb === undefined ? null : lb, fellBack: false };
+  }
   const targetR = (sign * (target - entry)) / risk;
   // The lock: the target's R less lockGivebackR. With the ratchet on (opt in), the best R reached (closed bars'
   // extremes, the peak the R trail reads) less it, so it rises with the peak. Never below the entry.
@@ -88,11 +108,15 @@ function afterTargetStep(trade, bar, plan, tick, swing = null) {
   const trail = a.trailBy === 'structure' && !fellBack ? swing - sign * tick : entry + sign * (peakR - a.trailR) * risk;
   const best = sign > 0 ? Math.max(lock, trail) : Math.min(lock, trail);
   const snapped = snapStop(best, sign, tick);
-  const stop = sign > 0 ? Math.max(trade.stop, snapped) : Math.min(trade.stop, snapped);
-  const unfav = sign > 0 ? bar.l : bar.h;
-  if (stop !== trade.stop && (sign > 0 ? unfav <= stop : unfav >= stop)) return { stop, peakR, armed, close: { price: bar.c, reason: 'trail' }, fellBack, ...why };
-  return { stop, peakR, armed, close: null, fellBack, ...why };
+  const stop = sign > 0 ? Math.max(base, snapped) : Math.min(base, snapped);
+  const lb = lockBar(stop);
+  if (lb !== undefined) return { stop, peakR, armed, locked, close: lb, fellBack, ...why };
+  if (through(stop)) return { stop, peakR, armed, locked, close: { price: bar.c, reason: 'trail' }, fellBack, ...why };
+  return { stop, peakR, armed, locked, close: null, fellBack, ...why };
 }
+
+/** The early lock is on: both keys set (the rulebook's lock_at_r and lock_to_ticks; left out of the plan when off). */
+const lockOn = a => Number.isFinite(a.lockAtR) && a.lockAtR > 0 && Number.isInteger(a.lockToTicks) && a.lockToTicks > 0;
 
 /**
  * Live: the swing a structure trail stands behind at the close of `bar` (one of `bars`, the runner's closed bars,
