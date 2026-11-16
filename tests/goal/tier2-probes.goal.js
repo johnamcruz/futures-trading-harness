@@ -10,7 +10,8 @@
  *   a size above the verdict's / below the rulebook's floor              [phase2-size] / [min-contracts]
  *   the entry without a bracket stop                                     [stop-defined]
  *   a second position while one is open                                  [prop-one-position]
- *   the bracket stop moved to loosen the risk                            [modify-protection]
+ *   the bracket stop moved to loosen the risk                            [modify-stop] (the runner's confirmed resting
+ *     stop on record, local state; with no record the gateway's [modify-protection] judges it: order-gate.test.js)
  * (An expired record is the order-latency self-test's: tier2-breaks.goal.js.) Mutation check: the policy's entry rule
  * turned off in the order gate (a copy of the tree: `if (false && why)`) must fail the entry-rule probe.
  */
@@ -38,7 +39,7 @@ const EXPECTED = {
   'size below the floor': { tag: 'min-contracts' },
   'no bracket stop': { tag: 'stop-defined' },
   'a second position while one is open': { tag: 'prop-one-position' },
-  'the stop moved to loosen the risk': { tag: 'modify-protection' },
+  'the stop moved to loosen the risk': { tag: 'modify-stop' },
 };
 const run = root => T.runDays([DAY], { probe: true, root, parallel: 1, dir: OUT }).then(r => r[0]);
 
