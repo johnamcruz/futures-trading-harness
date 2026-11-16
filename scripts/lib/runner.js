@@ -791,8 +791,11 @@ function createRunner(deps) {
       // A level the resting stop never reached (a modify that failed or came
       // too late) protects nothing: a bar through it means out at market.
       if ((resting === null || sign * (target - resting) > 0) && (sign > 0 ? bar.l <= target : bar.h >= target)) { cross = { bar, stop: target }; break; }
-      const x = extremeStep({ ...ext, peakR, troughR }, bar, t);
-      ext = { bestPrice: x.bestPrice, bestBarT: x.bestBarT, worstPrice: x.worstPrice, stallBars: x.stallBars };
+      // The Position line's facts never touch the exit: a failure blanks them (the line then folds), the loop goes on.
+      try {
+        const x = extremeStep({ ...ext, peakR, troughR }, bar, t);
+        ext = { bestPrice: x.bestPrice, bestBarT: x.bestBarT, worstPrice: x.worstPrice, stallBars: x.stallBars };
+      } catch (_err) { ext = { bestPrice: null, bestBarT: null, worstPrice: null, stallBars: 0 }; }
       troughR = Math.min(troughR, (sign * ((sign > 0 ? bar.l : bar.h) - t.entry)) / t.risk);
       const after = t.plan.afterTarget;
       // Past the target: exit-trail.js on this closed bar, the swing confirmed by its close (never a later bar).
@@ -800,7 +803,7 @@ function createRunner(deps) {
       const step = after ? afterTargetStep({ ...t, stop: target, peakR, armed }, bar, t.plan, tick, swing)
         : trailStep({ ...t, stop: target, peakR }, bar, t.plan, tick);
       if (after) { armed = step.armed; fellBack = fellBack || step.fellBack; wrongSide = wrongSide || Boolean(step.wrongSide); }
-      if (after) swingClass = swingClassOf({ trade: { ...t, peakR: step.peakR, armed: step.armed }, bar, plan: t.plan, tick, swing });
+      if (after) { try { swingClass = swingClassOf({ trade: { ...t, peakR: step.peakR, armed: step.armed }, bar, plan: t.plan, tick, swing }); } catch (_err) { swingClass = null; } }
       lastClose = bar.c;
       peakR = step.peakR;
       target = step.stop;
@@ -814,7 +817,8 @@ function createRunner(deps) {
       const last = bars[bars.length - 1];
       emit('position_closed', { symbol: item.symbol, contractId: cid, setup: t.setup, side: sign > 0 ? 'long' : 'short', entry: t.entry, risk: t.risk, why,
         lastClose: last.c, rNow: (sign * (last.c - t.entry)) / t.risk, peakR, troughR, barsHeld });
-      save({ ...t, peakR, troughR, barsHeld, lastBarT, armed });
+      // closing: the Position line no longer reads this record as current (position-read.js heldFor) while the close fills.
+      save({ ...t, peakR, troughR, barsHeld, lastBarT, armed, closing: true });
       // The runner's own exit, one record per position (append-only, the last few kept), for the decision history's
       // real R (decision-history.js withPositions).
       state = { ...state, runnerExits: appendExit(state.runnerExits, { contractId: cid, side: sign > 0 ? 'long' : 'short', openedAt: new Date(t.since).toISOString(), size: Number(p.size), at: clock.now().toISOString(), r: Math.round(((sign * (last.c - t.entry)) / t.risk) * 100) / 100 }) };
@@ -931,7 +935,7 @@ function createRunner(deps) {
       // The held trade: under its trail item's contract (the first lane's, as trailPosition keeps it); current when its
       // last bar is that item's last closed bar this pass; with no such item this pass, as of its own last bar.
       const trailItem = p => traded.find(x => x.lane === 0 && x.contractId === p.contractId) || traded.find(x => x.lane === 0 && famOf(x.contractId) === famOf(p.contractId));
-      const heldOf = p => { const x = trailItem(p) || item(p) || sym(p); const tr = state.trails || {}; return x && x.contractId ? tr[x.contractId] || null : Object.values(tr).find(h => h && h.key === positionKey(p)) || null; };
+      const heldOf = p => { const x = trailItem(p) || item(p) || sym(p); return x && x.contractId ? (state.trails || {})[x.contractId] || null : null; };
       const lastBarFor = p => { const x = trailItem(p); return x && Array.isArray(x.bars) && x.bars.length ? x.bars[x.bars.length - 1].t : undefined; };
       tradeObjs = openTrades({ positions: acct.positions, orders: acct.orders || [], entries: journal, barsFor: p => (item(p) ? item(p).bars : null), heldFor: heldOf, lastBarFor, tickFor: tickOf });
       const history = t => { if (!withHistory) return null; try { return t.setup ? tradeHistory(t) : null; } catch (err) { failed(`${t.setup}'s backtest excursions for the open trade`, err); return null; } };

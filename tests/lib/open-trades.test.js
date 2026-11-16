@@ -116,7 +116,7 @@ test('the open trade\'s line ends with its read facts (trade-read.js); a read th
   assert.match(tradeReadText(t, { bars: null, base: 3 }), /^Trade read: unavailable \(/);
 });
 
-// One R basis (DESIGN 4.2, review B1/B2): the runner's held trade, when it is the position's and current.
+// One R basis: the runner's held trade, when it is the position's and current.
 const { tradeFold } = require('../../scripts/lib/trading/exit-trail');
 const POS = { id: 7, contractId: C, type: 1, size: 2, averagePrice: 21500.25, creationTimestamp: '2026-10-08T14:41:10Z' };
 const ORDERS = [{ contractId: C, type: 4, side: 1, stopPrice: 21494.75 }];
@@ -178,4 +178,46 @@ test('describeOpenTrade is total: a broken trade object still gives a Position l
     const s = describeOpenTrade(bad);
     assert.match(s, /^Position(: unavailable \(| \(code facts\): )/, s);
   }
+});
+
+test('a re-averaged position through openTrades: every R stays on the held trade\'s entry, and the line says the average price now', () => {
+  const held = heldOver(BARS);
+  const [t] = openTrades({ positions: [{ ...POS, averagePrice: 21502.75 }], orders: ORDERS, entries: JOURNAL, barsFor: () => BARS, heldFor: () => held, lastBarFor: () => BARS[2].t, tickFor: () => 0.25 });
+  assert.deepStrictEqual([t.entry, t.averagePrice, t.risk], [21500.25, 21502.75, 10]);
+  const text = describeOpenTrade(t, { tickSize: 0.25 });
+  assert.match(text, /^Position \(code facts\): MNQ long 2 @ 21500\.25, 1R 10 pts \(average price now 21502\.75; R from the runner's entry 21500\.25\); now \+0\.95R at 21509\.75; /);
+  assert.match(text, /Open trade MNQ long 2 @ 21500\.25 /);
+  assert.match(text, /working stop 21494\.75 \(-0\.55R\)/, 'the sentence\'s R on the held entry too');
+});
+
+test('the record\'s MFE and MAE fields are clamped as the line is (MFE never under 0, MAE never above)', () => {
+  const up = [bar('2026-10-08T14:42:00.000Z', 21501, 21510, 21501, 21509)];
+  const [t] = openTrades({ positions: [POS], orders: ORDERS, entries: JOURNAL, barsFor: () => up, tickFor: () => 0.25 });
+  assert.deepStrictEqual([t.maeR, t.mfeR], [0, 0.87], 'the low 21501 is above the entry: MAE 0, not +0.07');
+  const down = [bar('2026-10-08T14:42:00.000Z', 21499, 21499.5, 21490, 21492)];
+  assert.strictEqual(openTrades({ positions: [POS], orders: ORDERS, entries: JOURNAL, barsFor: () => down, tickFor: () => 0.25 })[0].mfeR, 0);
+});
+
+test('one basis: the held best reaches the Trade read and the Manage read even when the bars in the window miss it', () => {
+  // The held trade saw 21530 (a bar the window no longer holds); the window's own best is 21514.
+  const held = heldOver(BARS, { bestPrice: 21530, peakR: 2.98 });
+  const [t] = openTrades({ positions: [POS], orders: ORDERS, entries: JOURNAL, barsFor: () => BARS, heldFor: () => held, lastBarFor: () => BARS[2].t, tickFor: () => 0.25 });
+  const read = tradeReadText(t, { bars: BARS, base: 3, tickSize: 0.25, exit: PLAN.afterTarget });
+  assert.match(read, /: best 21530; /);
+  assert.match(read, /warning giveback \(0\.5R behind the best\): 21525 /, '21530 - 0.5 x 10');
+});
+
+test('several working stops: the line and the sentence name the same one rule (the loosest is the exposure) and say how many', () => {
+  const [t] = openTrades({ positions: [POS], orders: [...ORDERS, { contractId: C, type: 4, side: 1, stopPrice: 21480 }], entries: JOURNAL, barsFor: () => BARS, tickFor: () => 0.25 });
+  const text = describeOpenTrade(t, { tickSize: 0.25 });
+  assert.match(text, /; 2 stop orders, the loosest 21480 \(/);
+  assert.match(text, /Open trade .*: initial stop 21489: risk 11\.25 points = 45 ticks; 2 stop orders, the loosest 21480 \(-1\.8R\)/);
+  assert.doesNotMatch(text.slice(text.indexOf('Open trade')), /working stop 21494\.75/);
+});
+
+test('describeOpenTrade never throws when its Position facts can\'t be read: the line says so first', () => {
+  const t = { contractId: C, side: 'long', sign: 1, size: 1, entry: 100, risk: 10, initialStop: 90, stop: 90, stops: [90], target: null, barsHeld: 1, noBars: false, notes: [] };
+  Object.defineProperty(t, 'position', { get() { throw new Error('unreadable facts'); } });
+  const s = describeOpenTrade(t);
+  assert.match(s, /^Position: unavailable \(unreadable facts\)\. Open trade MNQ long 1 @ 100/);
 });

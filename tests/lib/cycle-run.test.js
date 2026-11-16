@@ -376,11 +376,16 @@ test('cycle run: the result carries stopText, the STOP-led lines of the head\'s 
   const r = await runCycle(cfg, 'trade', 'p', {}, { timeoutMs: 10000, context }, d.deps);
   assert.strictEqual(r.stopText, 'STOP 21495: protected-swing 15m BOS up');
   assert.strictEqual(r.modifyOrders, 0, 'no modify_order call in the cycle');
-  // A modify_order call in the head's turn: counted, for the STOP line's record.
-  const call = JSON.stringify({ type: 'assistant', message: { role: 'assistant', model: 'm', content: [{ type: 'tool_use', id: 'tu1', name: 'mcp__broker__modify_order', input: { orderId: 7, stopPrice: 21495 } }] } });
+  // The trade-executor's modify_order (only it holds order-writing tools): Claude Code's stream carries a subagent's
+  // calls (parent_tool_use_id), so it is counted for the STOP line's record.
+  const call = JSON.stringify({ type: 'assistant', parent_tool_use_id: 'task1', message: { role: 'assistant', model: 'm', content: [{ type: 'tool_use', id: 'tu1', name: 'mcp__broker__modify_order', input: { orderId: 7, stopPrice: 21495 } }] } });
   const out2 = [call, head, JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'CYCLE RESULT: managed - held' })].join('\n');
   const m = await runCycle(cfg, 'trade', 'p', {}, { timeoutMs: 10000, context }, deps(tmpDir(), async () => ({ ok: true, timedOut: false, code: 0, output: out2, stdout: out2 })).deps);
   assert.strictEqual(m.modifyOrders, 1);
+  // A harness whose head stream doesn't carry its subagents' calls: unknown (null), never a 0 after a real modify.
+  const oc = validateConfig({ harness: 'opencode', premarketAt: '', symbols: ['MNQ'] });
+  const o = await runCycle(oc, 'trade', 'p', {}, { timeoutMs: 10000, context }, deps(tmpDir(), async () => ({ ok: true, timedOut: false, code: 0, output: 'STOP hold: hold\nCYCLE RESULT: managed - held', stdout: 'STOP hold: hold\nCYCLE RESULT: managed - held' })).deps);
+  assert.strictEqual(o.modifyOrders, null);
   const e = await runCycle(cfg, 'eod', 'p', {}, { timeoutMs: 10000, context: { action: 'eod', symbols: [] } }, deps(tmpDir(), async () => ({ ok: true, timedOut: false, code: 0, output: stdout, stdout })).deps);
   assert.ok(!('stopText' in e), 'end of day: none');
 });

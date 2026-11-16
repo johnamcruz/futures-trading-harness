@@ -135,13 +135,14 @@ function lockAt(sign, entry, risk, target, peakR, a) {
 
 /**
  * The code floor's class at a closed bar, from the same inputs the step read there (the trade after the bar: its
- * peakR and armed; the bar's close; the swing it was given) (the Position line, DESIGN 4.1, review R1):
- *   A  not armed: before the target, the initial stop holds
+ * peakR and armed; the bar's close; the swing it was given) (for the Position line):
+ *   A  not armed: before the target, the initial stop holds (or the early lock, `earlyLock`, once reached)
  *   B  a usable swing (its stop on the protective side of the close) whose stop is beyond the lock: the stop trails it
  *   C  a usable swing whose stop is not beyond the lock: the stop rests at the lock
  *   D  no usable swing (none in the bars, `wrongSide`: one on the wrong side of the close; or a trail by R): the lock or
  *      the R trail, whichever is tighter (`binds`)
- * Returns { cls, trailBy, swing, swingStop, lock, binds ('swing' | 'lock' | 'trail'), trailStop, wrongSide } with the
+ * Returns { cls, trailBy, swing, swingStop, lock, binds ('swing' | 'lock' | 'trail'), trailStop, wrongSide, earlyLock (class A
+ * with the early lock on and reached: the level the step holds the stop at; else null) } with the
  * levels snapped as the step snaps its stop; null with no afterTarget.
  */
 function swingClassOf({ trade, bar, plan, tick, swing = null }) {
@@ -152,14 +153,16 @@ function swingClassOf({ trade, bar, plan, tick, swing = null }) {
   const raw = lockOf(trade, plan);
   const lock = raw === null ? null : snap(raw);
   const base = { trailBy: a.trailBy, swing: Number.isFinite(swing) ? swing : null, swingStop: Number.isFinite(swing) ? snap(swing - sign * tick) : null, lock };
-  if (!trade.armed || raw === null) return { cls: 'A', ...base, binds: null, trailStop: null, wrongSide: false };
+  // Before the target, the early lock (lock_at_r, lock_to_ticks) holds the stop at its level once the best reached it.
+  const early = lockOn(a) && (trade.peakR || 0) >= a.lockAtR ? snap(entry + sign * a.lockToTicks * tick) : null;
+  if (!trade.armed || raw === null) return { cls: 'A', ...base, binds: null, trailStop: null, wrongSide: false, earlyLock: early };
   const usable = a.trailBy === 'structure' && Number.isFinite(swing) && sign * (bar.c - (swing - sign * tick)) > 0;
   if (usable) {
     const beyond = sign * ((swing - sign * tick) - raw) > 0;
-    return { cls: beyond ? 'B' : 'C', ...base, binds: beyond ? 'swing' : 'lock', trailStop: null, wrongSide: false };
+    return { cls: beyond ? 'B' : 'C', ...base, binds: beyond ? 'swing' : 'lock', trailStop: null, wrongSide: false, earlyLock: null };
   }
   const trail = entry + sign * ((trade.peakR || 0) - a.trailR) * risk;
-  return { cls: 'D', ...base, binds: sign * (trail - raw) > 0 ? 'trail' : 'lock', trailStop: snap(trail), wrongSide: a.trailBy === 'structure' && Number.isFinite(swing) };
+  return { cls: 'D', ...base, binds: sign * (trail - raw) > 0 ? 'trail' : 'lock', trailStop: snap(trail), wrongSide: a.trailBy === 'structure' && Number.isFinite(swing), earlyLock: null };
 }
 
 /**

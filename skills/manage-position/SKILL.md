@@ -107,6 +107,6 @@ trade_lifecycle long +1.4R, Manage read: protected swing BROKEN by a close
   -> STOP hold: hold (out at market); close_position
 trade_lifecycle long +1.2R, warning giveback 21499.75, working 21500.50 -> STOP hold: hold (not tighter)
 trade_lifecycle long, Position: now +3.34R, MFE +4.16R, giveback 0.82R (20%), the stop rests at the lock (+0.34R),
-  no 15m CHoCH, weakening 0 of 5 -> STOP hold: hold. (2021-09-01: this one came back and stopped at +0.33R. The hold
+  no 15m CHoCH, weakening 0 of 5 -> STOP hold: hold. (2021-09-01: this one came back and stopped at +0.32R. The hold
   is still the read: the same facts came before 5R and 6R runs on other days, and no rule that exits here pays.)
 ```

@@ -151,7 +151,10 @@ function describeOpenTrade(t, { round = x => Math.round(x * 100) / 100, tickSize
     const pts = t.risk !== null ? `${r(t.risk)} points${tickSize ? ` = ${Math.round(t.risk / tickSize)} ticks` : ''}` : null;
     const risk = t.risk === null ? 'initial risk unknown'
       : fromWorking ? `risk ${pts}, measured to the working stop (the initial stop is unknown)` : `initial stop ${r(t.initialStop)}: risk ${pts}`;
-    const stop = t.stop !== null ? `working stop ${r(t.stop)} (${sR(R(t.stop))})` : 'NO working stop';
+    // Several stop orders: the loosest is the exposure, as the Position line names it (one rule for both).
+    const stops = Array.isArray(t.stops) ? t.stops.filter(Number.isFinite) : [];
+    const loosest = stops.length > 1 ? stops.reduce((a, b) => (t.sign * (b - a) < 0 ? b : a)) : null;
+    const stop = loosest !== null ? `${stops.length} stop orders, the loosest ${r(loosest)} (${sR(R(loosest))})` : t.stop !== null ? `working stop ${r(t.stop)} (${sR(R(t.stop))})` : 'NO working stop';
     const target = t.target !== null ? `, target ${r(t.target)} (${sR(R(t.target))})` : ', no target order';
     // Now, best and worst are the Position line's (one basis); a contract with no bar this cycle is said here.
     const now = t.noBars ? '; no bars for this contract this cycle (read get_bars or the quote)' : '';

@@ -1,6 +1,6 @@
 'use strict';
 
-// The run's STOP lines (scripts/lib/replay/stop-lines.js, DESIGN 5.4 with the review's R3): managed cycles, stated (of
+// The run's STOP lines (scripts/lib/replay/stop-lines.js): managed cycles, stated (of
 // them read inline), missing; one threshold (config/replay.json scorecard.maxMissingStopShare, 2%) for the alarm.
 
 const test = require('node:test');
@@ -37,8 +37,8 @@ test('stopLinesOf: the run home\'s event logs; the line says the alarm', () => {
   fs.writeFileSync(path.join(home, 'logs', 'events-2021-09-01.jsonl'), `${rows.map(x => JSON.stringify(x)).join('\n')}\nnot json\n`);
   const s = SL.stopLinesOf(home);
   assert.deepStrictEqual([s.managed, s.stated, s.inline, s.missing], [3, 2, 1, 1]);
-  assert.strictEqual(SL.stopLinesLine(s), 'STOP lines: 3 managed cycles, 2 stated (1 read from the 9 Manage: line), 1 missing (33.3%): ALARM, above 2% of managed cycles.');
-  assert.strictEqual(SL.stopLinesLine({ ...s, missing: 0, share: 0, alarm: false }), 'STOP lines: 3 managed cycles, 2 stated (1 read from the 9 Manage: line), 0 missing (0%).');
+  assert.strictEqual(SL.stopLinesLine(s), 'STOP lines: 3 managed (one per open trade a cycle), 2 stated (1 read from the 9 Manage: line), 1 missing (33.3%): ALARM, above 2% of them.');
+  assert.strictEqual(SL.stopLinesLine({ ...s, missing: 0, share: 0, alarm: false }), 'STOP lines: 3 managed (one per open trade a cycle), 2 stated (1 read from the 9 Manage: line), 0 missing (0%).');
   assert.strictEqual(SL.stopLinesOf(tmpDir()), null, 'no logs: none');
   assert.strictEqual(SL.stopLinesLine(null), null);
 });
@@ -47,6 +47,19 @@ test('the replay report shows the run\'s STOP lines with the alarm', () => {
   const R = require('../../scripts/lib/replay/report');
   const s = { managed: 157, stated: 152, inline: 11, missing: 5, share: 0.032, alarm: true, maxMissingShare: 0.02 };
   const summary = { months: [], total: { label: 'total' }, timing: null, stopLines: s };
-  assert.match(R.toMarkdown({ ...summary, total: R.summarize({}).total }, {}), /STOP lines: 157 managed cycles, 152 stated \(11 read from the 9 Manage: line\), 5 missing \(3\.2%\): ALARM, above 2% of managed cycles\./);
-  assert.match(R.toText({ ...summary, months: [], total: R.summarize({}).total }), /STOP lines: 157 managed cycles/);
+  assert.match(R.toMarkdown({ ...summary, total: R.summarize({}).total }, {}), /STOP lines: 157 managed \(one per open trade a cycle\), 152 stated \(11 read from the 9 Manage: line\), 5 missing \(3\.2%\): ALARM, above 2% of them\./);
+  assert.match(R.toText({ ...summary, months: [], total: R.summarize({}).total }), /STOP lines: 157 managed/);
 });
+
+test('summarize reads the run home\'s STOP lines (the run folder two levels under it)', () => {
+  const R = require('../../scripts/lib/replay/report');
+  const home = tmpDir();
+  const runDir = path.join(home, 'replay', 'run-1');
+  fs.mkdirSync(runDir, { recursive: true });
+  fs.mkdirSync(path.join(home, 'logs'), { recursive: true });
+  fs.writeFileSync(path.join(home, 'logs', 'events-2021-09-01.jsonl'), [ev(true), ev(false)].map(x => JSON.stringify(x)).join('\n') + '\n');
+  const s = R.summarize({}, { runDir });
+  assert.deepStrictEqual([s.stopLines.managed, s.stopLines.missing], [2, 1]);
+  assert.ok(!('stopLines' in R.summarize({})), 'no run folder: none');
+});
+

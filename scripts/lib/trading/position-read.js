@@ -35,6 +35,9 @@ function heldFor(held, { key, lastBarT } = {}) {
   if (!held || typeof held !== 'object') return { why: 'no held trade' };
   if (held.key !== key) return { why: 'the held trade is another position\'s' };
   if (held.skip) return { why: 'not managed by the runner (no exit plan it manages)' };
+  // The runner's own close-out was sent (its trail or time stop): its record stops at that bar, the position may still
+  // read open until the close fills.
+  if (held.closing) return { why: 'the runner is closing this trade' };
   if (lastBarT === undefined) return { held, asOf: held.lastBarT || null };
   if (!held.lastBarT || Date.parse(held.lastBarT) !== Date.parse(lastBarT)) return { why: 'the held trade was not updated to the last closed bar' };
   return { held };
@@ -104,7 +107,7 @@ function classText(c, p, level) {
   if (!c || typeof c !== 'object') return null;
   const tf = p.tf || 'swing';
   const restsOrTrails = c.binds === 'trail' ? `the stop trails ${p.trailR}R behind the best (${level(c.trailStop)})` : 'the stop rests at the lock';
-  if (c.cls === 'A') return 'before the target: the initial stop holds';
+  if (c.cls === 'A') return Number.isFinite(c.earlyLock) ? `before the target: the early lock holds the stop at ${level(c.earlyLock)}` : 'before the target: the initial stop holds';
   if (c.cls === 'B') return `the stop trails the ${tf} swing ${level(c.swing)} (stop ${level(c.swingStop)})`;
   if (c.cls === 'C') return `last confirmed ${tf} swing ${level(c.swing)} is behind the lock: the stop rests at the lock`;
   if (c.cls === 'D' && c.trailBy !== 'structure') return restsOrTrails;
@@ -124,10 +127,12 @@ function lineOf(p, { level = x => String(r2(x)), et = hhmm } = {}) {
   const at = x => `${level(p.work)} (${sR(p.workR)}; a fill there is ${x}R off the best)`;
   const stop = p.work === null ? 'NO working stop' : p.stops > 1 ? `${p.stops} stop orders, the loosest ${at(p.atStopGive)}` : `working stop ${at(p.atStopGive)}`;
   const R = x => r2((p.sign * (x - p.entry)) / p.risk);
-  const exit = p.mode === 'target_then_trail' ? `target ${p.armed ? `reached (lock ${p.lockR === null ? '?' : sR(p.lockR)})` : 'not reached'}`
+  const noTarget = p.mode === 'target_then_trail' && p.target === null;
+  const exit = noTarget ? 'no target (the stop holds until its own exit)'
+    : p.mode === 'target_then_trail' ? `target ${p.armed ? `reached (lock ${p.lockR === null ? '?' : sR(p.lockR)})` : 'not reached'}`
     : p.mode === 'trail' ? `trail ${p.trail.givebackR}R behind the best from ${sR(p.trail.activateR)}`
       : p.targetOrder !== null ? `target order ${level(p.targetOrder)} (${sR(R(p.targetOrder))})` : 'no target order';
-  const cls = p.mode === 'target_then_trail' ? classText(p.swingClass, p, level) : null;
+  const cls = p.mode === 'target_then_trail' && !noTarget ? classText(p.swingClass, p, level) : null;
   const tail = p.basis === 'fold' ? ` (not runner-managed: ${p.why || 'no held trade'}; risk from ${p.riskFrom === 'working' ? 'the working stop' : 'the journal stop'})` : '';
   return `${head}; ${now}; ${mfe}; ${mae}; ${give}; ${stop}; ${exit}${cls ? `; code floor: ${cls}` : ''}${tail}.`;
 }

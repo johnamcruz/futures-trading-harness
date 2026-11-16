@@ -934,7 +934,7 @@ test('a section that could not be built is named; positions without trade detail
   assert.doesNotMatch(prompts(cfg, new Date(), '/r').trade([{ symbol: 'MNQ' }]), /Context unavailable/);
   const t = accountText({ id: 1, at: '2026-10-08T14:33:20Z', balance: 50000, positions: [{ contractId: 'MNQ', type: 1, size: 2, averagePrice: 21500 }], workingOrders: 1, openTradesError: 'bad order data' });
   assert.match(t, /1 open position \(below\); 1 working order\. Position: unavailable \(bad order data\)\. Open positions: MNQ long 2 @ 21500 \(trade details unavailable this cycle: bad order data; read list_open_positions and list_open_orders\)\./);
-  // One Position line per position, never dropped (DESIGN 4.4, review M2); and accountText itself never throws.
+  // One Position line per position, never dropped; and accountText itself never throws.
   const two = accountText({ id: 1, at: '2026-10-08T14:33:20Z', balance: 50000, positions: [{ contractId: 'MNQ', type: 1, size: 2, averagePrice: 21500 }, { contractId: 'MES', type: 2, size: 1, averagePrice: 6000 }], workingOrders: 2, openTradesError: 'x' });
   assert.strictEqual((two.match(/Position: unavailable \(x\)\./g) || []).length, 2);
   // The premarket and end-of-day prompts carry the same account text, so the same lines.

@@ -2471,7 +2471,7 @@ test('exit mode target_then_trail, live: a target cancel that fails is retried e
 });
 
 // The Position line (trading/position-read.js) on every prompt that shows the account with a position: one basis, the
-// runner's held trade (DESIGN 4.2, 4.5; review B1, B2, M2, M3, R4).
+// runner's held trade.
 const TTT = { mode: 'target_then_trail', lock_giveback_r: 1.5, trail_by: 'r', trail_r: 1 };
 const positionLines = p => (String(p).match(/Position(?: \(code facts\)|: unavailable \()/g) || []).length;
 
@@ -2489,6 +2489,12 @@ test('every managed prompt with a position carries exactly one Position line per
   const last = managed[managed.length - 1];
   assert.match(last, /Position \(code facts\): MNQ long 1 @ 21500, 1R 10 pts; now \+1\.7R at 21517; MFE \+2\.4R at 21524 \(10:06 ET bar\); MAE -0\.1R; giveback 0\.7R \(29% of MFE\); /);
   assert.match(last, /working stop 21514 \(\+1\.4R; a fill there is 1R off the best\); target reached \(lock \+0\.5R\); code floor: the stop trails 1R behind the best \(21514\)\. Open trade/);
+  // The prompt of the bar that armed the target (the 10:06 bar, its cycle at 10:09): the class is the step's after that
+  // bar, never "before the target" beside "target reached".
+  const arming = managed.find(x => /The cycle's time: 2026-10-07 10:09/.test(x));
+  assert.ok(arming, 'the arming bar\'s prompt');
+  assert.match(arming, /target reached \(lock \+0\.5R\); code floor: the stop trails 1R behind the best \(21514\)\./);
+  for (const x of managed) assert.ok(!(/target reached/.test(x) && /before the target/.test(x)), x);
   // Parity with the held trade itself, and the cycle record's structured fields (the T5 dataset fields).
   const held = r.saved.trails.MNQ;
   const ctx = r.contexts.filter(c => c && Array.isArray(c.openTrades) && c.openTrades.length).pop();
@@ -2514,7 +2520,7 @@ test('a micro and its mini on one item: the second position\'s line is folded an
   const tape = { 3: [21512, 21499, 21510], 6: [21524, 21515, 21518] };
   const r = await trailSim({ tape, exit: TTT, record: { targetTicks: 80 }, otherMonth: 'MNQ:2026-12', until: et(10, 11) });
   const p = r.prompts.filter(x => /Open trade MNQ:2026-12/.test(x)).pop();
-  if (!p) return; // the runner closed the other month (a roll): no prompt shows it
+  assert.ok(p, 'a managed prompt shows both positions');
   assert.strictEqual(positionLines(p), 2, p);
   // The other position (no stop, no journal entry: no 1R) never gets the held trade's numbers: its own line says why
   // (with a 1R it is folded and says "not runner-managed: the held trade is another position's", open-trades.test.js).
@@ -2529,3 +2535,39 @@ test('end of day: a position still open after the flatten carries its Position l
   for (const p of eod) assert.strictEqual(positionLines(p), 1, p);
   assert.match(eod[0], /Position \(code facts\): MNQ long 1 @ 21500, 1R 10 pts; now [^;]* \(the \d\d:\d\d ET bar's close\); /, 'the held trade, as of its last bar');
 });
+
+test('never a throw: the open trades failing to build still give each position one "Position: unavailable (...)" line, on a trade cycle and at end of day', async () => {
+  // An order record that throws when its side is read (a malformed broker reply): openTrades throws inside describeOpen.
+  const odd = () => { const o = { id: 99, contractId: 'MNQ', type: 7 }; Object.defineProperty(o, 'side', { get() { throw new Error('malformed order'); }, enumerable: true }); return o; };
+  const bad = { ordersOver: list => [...list, odd()] };
+  const r = await trailSim({ tape: {}, exit: TTT, record: { targetTicks: 80 }, ...bad, until: et(10, 8) });
+  const managed = r.prompts.filter(x => /1 open position \(below\)/.test(x));
+  assert.ok(managed.length >= 1, r.prompts.length);
+  for (const x of managed) assert.strictEqual((x.match(/Position: unavailable \(/g) || []).length, 1, x);
+  const e = await trailSim({ tape: {}, exit: TTT, record: { targetTicks: 80 }, ...bad, closeFails: 99, fillAt: et(15, 30) + 5000, startAt: et(15, 40) + 2000, until: et(15, 56), cfgOver: { eodAt: '15:50@America/New_York' } });
+  const eod = e.prompts.filter(x => /Run the end-of-day skill/.test(x));
+  assert.ok(eod.length >= 1);
+  for (const x of eod) assert.strictEqual((x.match(/Position: unavailable \(/g) || []).length, 1, x);
+});
+
+test('after the runner\'s own close-out the held trade is not read as current: a position still open (the close not filled yet) folds from the bars and says the runner is closing it', async () => {
+  // Long from 21500, 1R 10: the 10:03 bar reaches the target (21520, 2R), its best 21524 sets the trail at 21514, and its
+  // low 21510 is already through it: closed at market at its close. The broker accepts the close without filling it
+  // (ghostCloses), so the cycle's account read still lists the position; the 10:06 bar closes at 21508 (+0.8R).
+  const tape = { 3: [21524, 21510, 21518], 6: [21519, 21505, 21508] };
+  const r = await trailSim({ tape, exit: TTT, record: { targetTicks: 80 }, ghostCloses: 9, until: et(10, 11) });
+  assert.ok(r.closed.length >= 1, 'the runner closed it');
+  assert.strictEqual(r.saved.trails.MNQ.closing, true);
+  const after = r.prompts.filter(x => /Open trade MNQ/.test(x) && /The cycle's time: 2026-10-07 10:09/.test(x));
+  assert.ok(after.length >= 1, 'a prompt after the close-out still lists the position');
+  // The close cancelled its stop, so no 1R is left to read (no journal stop here): unavailable, never the held record's
+  // numbers (its last close 21518, +1.8R). With a 1R the line folds and says "the runner is closing this trade"
+  // (position-read.test.js).
+  for (const x of after) {
+    assert.match(x, /\. Position: unavailable \(no initial risk: no R to state\)\. Open trade MNQ/);
+    assert.doesNotMatch(x, /Position \(code facts\)|at 21518;/);
+  }
+  // Without the closing mark the held record would pass as current here: its lastBarT is the last closed bar.
+  assert.strictEqual(r.saved.trails.MNQ.lastBarT, new Date(et(10, 6)).toISOString());
+});
+

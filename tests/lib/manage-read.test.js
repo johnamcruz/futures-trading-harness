@@ -42,9 +42,9 @@ test('manageRead: a 15m BOS the trade\'s way since entry gives its protected swi
   // A level at or past the last close is no stop to rest: said so, never 'tighter' (the warning giveback after a deep pullback).
   const deep = manageRead({ side: 'long', entry: 106, risk: 2, stop: 96, openedAt: opened, bars: bars15(UP), base: 3, tick: 0.25, exit: EXIT });
   assert.deepStrictEqual([deep.warning.stop, deep.warning.past, deep.warning.tighter], [109, true, false], 'best 110 - 0.5 x 2 = 109, snapped 109; last close 109');
-  // The fact only, no advice in it (DESIGN 4.4; the skill keeps "past the price -> hold").
+  // The fact only, no advice in it (the skill keeps "past the price -> hold").
   assert.match(manageReadLine(deep), /past the price: a stop there would fill at once/);
-  const facts = x => x.slice(x.indexOf('only when tighter): ')); // the facts after the header's instruction (kept, review m1)
+  const facts = x => x.slice(x.indexOf('only when tighter): ')); // the facts after the header's instruction (kept)
   assert.doesNotMatch(facts(manageReadLine(deep)), /\bhold\b/, 'no "hold" in any Manage read fact');
   // The working stop and the best are the Position line's: not repeated here.
   assert.doesNotMatch(line, /working stop \d|; best \d/);

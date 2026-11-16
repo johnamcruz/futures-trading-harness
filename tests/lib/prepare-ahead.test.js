@@ -806,7 +806,7 @@ test('prepare-ahead: its tunables are config (config/runner.json prepare): the d
   for (const effort of ['turbo', 3, '']) assert.throws(() => loadWith(effort), /prepare\.effort/, String(effort));
 });
 
-test('with a position open neither the prepare nor the confirm runs: the full head-trader prompt (which carries the Position line) always does (DESIGN 4.5, review M3)', () => {
+test('with a position open neither the prepare nor the confirm runs: the full head-trader prompt (which carries the Position line) always does', () => {
   const { flatOf } = require('../../scripts/lib/prepare-shadow');
   const acct = { positions: [{ contractId: 'MNQ', type: 1, size: 1, averagePrice: 21500 }], orders: [{ id: 9, contractId: 'MNQ', type: 4 }] };
   assert.strictEqual(flatOf(acct), false);

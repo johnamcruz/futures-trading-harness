@@ -1,6 +1,6 @@
 'use strict';
 
-// The Position line (scripts/lib/trading/position-read.js, DESIGN 4.1-4.3 with the review's R1): one code-computed line
+// The Position line (scripts/lib/trading/position-read.js): one code-computed line
 // per open position, every number from the runner's held trade (one R basis), or folded from the bars when the runner
 // holds none for it (said so); total: a failure is a line that says so, never a throw.
 
@@ -12,7 +12,7 @@ const TICK = 0.25;
 const level = x => String(Math.round(x / TICK) * TICK);
 const PLAN = { afterTarget: { lockGivebackR: 1.5, trailBy: 'structure', trailR: 1, swingMinutes: 15 } };
 
-// 2021-09-01 13:54Z (the mt343 run's long, DESIGN 4.1): entry 15659.5, 1R 9.5 pts (38 ticks, $19.00 per MNQ); the fill
+// 2021-09-01 13:54Z (the mt343 run's long): entry 15659.5, 1R 9.5 pts (38 ticks, $19.00 per MNQ); the fill
 // bar's low 15656.75 is 11 ticks under the entry (MAE -0.29R); target 15677 (1.84R): lock +0.34R = 15662.75, 13 ticks over.
 const LONG_T = { contractId: 'MNQ', side: 'long', sign: 1, size: 1, entry: 15659.5, averagePrice: 15659.5, risk: 9.5, riskFrom: 'journal', stop: 15662.75, stops: [15662.75], target: null, openedAt: '2021-09-01T13:41:20.000Z' };
 const LONG_H = {
@@ -33,7 +33,7 @@ const L0307 = 'Position (code facts): MNQ short 1 @ 13674, 1R 82.25 pts; now +0.
 
 const line = (t, h, extra = {}) => positionLine(positionRead(t, { held: h, tick: TICK, ...extra }), { level });
 
-test('the three examples of DESIGN 4.1, exactly (the 09-01 hold at 13:54Z and 13:57Z, the 03-07 short before its target)', () => {
+test('the three worked examples, exactly (the 09-01 hold at 13:54Z and 13:57Z, the 03-07 short before its target)', () => {
   assert.strictEqual(line(LONG_T, LONG_H), L1354);
   assert.strictEqual(line(LONG_T, { ...LONG_H, lastClose: 15672.75, lastBarT: '2021-09-01T13:54:00.000Z' }), L1357);
   assert.strictEqual(line(SHORT_T, SHORT_H), L0307);
@@ -127,11 +127,11 @@ test('readable without the skill: plain labels, no code words or class letters, 
     assert.doesNotMatch(l, /\b[a-z]+[A-Z]\w*\b/, 'no camelCase identifiers');
     assert.doesNotMatch(l, /\b(class|cls) [A-D]\b|\(?\b[A-D]\)/, 'no class letters');
     assert.doesNotMatch(l, /\b(hold|exit|tighten|close it|should|consider)\b/i, 'facts only, no instruction');
-    assert.doesNotMatch(l, /stall/i, 'no stall clause (review B4)');
+    assert.doesNotMatch(l, /stall/i, 'no stall clause');
   }
 });
 
-// Parity with the simulators' excursions (review B1.3, DESIGN 4.7, section 10 item 2): the line's MFE and MAE are the
+// Parity with the simulators' excursions: the line's MFE and MAE are the
 // runner's bar rule (a bar that opened at most fillGraceMs before the fill counts); bracketExit never counts the fill bar.
 test('parity: the line\'s MFE/MAE equal bracketExit\'s for a fill outside the grace, and differ by exactly the fill bar inside it (the runner counts it, the simulators never do)', () => {
   const { bracketExit } = require('../../scripts/lib/learning/experience-log');
@@ -152,4 +152,43 @@ test('parity: the line\'s MFE/MAE equal bracketExit\'s for a fill outside the gr
   assert.deepStrictEqual([r2(inside.peakR), r2(inside.troughR)], [0.3, -0.15]);
   assert.deepStrictEqual([sim().mfeR, sim().maeR], [0.3, -0.05], 'the best 106 is after the fill bar; the worst without it 99');
   assert.notStrictEqual(r2(inside.troughR), sim().maeR, 'the fill bar\'s low 97 is the difference');
+});
+
+// never-throw reached for real, the runner's own close-out,
+// the early lock, no target.
+test('never a throw, reached: a level or clock that throws, a held record whose field throws: "Position: unavailable (...)"', () => {
+  const boom = () => { throw new Error('boom'); };
+  const read = positionRead(LONG_T, { held: LONG_H, tick: TICK });
+  assert.strictEqual(positionLine(read, { level: boom }), 'Position: unavailable (boom).');
+  assert.strictEqual(positionLine(read, { level, et: boom }), 'Position: unavailable (boom).');
+  const bad = { ...LONG_H };
+  Object.defineProperty(bad, 'peakR', { get: boom, enumerable: true });
+  assert.deepStrictEqual(positionRead(LONG_T, { held: bad, tick: TICK }), { unavailable: 'boom' });
+});
+
+test('the runner closing the trade: heldFor gives the reason, so the line folds from the bars, never "now" at the last held close', () => {
+  const closing = { ...LONG_H, closing: true };
+  assert.deepStrictEqual(heldFor(closing, { key: 'p1', lastBarT: LONG_H.lastBarT }), { why: 'the runner is closing this trade' });
+  assert.deepStrictEqual(heldFor(closing, { key: 'p1', lastBarT: undefined }), { why: 'the runner is closing this trade' });
+  // The held trade's last close said +2.4R at 124; the bars' last close is 102 (+0.2R): the line says 102.
+  const t = { contractId: 'MNQ', side: 'long', sign: 1, size: 1, entry: 100, averagePrice: 100, risk: 10, riskFrom: 'journal', stop: 90, stops: [90], target: null, openedAt: '2026-10-07T14:00:00.000Z' };
+  const bars = [{ t: '2026-10-07T14:00:00.000Z', h: 125, l: 99, c: 124 }, { t: '2026-10-07T14:03:00.000Z', h: 124, l: 101, c: 102 }];
+  const h = heldFor({ key: 'k', entry: 100, risk: 10, peakR: 2.5, lastClose: 124, lastBarT: bars[1].t, closing: true }, { key: 'k', lastBarT: bars[1].t });
+  const l = positionLine(positionRead(t, { held: h.held || null, why: h.why, bars, tick: TICK }), { level });
+  assert.match(l, /now \+0\.2R at 102; /);
+  assert.match(l, /\(not runner-managed: the runner is closing this trade; risk from the journal stop\)\.$/);
+  assert.doesNotMatch(l, /at 124;/);
+});
+
+test('the early lock before the target: the code floor names the lock level, never "the initial stop holds"', () => {
+  const early = { ...SHORT_H, swingClass: { ...SHORT_H.swingClass, earlyLock: 13673.5 } };
+  const l = line({ ...SHORT_T, stop: 13673.5, stops: [13673.5] }, early);
+  assert.match(l, /target not reached; code floor: before the target: the early lock holds the stop at 13673\.5\.$/);
+  assert.doesNotMatch(l, /initial stop holds/);
+});
+
+test('no target to trail past: the line says so, never "target not reached" or "before the target"', () => {
+  const l = line(LONG_T, { ...LONG_H, target: null, armed: false, swingClass: { ...LONG_H.swingClass, cls: 'A', lock: null } });
+  assert.match(l, /; no target \(the stop holds until its own exit\)\.$/);
+  assert.doesNotMatch(l, /target not reached|before the target/);
 });

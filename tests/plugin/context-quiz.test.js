@@ -124,7 +124,7 @@ test('context quiz: every layer asked, ids unique, the bar the whole quiz at K 5
   // q141-q146 (feat/position-line, layer manage: the Position line's fields read (giveback, MAE, what the stop rests on)
   // and three recorded holds (a 3m pullback, a 67% giveback at the lock, a warning past the price); the managed
   // situation's prompt; closed choices). A drafted synthetic item (a 15m CHoCH against with a placeable level ->
-  // choch-against, review R2) failed 0/3 on main and on the branch and was deferred to the "what is a WARNING" study:
+  // choch-against) failed 0/3 on main and on the branch and was deferred to the "what is a WARNING" study:
   // the taught warning stop is not a validated right answer (it cost R in the exit study).
   assert.strictEqual(QUIZ.questions.length, 113);
   assert.deepStrictEqual(QUIZ.questions.filter(x => x.layer === 'manage').map(x => x.id), ['q141', 'q142', 'q143', 'q144', 'q145', 'q146']);

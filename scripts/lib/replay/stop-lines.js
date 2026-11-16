@@ -2,7 +2,7 @@
 
 /**
  * A run's STOP lines (manage-position: one `STOP <price|hold>: <reason>` line every managed cycle; runner.js records
- * each as a `stop_line` event, trading/stop-line.js parses it): how many managed cycles, how many stated it (and of
+ * each as a `stop_line` event, one per open trade a managed cycle; trading/stop-line.js parses it): how many, how many stated it (and of
  * them read from the end of the PLAN's `9 Manage:` line, `inline`), how many are missing (read as hold: a process
  * failure), and an alarm when the missing share is above the one threshold (config/replay.json
  * scorecard.maxMissingStopShare: the same 2% the PR's keep rule uses). A report, never a refusal.
@@ -44,7 +44,7 @@ const pct = x => `${Math.round(x * 1000) / 10}%`;
 
 function stopLinesLine(s) {
   if (!s) return null;
-  return `STOP lines: ${s.managed} managed cycles, ${s.stated} stated (${s.inline} read from the 9 Manage: line), ${s.missing} missing (${pct(s.share)})${s.alarm ? `: ALARM, above ${pct(s.maxMissingShare)} of managed cycles` : ''}.`;
+  return `STOP lines: ${s.managed} managed (one per open trade a cycle), ${s.stated} stated (${s.inline} read from the 9 Manage: line), ${s.missing} missing (${pct(s.share)})${s.alarm ? `: ALARM, above ${pct(s.maxMissingShare)} of them` : ''}.`;
 }
 
 module.exports = { stopLineSummary, stopLinesOf, stopLinesLine };
