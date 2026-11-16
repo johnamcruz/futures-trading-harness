@@ -244,8 +244,9 @@ async function runCycle(cfg, action, prompt, opts, limits = {}, deps = {}) {
   // run's end, and the reads before its spawn.)
   const turn = confirm ? confirmTurnOf(res, spawnMs, runEndMs) : null;
   const confirmed = confirm ? { confirm: { outcome: res.ok && !res.timedOut ? 'done' : res.timedOut ? 'timeout' : 'error', ms: Math.max(0, endedMs - startedMs), fellBack: false, late, ...turn, readsMs: Math.max(0, spawnMs - startedMs) } } : measureLate ? { late } : {};
-  // The managed cycle's STOP line: only the STOP-led lines of the head's own text (cycle-log.js stopLineText).
-  const stopText = action === 'eod' ? null : stopLineText(res.output || '');
+  // The managed cycle's STOP line: only the STOP-led lines of the head's own text (cycle-log.js stopLineText), from its
+  // stdout (a stderr chunk can tear a stream line in the mixed output), as the runner's entry reads it.
+  const stopText = action === 'eod' ? null : stopLineText(typeof res.stdout === 'string' && res.stdout ? res.stdout : res.output || '');
   return { ...cycleOutcome(res, { result, intact, action, lookups, reportedResult, resultNote }), ...(stopText === null ? {} : { stopText }), ...(phase1Refused ? { phase1Refused: true } : {}), ...confirmed };
 }
 
