@@ -34,6 +34,7 @@ function transcript({ headText = [], tasks = [], calls = [] }) {
 /**
  * Writes a run under `home` and returns { runDir, records }. Each decision: { t, symbol?, kind ('take'|'pass'|'risk'),
  * action?, category?, expected?, record?, attempts? (compose records), prompt, headText?, tasks?, calls?, attempt?, gate?,
+ * factCheck? (the cycle's fact check), rawTranscript? (another harness's transcript, in place of opencode's), argv?,
  * ran? (the store line's ran: default one ok trade cycle), interrupted? }. `exit`: the manifest's exit record (null:
  * none, a run before the record); `code`: the setup record's code digest.
  */
@@ -50,7 +51,7 @@ function writeRun(home, { runId = 'r1', start, end, decisions, states = null, do
     const rel = `logs/cycles/${day}/${String(i).padStart(6, '0')}-trade.json`;
     fs.mkdirSync(path.join(home, path.dirname(rel)), { recursive: true });
     const composed = d.composed || (d.record ? [{ symbol: d.symbol || 'MNQ', ...d.record }] : []);
-    fs.writeFileSync(path.join(home, rel), JSON.stringify({ prompt: d.prompt, transcript: transcript(d), composed }));
+    fs.writeFileSync(path.join(home, rel), JSON.stringify({ prompt: d.prompt, transcript: d.rawTranscript || transcript(d), composed, ...(d.factCheck ? { factCheck: d.factCheck } : {}), ...(d.argv ? { argv: d.argv } : {}) }));
     // The replay store's line for the decision time (replay/store.js): its cycles' health.
     fs.appendFileSync(path.join(runDir, `${day}.jsonl`), `${JSON.stringify({ v: 1, t: d.t, day, kind: 'trade', ran: d.ran || [{ action: 'trade', ok: true, timedOut: false }], step: { code: 0, timedOut: false }, ...(d.interrupted ? { interrupted: true } : {}) })}\n`);
     const action = d.action || (d.kind === 'take' ? 'long' : d.kind === 'pass' ? 'none' : 'hold');
@@ -65,4 +66,8 @@ function writeRun(home, { runId = 'r1', start, end, decisions, states = null, do
   return { runDir, records, score: () => records };
 }
 
-module.exports = { SYSTEM, DOCS, CODE, EXIT, transcript, writeRun };
+// The cycle's fact check of one phase-2 report, every claim true (decision-examples.js verifySubagents), stated in the
+// fixture's risk-manager reply 'APPROVED' (its verdict and its one claim's text), so the report is that reply's own.
+const FACTS_TRUE = Object.freeze({ reports: [{ verdict: 'APPROVE', claims: [{ type: 'verdict', text: 'APPROVED', check: true }], unavailable: null, verdictProblem: null }], counts: { reports: 1, claims: 1, true: 1, false: 0, unchecked: 0 } });
+
+module.exports = { SYSTEM, DOCS, CODE, EXIT, FACTS_TRUE, transcript, writeRun };

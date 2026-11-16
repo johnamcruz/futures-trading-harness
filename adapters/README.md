@@ -84,10 +84,39 @@ reason, and neither is ever trained on.
        no example (which result answers which call is ambiguous);
      - the system prompt from the run's own `workspace/opencode.json`.
 
-     Only the head trader's turns are examples by default. A subagent's
-     claims are checked by nothing, so its turns (its task prompt and reply)
-     come only when `--roles <role,...>` (or `all`) names it, each marked
-     `"subagent": true` in `meta.jsonl`.
+     A Claude Code run (its `stream-json` transcript in the cycle record)
+     gives the same format (`scripts/lib/learning/claude-turns.js`):
+     - the system prompt is the file the run appended
+       (`--append-system-prompt-file`), read from the run home and checked
+       against the sha256 in its name;
+     - the session start hooks' context (the account and lessons briefing)
+       is a `user` message before the cycle prompt; a hook that failed or
+       printed JSON gives no example;
+     - thinking blocks are left out, as opencode's reasoning is;
+     - a deferred tool's schema load (a result of tool references only, no
+       text) is left out with its call, and counted;
+     - a hook's message to the model mid-turn is a `user` message (its text
+       as the hook wrote it, local paths included: the dataset stays local);
+     - an error result is its text, with no error flag, as opencode's is;
+     - a resumed or forked session (the confirm of prepare-ahead) gives no
+       example: its history is in the CLI's session store, not the record;
+     - a stream with a line that doesn't parse, an event the CLI wrote
+       itself (an API error), a cut-off or compacted turn, or a record
+       without its argv gives no example;
+     - a subagent it launched gives no example.
+
+     Neither reader holds the CLI's own base system prompt, its project
+     instruction files or the tool definitions: each example is the role's
+     prompt, the context the run recorded, and the turn.
+
+     Only the head trader's turns are examples by default, its subagent
+     calls and their results kept in its turn. A subagent's own turn (its
+     task prompt and reply) comes only when `--roles <role,...>` (or `all`)
+     names it and the code verified its claims, each marked
+     `"subagent": true` in `meta.jsonl`. Today that is only a risk-manager
+     reply whose cycle fact check (its phase-2 FACTS against the briefing)
+     holds one report, every claim true. No code checks an analyst's reads,
+     so their turns are never examples.
 
      A transcript the reader doesn't recognize, or a call it can't read
      whole, gives no example. A cycle that failed, timed out or was
@@ -120,12 +149,65 @@ reason, and neither is ever trained on.
        exit plan, the repeated samples, and `validSetups` (correct takes
        against correct passes on valid setups: a pass there is rarely
        verifiable, so the set leans to taking).
+   - **Coverage.** `dataset.json` (`coverage`) and `show` count the train
+     and validate examples per skill (each verified read's skill, by the
+     trade-lifecycle crosswalk), per read type, per kind and per role. The
+     GAPS list names each skill the head trader reads with that has fewer
+     than `spec.json`'s `coverage.minExamplesPerSkill` examples: the moments
+     to collect next. A gap is reported, never refused.
    - `show <folder>` checks the fingerprint against the files.
 
 The scorecard grades each decision. A run whose months the scorecard's look
 schedule refuses for a tuning look needs its scorecard written first, under a
 look the ledger allows: `node scripts/replay.js scorecard <run dir> ...`. The
 build reads a `scorecard.jsonl` written after the run's last step.
+
+### Structure reads
+
+A second dataset teaches the structure read alone
+(`scripts/lib/learning/structure-read.js`, `structure-dataset.js`). For each
+bar a run recorded a briefing for, there is one example per instruction:
+
+- **The prompt** is the recorded briefing, a blank line, then one of two fixed
+  instructions:
+  - `structure`: the 3m and 15m breaks, the protected swing and its status, the
+    CISDs, the pullback and its depth, the Day so far word and its VWAP
+    crosses, a 15m BOS known today;
+  - `sequence`: the owner's table (continuation, potential, confirmed or
+    failed reversal), its direction, its invalidation level, and whether it
+    is broken.
+- **The completion** is a model's answer only when it is one JSON object with
+  exactly the instruction's keys, every value exactly the truth's, written
+  canonically (no repeated key, escape or other number form)
+  (`source: model`). Otherwise it is the code-built answer (`source: code`;
+  `--no-gold` writes verified answers only).
+- **The truth** is the briefing's own printed facts, the code's output for
+  that bar. It is never an outcome. Only 3m briefings as of their cycle's bar
+  close are read. A bar whose facts can't be read gives no example of that
+  instruction.
+
+Answers come from any model, outside the harness:
+
+```bash
+node scripts/structure-read-dataset.js prompts --run <run dir> ... --out <prompts.jsonl>
+# answer each prompt with your CLI; write { "id": <its id>, "text": <the answer> } lines
+node scripts/structure-read-dataset.js build --train <practice-train run dir> ... [--validate <practice-validate run dir> ...] \
+  [--answers <answers.jsonl> ...] --out <new folder>
+node scripts/structure-read-dataset.js show <folder>
+```
+
+The same rules as the decision dataset apply:
+
+- **Splits.** Train comes from practice-train only, validate from
+  practice-validate only, and test and final are refused.
+- **The digest.** Only bars made under the harness's code digest now are kept
+  (`--include-digest` keeps others by name, marked). Duplicates are dropped.
+- **Balance.** The train bars are balanced by `spec.json`'s `structureRead`:
+  no case (the sequence truth) and no regime (pullback, trend, chop, other)
+  over its share.
+- **Output.** `train.jsonl`, `valid.jsonl`, `meta.jsonl` (each example's
+  instruction, source, run, bar, case and regime) and `dataset.json` (the
+  fingerprint, the answers seen, verified and rejected by field, the coverage).
 
 ## 2. Train
 

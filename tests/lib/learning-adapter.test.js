@@ -42,6 +42,16 @@ test('the repository\'s spec is valid: the splits, the balance, and the two step
   bad(s => { s.steps = [s.steps[0]]; return s; }, /steps: two/);
   bad(s => { s.balance.takeShare = [0.7, 0.3]; return s; }, /takeShare/);
   bad(s => { s.balance.minNearMllShare = 1; return s; }, /minNearMllShare/);
+  // The coverage floor and the structure-read balance: optional, checked when present.
+  assert.ok(Number.isInteger(SPEC.coverage.minExamplesPerSkill) && SPEC.structureRead.maxCaseShare < 1);
+  bad(s => { s.coverage.minExamplesPerSkill = 0; return s; }, /coverage/);
+  bad(s => { s.coverage = 'x'; return s; }, /coverage/);
+  bad(s => { s.structureRead.maxCaseShare = 1; return s; }, /structureRead/);
+  bad(s => { s.structureRead.seed = 'x'; return s; }, /structureRead/);
+  const bare = JSON.parse(JSON.stringify(SPEC));
+  delete bare.coverage;
+  delete bare.structureRead;
+  assert.deepStrictEqual(A.validateSpec(bare), []);
   assert.deepStrictEqual(A.validateSpec(null), ['the spec: a JSON object']);
 });
 

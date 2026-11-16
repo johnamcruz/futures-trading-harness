@@ -27,6 +27,13 @@
  *                     claims are unchecked: the dataset trains on them only by name (decision-dataset.js roles)
  *   system            the role's own prompt from the run's workspace/opencode.json (the generated adapter the run
  *                     read), when that file holds one; never rebuilt from today's documents
+ * A Claude Code run (its stream-json transcript, claude-turns.js) gives the same head turn: its system prompt the file the
+ * run appended (--append-system-prompt-file, from the run home, checked against the sha256 its name carries), a deferred
+ * tool's schema load left out and counted (`omitted`), its SessionStart hooks' context a user message before the
+ * prompt, a resumed or forked session none (its history isn't recorded), a stream with a line that doesn't parse none;
+ * the subagents it launched are never faithful (no example).
+ * A subagent turn is an example only when `verified` (verifySubagents: a risk-manager reply whose cycle fact check holds
+ * one report, every claim true); an analyst's claims are checked by no code, so its turns are never examples.
  * A transcript the reader doesn't recognize, or a call it can't read whole, gives no head turn (nothing is guessed):
  * `faithful: false`. A decision whose cycle failed, timed out or was interrupted (cycleHealth: the run's store line for
  * its time, and its cycle file) carries `cycleFailed` (why), and none of its turns is faithful.
@@ -36,7 +43,9 @@
  *   toolCall(part)                         { call, result } of an opencode tool_use part, or null
  *   headMessages(events)                   the head trader's messages after its prompt, or null (see above)
  *   cycleHealth(storeLine, cycleDoc)       why the cycle can't be trusted, or null
- *   roleTurns(doc, { systemPrompts })      [{ role, messages, faithful }]
+ *   roleTurns(doc, { systemPrompts, home }) [{ role, messages, faithful }] (home: the run home, for a Claude Code run's
+ *                                          appended system prompt)
+ *   verifySubagents(turns, doc)            the turns, each subagent's marked `verified` (CHECKED_ROLES)
  *   systemPromptsOf(home)                  { role: prompt } from <home>/workspace/opencode.json, {} without one
  *   runDecisions(runDir, { score, times, sample })   the run's decisions (see the head); `score(runDir)` -> scorecard
  *                                          records; `times`: only decisions at these times (a sample's); `sample`:
@@ -119,9 +128,40 @@ function headMessages(events) {
   return last && last.role === 'assistant' && !last.tool_calls && last.content ? msgs : null;
 }
 
-function roleTurns(doc, { systemPrompts = {} } = {}) {
+/**
+ * A Claude Code run's turns (claude-turns.js): the head trader's from its stream, its system prompt the file the run
+ * appended (none appended: no system message; one that can't be read whole: no head turn). A subagent it launched
+ * (the Agent or Task tool) is never faithful here: its reply's wrapper isn't read, so it gives no example.
+ */
+function claudeRoleTurns(doc, events, home) {
+  const CT = require('./claude-turns');
+  // Every line of the record parsed (documents() skips one that doesn't: a lost event is a lost text).
+  const lines = String(doc.transcript || '').split('\n').filter(l => l.trim()).length;
+  const whole = lines === events.length ? null : `${lines - events.length} line(s) of the stream don't parse`;
+  const resumed = CT.resumedSession(doc, events);
+  const sys = home ? CT.appendedSystemPrompt(doc, home) : { error: 'no run home' };
+  const ctx = CT.sessionContext(events);
+  const why = whole || resumed || sys.error || ctx.error || null;
+  const head = why ? null : CT.claudeHeadMessages(events);
+  const turns = [head
+    ? { role: HEAD_ROLE, messages: [...(sys.prompt !== undefined ? [{ role: 'system', content: sys.prompt }] : []), ...ctx.texts.map(t => ({ role: 'user', content: t })), { role: 'user', content: doc.prompt }, ...head.messages], faithful: true, harness: 'claude', omitted: head.omitted }
+    : { role: HEAD_ROLE, messages: null, faithful: false, harness: 'claude', why: why || 'the stream could not be read whole' }];
+  for (const e of events) {
+    if (e.parent_tool_use_id || e.type !== 'assistant' || !isObj(e.message) || !Array.isArray(e.message.content)) continue;
+    for (const b of e.message.content) {
+      if (!isObj(b) || b.type !== 'tool_use' || !['Agent', 'Task'].includes(b.name)) continue;
+      const role = isObj(b.input) && typeof b.input.subagent_type === 'string' ? b.input.subagent_type : 'unknown';
+      turns.push({ role, messages: null, faithful: false, subagent: true, harness: 'claude' });
+    }
+  }
+  return turns;
+}
+
+function roleTurns(doc, { systemPrompts = {}, home = null } = {}) {
   if (!isObj(doc) || typeof doc.prompt !== 'string' || !doc.prompt) return [];
-  const events = documents(doc.transcript).filter(isOpencodeEvent);
+  const all = documents(doc.transcript);
+  if (require('./claude-turns').isClaudeStream(all)) return claudeRoleTurns(doc, all, home);
+  const events = all.filter(isOpencodeEvent);
   const turns = [];
   const head = headMessages(events);
   const sys = systemPrompts[HEAD_ROLE];
@@ -187,6 +227,35 @@ function statesOf(runDir) {
   return lines.length ? require('../prop/account-states').dayWeights(lines) : null;
 }
 
+/**
+ * Marks each subagent turn `verified` only when the code checked its claims: a risk-manager reply, the cycle's one, whose
+ * cycle fact check (cycle-log.js factCheck: the phase-2 report's FACTS against the briefing) holds exactly one report
+ * with claims, every one checked true, and that report is the reply's own (its verdict and every claim's text in it). No other role's claims are checked by code (an analyst's read): never verified,
+ * so never an example (decision-dataset.js examplesOf).
+ */
+const CHECKED_ROLES = Object.freeze(['risk-manager']);
+function verifySubagents(turns, doc) {
+  const fc = isObj(doc) && isObj(doc.factCheck) ? doc.factCheck : null;
+  const reports = fc && Array.isArray(fc.reports) ? fc.reports : [];
+  const allTrue = reports.length === 1 && isObj(reports[0]) && Array.isArray(reports[0].claims) && reports[0].claims.length > 0
+    && reports[0].claims.every(c => isObj(c) && c.check === true) && !reports[0].unavailable && !reports[0].verdictProblem;
+  // The report checked must be this reply's own: its verdict and every claim's text stated in the reply, both read in
+  // the fact check's own spelling (fact-claims.js parseClaim: ASCII, lower case, spaces collapsed).
+  const norm = x => require('../trading/fact-claims').parseClaim(String(x)).text.replace(/\s+/g, ' ');
+  const own = t => {
+    const reply = Array.isArray(t.messages) && t.messages.length ? t.messages[t.messages.length - 1].content : '';
+    const r = reports[0];
+    if (typeof reply !== 'string' || typeof r.verdict !== 'string' || !r.verdict) return false;
+    const said = norm(reply);
+    return said.includes(norm(r.verdict)) && r.claims.every(c => typeof c.text === 'string' && c.text && said.includes(norm(c.text)));
+  };
+  return turns.map(t => {
+    if (!t.subagent) return t;
+    const one = turns.filter(x => x.subagent && x.role === t.role).length === 1;
+    return { ...t, verified: Boolean(t.faithful && CHECKED_ROLES.includes(t.role) && one && allTrue && own(t)) };
+  });
+}
+
 function runDecisions(runDir, { score, times = null, sample = null } = {}) {
   if (typeof score !== 'function') throw new Error('runDecisions: score(runDir) -> the scorecard records');
   const home = path.resolve(runDir, '..', '..');
@@ -226,7 +295,7 @@ function runDecisions(runDir, { score, times = null, sample = null } = {}) {
     const setupRead = record && Array.isArray(record.reads) ? record.reads.find(x => x && x.step === 'setup') : null;
     // A failed, timed-out or interrupted cycle: unverifiable (decision-label.js), and none of its turns faithful.
     const cycleFailed = cycleHealth(lines.get(new Date(r.t).toISOString()), doc);
-    const turns = roleTurns(doc, { systemPrompts });
+    const turns = verifySubagents(roleTurns(doc, { systemPrompts, home }), doc);
     out.push({
       key: `${new Date(r.t).toISOString()}|${r.symbol}`, runId: manifest.runId, t: new Date(r.t).toISOString(), day: r.day, symbol: r.symbol, kind, action,
       scorecard: { category: r.category, agrees: r.agrees }, expected: r.expected ? { decision: r.expected.decision, decidedBy: r.expected.decidedBy } : null,
@@ -242,4 +311,4 @@ function runDecisions(runDir, { score, times = null, sample = null } = {}) {
   return out;
 }
 
-module.exports = { HEAD_ROLE, taskResult, toolCall, headMessages, cycleHealth, roleTurns, systemPromptsOf, riskUsdOf, runDecisions };
+module.exports = { HEAD_ROLE, CHECKED_ROLES, verifySubagents, taskResult, toolCall, headMessages, cycleHealth, roleTurns, systemPromptsOf, riskUsdOf, runDecisions };

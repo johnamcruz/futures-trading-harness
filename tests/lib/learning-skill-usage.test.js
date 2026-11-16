@@ -267,6 +267,8 @@ test('skill usage: never shown to the model: only the replay report (and the sta
   const users = walk(path.join(ROOT, 'scripts')).filter(f => f.endsWith('.js') && /(learning-report|skill-usage)'\)/.test(fs.readFileSync(f, 'utf8')))
     .map(f => path.relative(ROOT, f).split(path.sep).join('/')).sort();
   assert.deepStrictEqual(users, [
+    // The verified-decision dataset's coverage report (its NO_READ_SKILLS list, offline: the operator's `show`, never a prompt or tool).
+    'scripts/lib/learning/dataset-coverage.js',
     'scripts/lib/learning/learning-report.js',
     // The recognition test's trace (learning/recognition/trace.js): rebuilds a past candle's briefing from bars closed by it,
     // after the run, for the report only (measurement; never a prompt, tool or order path).

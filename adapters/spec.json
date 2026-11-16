@@ -1,6 +1,6 @@
 {
   "v": 1,
-  "about": "The model-neutral training spec for a LoRA adapter on verified decisions (adapters/README.md; checked by scripts/lib/learning/adapter.js validateSpec). The dataset builder (scripts/decision-dataset.js build) balances by it, and an adapter's manifest is checked against it.",
+  "about": "The model-neutral training spec for a LoRA adapter on verified decisions (adapters/README.md; checked by scripts/lib/learning/adapter.js validateSpec). The dataset builder (scripts/decision-dataset.js build) balances by it and reports its coverage gaps against `coverage`; the structure-read builder (scripts/structure-read-dataset.js) balances by `structureRead`; an adapter's manifest is checked against it.",
   "dataset": {
     "format": "chat-jsonl",
     "version": 2,
@@ -16,6 +16,14 @@
     "maxYearShare": 0.4,
     "minYears": 2,
     "minNearMllShare": 0.25
+  },
+  "coverage": {
+    "minExamplesPerSkill": 20
+  },
+  "structureRead": {
+    "seed": 1,
+    "maxCaseShare": 0.4,
+    "maxRegimeShare": 0.5
   },
   "steps": [
     { "step": 1, "stages": [1], "mixStage1": 0, "validation": "stage-1-exit-test" },

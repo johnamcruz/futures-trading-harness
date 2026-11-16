@@ -14,8 +14,9 @@
  * counted (dataset.json `digests.stale`): decisions made under old wording teach rules that no longer exist. `include`
  * keeps others by name ('any', or a digest prefix), each marked in meta.jsonl (`digest.current: false`). A run without
  * an exit-plan record is dropped and counted (`untaggedExit`), and decisions made under two exit plans are never mixed
- * (refused). Only the head trader's turns are examples by default: a subagent's claims are checked by nothing, so its
- * turns come only when named (`roles`), marked `subagent: true` in meta.jsonl. Sampled moments whose every repeat
+ * (refused). Only the head trader's turns are examples by default: a subagent's turns come only when named (`roles`)
+ * and its claims verified by code (decision-examples.js verifySubagents), marked `subagent: true` in meta.jsonl. Sources
+ * may be opencode's or Claude Code's run records (decision-examples.js roleTurns). Sampled moments whose every repeat
  * answered the same are counted (`repeatedSamples`: sampling probably not applied), and the build refused when they are
  * more than half. `validSetups` counts correct takes against correct passes on valid setups (the labeller's lean).
  *
@@ -36,6 +37,8 @@
  *      the spec's mixStage1 slice of step 1's train examples, seeded) and step2/valid.jsonl (stage 2); meta.jsonl (each
  *      example's file, stage, role, source run, sample, decision and the label's reasons); dataset.json
  *   5. the fingerprint: sha256 over the data files and meta.jsonl (by name and bytes), with the source runs in dataset.json
+ *   6. the coverage (dataset-coverage.js): train and validate examples per skill, read type, kind and role, and the GAPS
+ *      (a head trader's read skill under the spec's coverage.minExamplesPerSkill): a report, never a refusal
  *
  *   REFUSED_ROLES
  *   checkSource(source, set)                  throws unless every day of the run is its set's window
@@ -91,7 +94,8 @@ function checkSource(source, set) {
  * (an analyst's read) are checked by nothing, so its turns are trained on only when named (`roles`), marked in meta.jsonl.
  */
 function examplesOf(decision, roles = [HEAD_ROLE]) {
-  return (decision.turns || []).filter(t => t && t.faithful && Array.isArray(t.messages) && (roles.includes('all') || roles.includes(t.role)))
+  // A subagent's turn only when the code verified its claims (decision-examples.js verifySubagents).
+  return (decision.turns || []).filter(t => t && t.faithful && Array.isArray(t.messages) && (roles.includes('all') || roles.includes(t.role)) && (t.role === HEAD_ROLE || t.verified === true))
     .map(t => ({ id: sha(JSON.stringify(t.messages)), role: t.role, subagent: t.role !== HEAD_ROLE, messages: t.messages }));
 }
 
@@ -307,6 +311,8 @@ function buildDataset({ train = [], validate = [], spec, rules, current, include
     ...step2.map(([x, st]) => metaOf(x, 'step2/train.jsonl', st)), ...v2.map(x => metaOf(x, 'step2/valid.jsonl', 2))];
   files['meta.jsonl'] = meta.map(m => `${JSON.stringify(m)}\n`).join('');
   const fingerprint = fingerprintOf(files);
+  const { coverageOf } = require('./dataset-coverage');
+  const cov = { minExamplesPerSkill: spec.coverage ? spec.coverage.minExamplesPerSkill : null };
   const dataset = {
     v: FORMAT_VERSION, fingerprint, format: 'chat-jsonl', toolCalls: true, spec: sha(JSON.stringify(spec)).slice(0, 16), rules, seed: b.seed,
     harness: { skills: current.skills, harness: current.prompt, code: current.code }, exitPlan: plans[0] || null,
@@ -327,6 +333,8 @@ function buildDataset({ train = [], validate = [], spec, rules, current, include
     labels: { train: tr.labels, validate: va.labels }, duplicates: { train: tr.duplicates, validate: va.duplicates },
     balance: { stage1: bal1.report, stage2: bal2 ? bal2.report : null },
     counts: { step1: { train: s1.length, valid: v1.length }, step2: { train: step2.length, stage2: s2.length, stage1Mix: slice.length, valid: v2.length } },
+    // What the examples teach: per skill, read type, kind and role, and the skills under the spec's floor (GAPS).
+    coverage: { train: coverageOf([...s1, ...s2], cov), validate: coverageOf([...v1, ...v2], cov) },
   };
   return { files, dataset };
 }

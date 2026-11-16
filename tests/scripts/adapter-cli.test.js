@@ -43,6 +43,9 @@ test('decision-dataset.js build and show; adapter.js init, check and validated',
   assert.match(b.stdout, /dataset [0-9a-f]{64}/);
   assert.match(b.stdout, /train labels: 2 correct, 0 incorrect, 0 unverifiable/);
   assert.ok(fs.readFileSync(path.join(out, 'step1', 'train.jsonl'), 'utf8').includes('CLI-TAKE'));
+  // The coverage report: per role, kind and skill, and the GAPS under the spec's floor.
+  assert.match(b.stdout, /coverage \(train, 2 examples\): roles \{"fth-head-trader":2\}/);
+  assert.match(b.stdout, /GAPS \(under \d+\): .*fair-value-gaps 1/);
   assert.strictEqual(run('decision-dataset.js', ['show', out]).status, 0);
   // A run made under other skills: its examples dropped and counted; included only by name, marked.
   const old = scoredRun(path.join(dir, 'old'), { documents: { harness: NOW.prompt, skills: '0'.repeat(64) }, runId: 'r0', tag: 'OLD' });
