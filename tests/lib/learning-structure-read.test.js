@@ -122,6 +122,8 @@ test('review fixes: only a 3m lane; a CISD displacement it can\'t read; the answ
   assert.strictEqual(SR.verifyAnswer(ok.replace('13990.25', '13990.2500000000000001'), 'sequence', truth).ok, false);
   assert.strictEqual(SR.verifyAnswer(ok.replace('"up"', '"\\u0075p"'), 'sequence', truth).ok, false, 'an escaped character');
   assert.strictEqual(SR.verifyAnswer(`\uFEFF${ok}`, 'sequence', truth).ok, false, 'a BOM');
+  assert.strictEqual(SR.verifyAnswer(`\u00A0${ok}`, 'sequence', truth).ok, false, 'a no-break space around it');
+  assert.strictEqual(SR.verifyAnswer(`${ok}\u3000\n`, 'sequence', truth).ok, false, 'an ideographic space around it');
   assert.strictEqual(SR.asOf(briefing({ t: '2022-03-07T15:00:00.000Z' })), '2022-03-07T15:00:00.000Z');
   assert.strictEqual(SR.asOf('no header'), null);
 });

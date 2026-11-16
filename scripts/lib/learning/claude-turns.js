@@ -29,8 +29,8 @@
  * A resumed or forked session (`--resume`, `--continue`, `--fork-session`, `--from-pr` in the record's argv, or a
  * SessionStart hook of a resume or fork in its stream) continues a history the cycle record doesn't hold: no turn
  * (resumedSession). The context the session's start hooks gave the model (sessionContext: each SessionStart hook's plain
- * text output, the account and lessons briefing) is a user message before the cycle prompt; a hook that failed, or
- * printed JSON (its context injected in a form not recorded), gives no turn.
+ * text output, the account and lessons briefing) is a user message before the cycle prompt; a hook that failed, started
+ * and never answered, or printed JSON (its context injected in a form not recorded), gives no turn.
  *
  *   isClaudeStream(events)                 a Claude Code stream-json run (its init event and session ids)
  *   resumedSession(doc, events)            why the turn continues a session the record doesn't hold, or null
@@ -161,6 +161,11 @@ function claudeHeadMessages(events) {
 
 function sessionContext(events) {
   const texts = [];
+  // A start hook that began and never answered (timed out, killed, its event lost): what it gave is unknown.
+  const started = (events || []).filter(e => isObj(e) && e.type === 'system' && e.subtype === 'hook_started' && e.hook_event === 'SessionStart');
+  const answered = new Set((events || []).filter(e => isObj(e) && e.type === 'system' && e.subtype === 'hook_response').map(e => e.hook_id));
+  const lost = started.find(e => !answered.has(e.hook_id));
+  if (lost) return { error: `the ${lost.hook_name} hook started and never answered: the context it gave is unknown` };
   for (const e of events || []) {
     if (!isObj(e) || e.type !== 'system' || e.subtype !== 'hook_response' || e.hook_event !== 'SessionStart') continue;
     if (e.exit_code !== 0 || e.outcome !== 'success' || typeof e.stdout !== 'string') return { error: `the ${e.hook_name} hook failed or printed nothing readable: the context it gave is unknown` };

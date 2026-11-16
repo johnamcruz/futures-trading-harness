@@ -239,12 +239,15 @@ function verifySubagents(turns, doc) {
   const reports = fc && Array.isArray(fc.reports) ? fc.reports : [];
   const allTrue = reports.length === 1 && isObj(reports[0]) && Array.isArray(reports[0].claims) && reports[0].claims.length > 0
     && reports[0].claims.every(c => isObj(c) && c.check === true) && !reports[0].unavailable && !reports[0].verdictProblem;
-  // The report checked must be this reply's own: its verdict and every claim's text stated in the reply.
+  // The report checked must be this reply's own: its verdict and every claim's text stated in the reply, both read in
+  // the fact check's own spelling (fact-claims.js parseClaim: ASCII, lower case, spaces collapsed).
+  const norm = x => require('../trading/fact-claims').parseClaim(String(x)).text.replace(/\s+/g, ' ');
   const own = t => {
     const reply = Array.isArray(t.messages) && t.messages.length ? t.messages[t.messages.length - 1].content : '';
     const r = reports[0];
-    return typeof reply === 'string' && typeof r.verdict === 'string' && r.verdict && reply.includes(r.verdict)
-      && r.claims.every(c => typeof c.text === 'string' && c.text && reply.includes(c.text));
+    if (typeof reply !== 'string' || typeof r.verdict !== 'string' || !r.verdict) return false;
+    const said = norm(reply);
+    return said.includes(norm(r.verdict)) && r.claims.every(c => typeof c.text === 'string' && c.text && said.includes(norm(c.text)));
   };
   return turns.map(t => {
     if (!t.subagent) return t;

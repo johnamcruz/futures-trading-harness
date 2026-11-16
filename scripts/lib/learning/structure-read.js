@@ -206,7 +206,8 @@ function verifyAnswer(text, kind, truth) {
   if (!fields) throw new Error(`no structure-read instruction "${kind}"`);
   if (!isObj(truth)) return { ok: false, wrong: [], why: 'no truth for the bar' };
   let a;
-  const body = String(text).trim();
+  // Only JSON's own whitespace around it (String.trim would also drop a no-break space, kept in the trained text).
+  const body = String(text).replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, '');
   try { a = JSON.parse(body); } catch (_err) { return { ok: false, wrong: [], why: 'not one JSON object and nothing else' }; }
   if (!isObj(a)) return { ok: false, wrong: [], why: 'not one JSON object' };
   // What is trained on is the text: it must be the object's own canonical text (whitespace aside), so a repeated key,

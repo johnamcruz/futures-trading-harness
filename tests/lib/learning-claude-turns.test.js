@@ -122,6 +122,8 @@ test('sessionContext: the SessionStart hooks\' plain text output, in order; a fa
   assert.match(CT.sessionContext(h({ outcome: 'error' })).error, /failed/);
   assert.match(CT.sessionContext(h({ stdout: ' [1]' })).error, /JSON/);
   assert.deepStrictEqual(CT.sessionContext(h({ hook_event: 'Stop' })), { texts: [] }, 'another event\'s hook: not the session\'s start');
+  const noAnswer = events().filter(e => e.subtype !== 'hook_response');
+  assert.match(CT.sessionContext(noAnswer).error, /never answered/, 'a start hook that began and never answered');
 });
 
 test('resumedSession: a resumed or forked session continues a history the record doesn\'t hold', () => {
@@ -201,6 +203,10 @@ test('verifySubagents: only a risk-manager reply whose cycle fact check holds on
   assert.deepStrictEqual(v([head, { ...sub, faithful: false }], F.FACTS_TRUE), [false]);
   // The report must be this reply's own: a reply that states neither its verdict nor its claims is not verified by it.
   assert.deepStrictEqual(v([head, { ...sub, messages: [{ role: 'user', content: 'check' }, { role: 'assistant', content: 'phase 1 notes' }] }], F.FACTS_TRUE), [false]);
+  // The claims as the fact check spells them (lower case, spaces collapsed): a real reply in its own case still matches.
+  const real = { reports: [{ verdict: 'APPROVE', claims: [{ text: 'window opening drive', check: true }, { text: 'trend long allowed', check: true }] }] };
+  const realReply = { ...sub, messages: [{ role: 'user', content: 'check' }, { role: 'assistant', content: 'VERDICT: APPROVE\nFACTS: Window  opening drive; Trend long allowed' }] };
+  assert.deepStrictEqual(v([head, realReply], real), [true]);
   const otherClaim = { reports: [{ ...F.FACTS_TRUE.reports[0], claims: [{ text: 'trend long allowed', check: true }] }] };
   assert.deepStrictEqual(v([head, sub], otherClaim), [false], 'a claim the reply doesn\'t state');
 });
