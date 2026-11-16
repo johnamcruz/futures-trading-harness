@@ -76,7 +76,8 @@ const code = t => t.replace(/^[ \t]*\/\*[^]*?\*\//gm, ' ').replace(/^[ \t]*\/\/[
 const FIELD_READERS = ['scripts/lib/trading/market-state.js', 'scripts/lib/trading/market-layers.js', 'scripts/lib/trading/structure-layers.js', 'scripts/lib/trading/briefing.js',
   'scripts/lib/learning/recognition/key.js', 'scripts/lib/eval/context-quiz.js', 'scripts/lib/trading/displacement.js'];
 const DECIDES = /(^hooks\/|^scripts\/hooks\/|gate|gateway|compose|entry-rule|order-plan|decision|verdict|phase2|autotrader|runner)/;
-// The one exception (feat/entry-exit, DECISIONS M4, PENDING THE OWNER'S YES): compose's trigger stop
+// The one exception (feat/entry-exit, DECISIONS M4; the owner, 2026-11-15: "I approve your change for trigger
+// invalidation"): compose's trigger stop
 // (composed-reads.js triggerStopPrices) verifies the price a `stop <tf> bos <price>` read names against the BOS's
 // protected swing level, and turns that stop read FALSE (so the record is refused) when the trigger is stale, broken,
 // a CHoCH or the other way. It reads no class, chop, layer or behavior field; it is opt-in by the stop form the model
@@ -108,6 +109,9 @@ test('round 20c: the gate, the gateway, compose, the entry rule and the runner n
   assert.ok(cr.includes(`function ${STOP_PRICE_EXCEPTION.fn}(`), 'the exception\'s function exists');
   assert.ok(fieldsIn(cr).length > 0, 'without the exception the file names the field (the exception is needed)');
   assert.deepStrictEqual(fieldsIn(`${cr}\nconst lvl = b.sections.m3.data.lastBreak.last.protected.level;\n`, STOP_PRICE_EXCEPTION.file), ['lastBreak...protected'], 'a read outside the function is still caught');
+  // Any other reader, even the same function's text in another file, is still caught: the exception is by file and name.
+  const fn = cr.slice(cr.indexOf(`function ${STOP_PRICE_EXCEPTION.fn}(`), cr.indexOf('\n}\n', cr.indexOf(`function ${STOP_PRICE_EXCEPTION.fn}(`)) + 3);
+  assert.deepStrictEqual(fieldsIn(fn, 'scripts/lib/trading/order-gate.js'), ['lastBreak...protected'], 'the same reads in a gate file are caught');
 });
 
 test('round 20c: the field scan catches a reader that never requires market-state.js (the review\'s two mutations, and each field)', () => {
