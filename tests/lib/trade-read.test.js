@@ -42,7 +42,10 @@ test('tradeRead: a long in a clean 15m trend up: pushes making new highs, nothin
   assert.strictEqual(r.extreme.best, Math.max(...bars.slice(20).map(b => b.h)));
   // The runner's trail level: the last confirmed 15m swing low, the stop a tick under it.
   assert.ok(r.trail && r.trail.stop === r.trail.swing - 0.25 && r.trail.swing < r.close, JSON.stringify(r.trail));
-  assert.match(tradeReadLine(r), /Weakening signs: [01] of 5[^;]*, 2 needed; reversal: none; the code floor's trail: the last confirmed 15m swing [\d.]+ \(stop [\d.]+, the runner's trail level\)\.$/);
+  // The code floor's trail is the Position line's (position-read.js), not repeated in the line.
+  assert.match(tradeReadLine(r), /Weakening signs: [01] of 5[^;]*, 2 needed; reversal: none\.$/);
+  // One basis: the held trade's best is the line's "best", and `from` moves the first bar counted.
+  assert.match(tradeReadLine(tradeRead({ side: 'long', entry: r.entry, openedAt: bars[20].t, bars, base: 3, best: 99999 })), /: best 99999; /);
 });
 
 test('tradeRead: a 15m push that fails to make a new high is the failed extreme (a lower high), never a 3m wick', () => {
@@ -174,12 +177,12 @@ test('tradeRead: the trail level is the active policy\'s own (its swing timefram
   const r5 = read(bars, { exit: { trailBy: 'structure', swingMinutes: 5 } });
   assert.strictEqual(r5.trail.swing, sw.low[bars.length - 1], 'the runner\'s swingSeries on the 5m candles');
   assert.strictEqual(r5.trail.minutes, 5);
-  assert.match(tradeReadLine(r5), /the code floor's trail: the last confirmed 5m swing [\d.]+ \(stop [\d.]+, the runner's trail level\)\.$/);
+  assert.doesNotMatch(tradeReadLine(r5), /code floor's trail/, 'the Position line states it');
   // A trail by R has no swing level, and no plan given has none: the line says so.
   const byR = read(bars, { exit: { trailBy: 'r', swingMinutes: null, trailR: 1.5 } });
   assert.deepStrictEqual([byR.trail, byR.trailBy], [null, 'r']);
-  assert.match(tradeReadLine(byR), /the code floor's trail: no swing level: the runner trails this trade by R behind the best price\.$/);
+
   const none = read(bars, { exit: null });
   assert.deepStrictEqual([none.trail, none.trailBy], [null, 'none']);
-  assert.match(tradeReadLine(none), /no swing level: the runner holds no structure trail for this trade\.$/);
+
 });

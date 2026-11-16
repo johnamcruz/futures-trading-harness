@@ -273,6 +273,16 @@ function amendCycleLog(file, field, value) {
   return true;
 }
 
+/**
+ * The prompt's format, on every cycle record (a dataset never mixes examples across formats): 'v2' from the Position
+ * line on (one code-computed line per open position, one R basis, MAE never above 0, the Manage read's facts without
+ * advice); a record without the key is 'v1', from before it (an MAE that could be positive, "hold" inside a fact, three
+ * R bases). A name, not a number: a format is no setting (tests/plugin/no-tunable-literals.test.js).
+ */
+const PROMPT_FORMAT = 'v2';
+/** The format of a cycle record: its promptFormat, else 'v1' (written before the key existed). */
+const promptFormatOf = doc => (doc && typeof doc.promptFormat === 'string' && doc.promptFormat ? doc.promptFormat : 'v1');
+
 function writeCycleLog(home, { at = new Date(), env = null, action, harness, prompt, context = null, argv = [], output = '', result = null, reportedResult = null, resultNote = null, ok = null, timedOut = false, durationMs = null, transcript = null, roleSkills = null, headPrompt = null, timing = null, desk = null, entry = null, overlap = null }) {
   const { cycleAt, laneBars } = cycleClock(env, at);
   const day = tradingDayKey(cycleAt);
@@ -334,7 +344,7 @@ function writeCycleLog(home, { at = new Date(), env = null, action, harness, pro
     const body = JSON.stringify({
       // result: the line as scored (autotrader.js scoreRun); reportedResult: the agent's own, when scored otherwise;
       // resultNote: why (scored otherwise, or the line taken from an earlier message: the final message had none).
-      at: at.toISOString(), cycleAt: cycleAt.toISOString(), action, harness, ok, timedOut, durationMs, result, ...(reportedResult ? { reportedResult } : {}), ...(resultNote ? { resultNote } : {}), summary, factCheck, ...(timing ? { timing } : {}), ...(desk ? { desk } : {}), ...(entry ? { entry } : {}), ...(overlap ? { overlap } : {}),
+      at: at.toISOString(), cycleAt: cycleAt.toISOString(), action, harness, promptFormat: PROMPT_FORMAT, ok, timedOut, durationMs, result, ...(reportedResult ? { reportedResult } : {}), ...(resultNote ? { resultNote } : {}), summary, factCheck, ...(timing ? { timing } : {}), ...(desk ? { desk } : {}), ...(entry ? { entry } : {}), ...(overlap ? { overlap } : {}),
       ...(composed.length ? { composed } : {}),
       ...(stateRead ? { stateRead } : {}),
       // context: what the prompt was built from (runner.js), so a line can be checked against its inputs.
@@ -352,7 +362,7 @@ function writeCycleLog(home, { at = new Date(), env = null, action, harness, pro
       }
     }
     fs.appendFileSync(path.join(home, 'logs', `cycles-${day}.jsonl`), `${JSON.stringify({
-      at: at.toISOString(), cycleAt: cycleAt.toISOString(), action, harness, ok, timedOut, durationMs, result, ...(reportedResult ? { reportedResult } : {}), ...(resultNote ? { resultNote } : {}), file,
+      at: at.toISOString(), cycleAt: cycleAt.toISOString(), action, harness, promptFormat: PROMPT_FORMAT, ok, timedOut, durationMs, result, ...(reportedResult ? { reportedResult } : {}), ...(resultNote ? { resultNote } : {}), file,
       promptChars: String(prompt || '').length, ...summary, commands: summary.commands.length,
       ...(factCheck.error || (factCheck.counts && factCheck.counts.reports) ? { factCheck: factCheck.counts || { error: factCheck.error } } : {}),
       ...(composed.length ? { composed: { calls: composed.length, ok: composed.filter(x => x.ok).length, signatures: [...new Set(composed.filter(x => x.ok).map(x => x.signature))] } } : {}),
@@ -457,4 +467,4 @@ function cycleExperienceLookups(transcript) {
   }
 }
 
-module.exports = { toolCalls, summarize, writeCycleLog, amendCycleLog, cycleLookups, cycleExperienceLookups, headOwnText, stopLineText, cycleClock, gateOrders, RISK_REDUCING };
+module.exports = { PROMPT_FORMAT, promptFormatOf, toolCalls, summarize, writeCycleLog, amendCycleLog, cycleLookups, cycleExperienceLookups, headOwnText, stopLineText, cycleClock, gateOrders, RISK_REDUCING };

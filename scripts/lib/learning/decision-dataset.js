@@ -14,7 +14,7 @@
  * counted (dataset.json `digests.stale`): decisions made under old wording teach rules that no longer exist. `include`
  * keeps others by name ('any', or a digest prefix), each marked in meta.jsonl (`digest.current: false`). A run without
  * an exit-plan record is dropped and counted (`untaggedExit`), and decisions made under two exit plans are never mixed
- * (refused). Only the head trader's turns are examples by default: a subagent's turns come only when named (`roles`)
+ * (refused), nor decisions made under two prompt formats (cycle-log.js PROMPT_FORMAT: refused). Only the head trader's turns are examples by default: a subagent's turns come only when named (`roles`)
  * and its claims verified by code (decision-examples.js verifySubagents), marked `subagent: true` in meta.jsonl. Sources
  * may be opencode's or Claude Code's run records (decision-examples.js roleTurns). Sampled moments whose every repeat
  * answered the same are counted (`repeatedSamples`: sampling probably not applied), and the build refused when they are
@@ -290,6 +290,10 @@ function buildDataset({ train = [], validate = [], spec, rules, current, include
   // One head trader delivery (deliveryOf): decisions made with its skills or data delivered another way are never pooled.
   const deliveries = [...new Set([...tr.decisions, ...va.decisions].map(d => d.digest.delivery || 'none'))];
   if (deliveries.length > 1) throw new Error(`the correct decisions were made under ${deliveries.length} head trader deliveries (${deliveries.join(' | ')}; the runner config's ${require('../autotrader').HEAD_DELIVERY_KEYS.join(', ')}): build from runs under one`);
+  // One prompt format (cycle-log.js PROMPT_FORMAT; a record without it is 'v1'): examples from before the Position line
+  // (an MAE that could be positive, "hold" inside a fact, three R bases) are never pooled with later ones.
+  const formats = [...new Set([...tr.decisions, ...va.decisions].map(d => (typeof d.promptFormat === 'string' && d.promptFormat ? d.promptFormat : 'v1')))];
+  if (formats.length > 1) throw new Error(`the correct decisions were made under ${formats.length} prompt formats (${formats.sort().join(', ')}): build from runs under one`);
   if (!tr.decisions.length && tr.stale.decisions) throw new Error(`every correct train decision was made under another skills or prompt digest than the harness's now (${tr.stale.examples} example(s) dropped): rerun the moments on this harness, or include those digests by name`);
   const stageOf = (xs, n) => xs.filter(d => d.stage === n);
   const bal1 = stageOf(tr.decisions, 1).length ? balance(stageOf(tr.decisions, 1), b, { stage: 1 }) : null;
@@ -315,7 +319,7 @@ function buildDataset({ train = [], validate = [], spec, rules, current, include
   const cov = { minExamplesPerSkill: spec.coverage ? spec.coverage.minExamplesPerSkill : null };
   const dataset = {
     v: FORMAT_VERSION, fingerprint, format: 'chat-jsonl', toolCalls: true, spec: sha(JSON.stringify(spec)).slice(0, 16), rules, seed: b.seed,
-    harness: { skills: current.skills, harness: current.prompt, code: current.code }, exitPlan: plans[0] || null,
+    harness: { skills: current.skills, harness: current.prompt, code: current.code }, exitPlan: plans[0] || null, promptFormat: formats[0] || null,
     // The head trader's delivery keys its decisions were made under, named only when one is on.
     ...(deliveries[0] && deliveries[0] !== 'none' ? { delivery: deliveries[0] } : {}),
     // The roles trained on (the head trader by default; a subagent only by name, its turns marked in meta.jsonl).

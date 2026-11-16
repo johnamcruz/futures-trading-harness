@@ -47,6 +47,7 @@
  *                                          appended system prompt)
  *   verifySubagents(turns, doc)            the turns, each subagent's marked `verified` (CHECKED_ROLES)
  *   systemPromptsOf(home)                  { role: prompt } from <home>/workspace/opencode.json, {} without one
+ *   positionsOf(doc)                       a cycle record's open trades with their Position facts (a risk decision's)
  *   runDecisions(runDir, { score, times, sample })   the run's decisions (see the head); `score(runDir)` -> scorecard
  *                                          records; `times`: only decisions at these times (a sample's); `sample`:
  *                                          { t, repeat, seed } recorded on each
@@ -256,6 +257,13 @@ function verifySubagents(turns, doc) {
   });
 }
 
+/** The open trades' Position facts a cycle record's context holds ([] with none; null without a record). */
+function positionsOf(doc) {
+  if (!isObj(doc)) return null;
+  const list = isObj(doc.context) && Array.isArray(doc.context.openTrades) ? doc.context.openTrades : [];
+  return list.filter(isObj).map(t => ({ contractId: t.contractId ?? null, side: t.side ?? null, position: isObj(t.position) ? t.position : null }));
+}
+
 function runDecisions(runDir, { score, times = null, sample = null } = {}) {
   if (typeof score !== 'function') throw new Error('runDecisions: score(runDir) -> the scorecard records');
   const home = path.resolve(runDir, '..', '..');
@@ -305,10 +313,14 @@ function runDecisions(runDir, { score, times = null, sample = null } = {}) {
       // plan it didn't take: a refused compose record's risk is not the model's trade.
       account: attempt ? accountCall(attempt, kind === 'pass' ? null : riskUsd) : null,
       stage, accountState: state ? state.bucket : null, skill: (setupRead && setupRead.skill) || 'none', year: String(r.day || '').slice(0, 4),
+      // The prompt's format (cycle-log.js promptFormatOf: a record without it is 'v1'): never mix examples across formats.
+      promptFormat: doc ? require('../cycle-log').promptFormatOf(doc) : null,
+      // A risk decision's open trades as the prompt stated them (their Position facts, open-trades.js position).
+      ...(kind === 'risk' ? { positions: positionsOf(doc) } : {}),
       sample, cycle: cycleFile || null, cycleFailed, turns: cycleFailed ? turns.map(t => ({ ...t, faithful: false })) : turns,
     });
   }
   return out;
 }
 
-module.exports = { HEAD_ROLE, CHECKED_ROLES, verifySubagents, taskResult, toolCall, headMessages, cycleHealth, roleTurns, systemPromptsOf, riskUsdOf, runDecisions };
+module.exports = { HEAD_ROLE, CHECKED_ROLES, verifySubagents, taskResult, toolCall, headMessages, cycleHealth, roleTurns, systemPromptsOf, riskUsdOf, positionsOf, runDecisions };

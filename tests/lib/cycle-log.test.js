@@ -39,6 +39,12 @@ test('summarize: skills loaded, tool calls by name, shell commands, orders, and 
   const att = JSON.stringify({ config: '/w/opencode.json', sha256: '0'.repeat(64), skills: [...perCycle, 'setup-judgment', 'trade-plan'] });
   assert.deepStrictEqual(writeCycleLog(require('../helpers').tmpDir(), { action: 'trade', harness: 'opencode', prompt: 'p', output: claudeStream([]), headPrompt: att }).summary.missingSkills, []);
   assert.deepStrictEqual(writeCycleLog(require('../helpers').tmpDir(), { action: 'trade', harness: 'opencode', prompt: 'p', output: claudeStream([]), headPrompt: '{bad' }).summary.missingSkills.length, 7);
+  // Every cycle record says its prompt format ('v2': the Position line; a record without the key is 'v1', from before it).
+  const home2 = require('../helpers').tmpDir();
+  const w = writeCycleLog(home2, { action: 'trade', harness: 'claude', prompt: 'p', output: claudeStream([]) });
+  assert.strictEqual(JSON.parse(require('fs').readFileSync(w.file, 'utf8')).promptFormat, 'v2');
+  const idx = require('fs').readdirSync(require('path').join(home2, 'logs')).find(f => /^cycles-.*\.jsonl$/.test(f));
+  assert.strictEqual(JSON.parse(require('fs').readFileSync(require('path').join(home2, 'logs', idx), 'utf8').trim()).promptFormat, 'v2');
   // A cycle's situational skills as the runner attested them (FTH_CYCLE_SKILLS): recorded as embedded; none without it.
   const exitAtt = JSON.stringify({ kind: 'cycle-skills', config: '/h/head-prompt/cycle-skills-x.md', sha256: '0'.repeat(64), skills: ['manage-position', 'pullback-vs-reversal'], cycle: '0123456789abcdef' });
   assert.deepStrictEqual(writeCycleLog(require('../helpers').tmpDir(), { action: 'trade', harness: 'claude', prompt: 'p', output: claudeStream([]), env: { FTH_CYCLE_SKILLS: exitAtt } }).summary.embeddedSkills, ['manage-position', 'pullback-vs-reversal']);

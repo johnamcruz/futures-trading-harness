@@ -1319,10 +1319,11 @@ test('every run\'s prompt states the account, read just before it; an unreadable
   assert.match(eod, /Account 7 at .*: balance \$50,100; flat; 2 working orders\./, 'the end-of-day run sees the account after the flatten');
   assert.deepStrictEqual(r.cancelled, [9, 10], 'the leftovers are cancelled once the account reads flat');
   // The open position is described once, as a trade (open-trades.js), not listed again in the account line.
-  assert.match(r.prompts.find(x => /trade-session/.test(x)), /Account 7 at .*: balance \$50,100; 1 open position \(below\); 2 working orders\. Open trade MNQ long 1 @ 21500 since 10:00 ET, 7 bars closed since \(setup unknown[^)]*\): risk 10 points = 40 ticks, measured to the working stop \(the initial stop is unknown\); working stop 21490 \(-1R\), target 21600 \(\+10R\); now \+0R at 21500/);
+  // Its Position line first (the runner's held trade: 1R 10 points from the entry record's 40 ticks), then its sentence.
+  assert.match(r.prompts.find(x => /trade-session/.test(x)), /Account 7 at .*: balance \$50,100; 1 open position \(below\); 2 working orders\. Position \(code facts\): MNQ long 1 @ 21500, 1R 10 pts; now \+0R at 21500; MFE \+0\.1R at 21501 \(\d\d:\d\d ET bar\); MAE -0\.1R; giveback 0\.1R \(100% of MFE\); working stop 21490 \(-1R; a fill there gives back 1\.1R\); trail 0\.5R behind the best from \+2R\. Open trade MNQ long 1 @ 21500 since 10:00 ET, 7 bars closed since \(setup unknown[^)]*\): initial stop 21490: risk 10 points = 40 ticks; working stop 21490 \(-1R\), target 21600 \(\+10R\)\./);
   // A managed cycle's open trade carries its read facts (trade-read.js), measured from its entry: the pullback-vs-reversal
   // read of an open trade, in the same line.
-  assert.match(r.prompts.find(x => /trade-session/.test(x)), /Open trade MNQ long 1 @ 21500 [^\n]*\. Trade read \(closed bars since entry; pullback-vs-reversal\): best [\d.]+; [^;]+; [^;]+; pullback [^;]+; close vs RTH VWAP [^;]+; structure against since entry: 3m [^;]+, 15m [^;]+; 15m displacement against: [^;]+; compression against: [^;]+; HTF bias at entry [^,]+, now [^(]+\([^)]+\)\. Weakening signs: \d of 5[^;]*, 2 needed; reversal: [^;]+; the code floor's trail: [^.]+\. Manage read \(answer every cycle with one line "STOP <price\|hold>: <reason>"; modify_order only when tighter\): working stop 21490 \(-1R\); best 21501 \(\+0\.1R\)/);
+  assert.match(r.prompts.find(x => /trade-session/.test(x)), /Open trade MNQ long 1 @ 21500 [^\n]*\. Trade read \(closed bars since entry; pullback-vs-reversal\): best [\d.]+; [^;]+; [^;]+; pullback [^;]+; close vs RTH VWAP [^;]+; structure against since entry: 3m [^;]+, 15m [^;]+; 15m displacement against: [^;]+; compression against: [^;]+; HTF bias at entry [^,]+, now [^(]+\([^)]+\)\. Weakening signs: \d of 5[^;]*, 2 needed; reversal: [^.;]+\. Manage read \(answer every cycle with one line "STOP <price\|hold>: <reason>"; modify_order only when tighter\): code floor: /);
   const bad = await trailSim({ tape: {}, until: et(10, 8), balanceFails: true });
   assert.match(bad.prompts.find(x => /trade-session/.test(x)), /Account 7: state unavailable \(HTTP 503\); read get_account_snapshot before deciding anything/);
 });
@@ -2467,4 +2468,64 @@ test('exit mode target_then_trail, live: a target cancel that fails is retried e
   const retries = always.logs.filter(l => /retrying the cancel of the target order 10 at 21600 failed \(HTTP 503\); trying again next cycle/.test(l)).length;
   assert.ok(retries >= 2, always.logs.join('\n'));
   assert.ok(!always.cancelTries.some(x => x[0] === 9));
+});
+
+// The Position line (trading/position-read.js) on every prompt that shows the account with a position: one basis, the
+// runner's held trade (DESIGN 4.2, 4.5; review B1, B2, M2, M3, R4).
+const TTT = { mode: 'target_then_trail', lock_giveback_r: 1.5, trail_by: 'r', trail_r: 1 };
+const positionLines = p => (String(p).match(/Position(?: \(code facts\)|: unavailable \()/g) || []).length;
+
+test('every managed prompt with a position carries exactly one Position line per position, from the runner\'s held trade (its MFE, MAE and armed are state.trails\')', async () => {
+  // Long from 21500, 1R 10 points (40 ticks), its own target 2R (21520): reached on the 10:06 bar, the best 21524 (2.4R);
+  // the code floor's R trail 1R behind it (21514) over the lock (+0.5R, 21505); no bar reaches it.
+  const tape = { 3: [21512, 21499, 21510], 6: [21524, 21515, 21518], 9: [21519, 21515, 21517] };
+  const r = await trailSim({ tape, exit: TTT, record: { targetTicks: 80 }, until: et(10, 15) });
+  const managed = r.prompts.filter(p => /Open trade MNQ/.test(p));
+  assert.ok(managed.length >= 2, `${managed.length} managed prompts`);
+  for (const p of managed) {
+    assert.strictEqual(positionLines(p), 1, p);
+    assert.doesNotMatch(p, /not runner-managed/, 'the held trade is the source');
+  }
+  const last = managed[managed.length - 1];
+  assert.match(last, /Position \(code facts\): MNQ long 1 @ 21500, 1R 10 pts; now \+1\.7R at 21517; MFE \+2\.4R at 21524 \(10:06 ET bar\); MAE -0\.1R; giveback 0\.7R \(29% of MFE\); /);
+  assert.match(last, /working stop 21514 \(\+1\.4R; a fill there gives back 1R\); target reached \(lock \+0\.5R\); code floor: the stop trails 1R behind the best \(21514\)\. Open trade/);
+  // Parity with the held trade itself, and the cycle record's structured fields (the T5 dataset fields).
+  const held = r.saved.trails.MNQ;
+  const ctx = r.contexts.filter(c => c && Array.isArray(c.openTrades) && c.openTrades.length).pop();
+  const pos = ctx.openTrades[0].position;
+  assert.deepStrictEqual([pos.basis, pos.mfeR, pos.maeR, pos.armed], ['held', Math.round(held.peakR * 100) / 100, Math.round(held.troughR * 100) / 100, held.armed]);
+  assert.deepStrictEqual([held.bestPrice, held.bestBarT, held.lastClose], [21524, new Date(et(10, 6)).toISOString(), 21517]);
+  assert.strictEqual(ctx.openTrades[0].stop, pos.work, 'context.openTrades[].stop stays the working stop');
+});
+
+test('the held trade\'s Position facts survive a restart (saved state in, the same best price and bar)', async () => {
+  const tape = { 3: [21512, 21499, 21510], 6: [21524, 21515, 21518] };
+  const first = await trailSim({ tape, exit: TTT, record: { targetTicks: 80 }, until: et(10, 11) });
+  const saved = first.saved;
+  assert.strictEqual(saved.trails.MNQ.bestPrice, 21524);
+  // Restarted after 10:11 with the bars from then on lower: the best stays the saved one.
+  const again = await trailSim({ tape: { 9: [21519, 21515, 21517], 12: [21518, 21514, 21516] }, exit: TTT, record: { targetTicks: 80 }, stateIn: saved, startAt: et(10, 12) + 2000, until: et(10, 18) });
+  const p = again.prompts.filter(x => /Open trade MNQ/.test(x)).pop();
+  assert.match(p, /MFE \+2\.4R at 21524 \(10:06 ET bar\)/);
+  assert.deepStrictEqual([again.saved.trails.MNQ.bestPrice, again.saved.trails.MNQ.bestBarT], [21524, new Date(et(10, 6)).toISOString()]);
+});
+
+test('a micro and its mini on one item: the second position\'s line is folded and says so, never the held trade\'s numbers', async () => {
+  const tape = { 3: [21512, 21499, 21510], 6: [21524, 21515, 21518] };
+  const r = await trailSim({ tape, exit: TTT, record: { targetTicks: 80 }, otherMonth: 'MNQ:2026-12', until: et(10, 11) });
+  const p = r.prompts.filter(x => /Open trade MNQ:2026-12/.test(x)).pop();
+  if (!p) return; // the runner closed the other month (a roll): no prompt shows it
+  assert.strictEqual(positionLines(p), 2, p);
+  // The other position (no stop, no journal entry: no 1R) never gets the held trade's numbers: its own line says why
+  // (with a 1R it is folded and says "not runner-managed: the held trade is another position's", open-trades.test.js).
+  assert.match(p, /\. Position: unavailable \(no initial risk: no R to state\)\. Open trade MNQ:2026-12 /);
+  assert.strictEqual((p.match(/MFE \+2\.4R/g) || []).length, 1, 'the held trade\'s numbers once, on its own position');
+});
+
+test('end of day: a position still open after the flatten carries its Position line into the review prompt', async () => {
+  const r = await trailSim({ tape: {}, exit: TTT, record: { targetTicks: 80 }, closeFails: 99, fillAt: et(15, 30) + 5000, startAt: et(15, 40) + 2000, until: et(15, 56), cfgOver: { eodAt: '15:50@America/New_York' } });
+  const eod = r.prompts.filter(p => /Run the end-of-day skill/.test(p));
+  assert.ok(eod.length >= 1, r.cycles.join(','));
+  for (const p of eod) assert.strictEqual(positionLines(p), 1, p);
+  assert.match(eod[0], /Position \(code facts\): MNQ long 1 @ 21500, 1R 10 pts; now [^;]* \(the \d\d:\d\d ET bar's close\); /, 'the held trade, as of its last bar');
 });

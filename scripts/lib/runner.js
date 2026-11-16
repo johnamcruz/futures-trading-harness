@@ -49,6 +49,7 @@
  */
 
 const { openTrades, describeOpenTrade, tradeReadText } = require('./trading/open-trades');
+const { positionKey } = require('./trading/position-read');
 const { parseStopLine } = require('./trading/stop-line');
 const { workingEntryLines } = require('./trading/working-entries');
 const { zonedParts } = require('./trading/clock');
@@ -70,7 +71,7 @@ const { writeReviews, tickValueFor } = require('./trading/runner-reviews');
 const famOf = contractId => familyRoot(contractRoot(contractId));
 const etTime = iso => { const p = zonedParts(new Date(iso), 'America/New_York'); return `${String(p.hour).padStart(2, '0')}:${String(p.minute).padStart(2, '0')} ET`; };
 const { trailStep } = require('./trading/trail');
-const { afterTargetStep, liveTarget, swingAtBar } = require('./trading/exit-trail');
+const { afterTargetStep, liveTarget, swingAtBar, extremeStep, swingClassOf } = require('./trading/exit-trail');
 const { tradingDayStart, inMarketHours, sessionMinuteOf, MARKET_CLOSE_MIN, MARKET_TZ, parseWindows, inWindow } = require('./trading/clock');
 
 /** Whether a session window of the runner's is open at `now` (a trade cycle could run). */
@@ -683,7 +684,7 @@ function createRunner(deps) {
     const tick = Number(item.tickSize) || 0;
     const sign = p.type === 1 ? 1 : p.type === 2 ? -1 : 0;
     const opened = Date.parse(p.creationTimestamp);
-    const key = String(p.id ?? `${p.creationTimestamp}|${p.averagePrice}`);
+    const key = positionKey(p);
     const protective = orders.filter(o => o.contractId === cid && Number(o.type) === 4 && (Number(o.side) === 0 ? 1 : -1) === -sign);
     const stopOrder = protective.length === 1 ? protective[0] : null;
     let t = trails[item.contractId];
@@ -780,16 +781,27 @@ function createRunner(deps) {
     let armed = Boolean(t.armed);
     let fellBack = false;
     let wrongSide = false; // a fallback because the swing sat on the wrong side of the close, not for want of one
+    // The Position line's facts (position-read.js), kept with the held trade from the same bars and the same step: the
+    // best and worst prices and the best's bar, the code floor's class at the last bar (its swing and lock), the last
+    // close; stallBars for the log only. No exit value reads them.
+    let ext = { bestPrice: t.bestPrice ?? null, bestBarT: t.bestBarT ?? null, worstPrice: t.worstPrice ?? null, stallBars: t.stallBars || 0 };
+    let swingClass = t.swingClass || null;
+    let lastClose = Number.isFinite(t.lastClose) ? t.lastClose : null;
     for (const bar of bars) {
       // A level the resting stop never reached (a modify that failed or came
       // too late) protects nothing: a bar through it means out at market.
       if ((resting === null || sign * (target - resting) > 0) && (sign > 0 ? bar.l <= target : bar.h >= target)) { cross = { bar, stop: target }; break; }
+      const x = extremeStep({ ...ext, peakR, troughR }, bar, t);
+      ext = { bestPrice: x.bestPrice, bestBarT: x.bestBarT, worstPrice: x.worstPrice, stallBars: x.stallBars };
       troughR = Math.min(troughR, (sign * ((sign > 0 ? bar.l : bar.h) - t.entry)) / t.risk);
       const after = t.plan.afterTarget;
       // Past the target: exit-trail.js on this closed bar, the swing confirmed by its close (never a later bar).
-      const step = after ? afterTargetStep({ ...t, stop: target, peakR, armed }, bar, t.plan, tick, after.trailBy === 'structure' ? swingAtBar(item.bars, bar, after.swingMinutes, sign) : null)
+      const swing = after && after.trailBy === 'structure' ? swingAtBar(item.bars, bar, after.swingMinutes, sign) : null;
+      const step = after ? afterTargetStep({ ...t, stop: target, peakR, armed }, bar, t.plan, tick, swing)
         : trailStep({ ...t, stop: target, peakR }, bar, t.plan, tick);
       if (after) { armed = step.armed; fellBack = fellBack || step.fellBack; wrongSide = wrongSide || Boolean(step.wrongSide); }
+      if (after) swingClass = swingClassOf({ trade: { ...t, peakR: step.peakR, armed: step.armed }, bar, plan: t.plan, tick, swing });
+      lastClose = bar.c;
       peakR = step.peakR;
       target = step.stop;
       if (step.close) { cross = { bar, stop: step.stop }; break; }
@@ -826,7 +838,7 @@ function createRunner(deps) {
       return;
     }
     if (fellBack && !t.fellBackSaid) log(`${item.symbol}: structure trail: ${wrongSide ? `the last ${t.plan.afterTarget.swingMinutes}m swing is on the wrong side of the close (its stop would be through the market)` : `no ${t.plan.afterTarget.swingMinutes}m swing in the bars at all`}; trailing ${t.plan.afterTarget.trailR}R behind the best price (the fallback)`);
-    save({ ...t, peakR, troughR, barsHeld, lastBarT, armed, fellBackSaid: Boolean(t.fellBackSaid || fellBack) });
+    save({ ...t, peakR, troughR, barsHeld, lastBarT, armed, fellBackSaid: Boolean(t.fellBackSaid || fellBack), ...ext, swingClass, lastClose });
     if (!stopOrder) {
       if (sign * (target - t.stop) < tick - 1e-9) return;
       log(`${item.symbol}: trail wants the stop at ${target} but there is no single working stop order to move`, 'error');
@@ -894,6 +906,50 @@ function createRunner(deps) {
     emit('stop_moved', { symbol: item.symbol, contractId: cid, setup: t.setup, from: resting, to: final, target, confirmed: confirmed !== null, peakR, barsHeld });
     save({ ...trails[item.contractId], stop: final });
     log(`${item.symbol}: trail: stop ${resting} -> ${final} (peak ${peakR.toFixed(2)}R)`);
+  }
+
+  /**
+   * Each open position of the account read `acct` as a trade, for every prompt that shows the account (the trade cycle,
+   * premarket, end of day): its Position line first (trading/position-read.js: the runner's held trade, state.trails,
+   * when it is the position's and current; else folded from the bars, said so), then its sentence and, with bars, its
+   * reads. `run`: this pass's cycle items (their bars; none in premarket or end of day: the held trade as of its last
+   * bar); `traded`: this pass's housekept items (the trail's lane is the first: its last bar is the held trade's current
+   * one). Never throws and never waits on anything: a failure is the account's openTradesError (accountText then prints
+   * one "Position: unavailable" line per position) and `failed(what, err)`.
+   * Returns { acct, tradeObjs, manageAlso }.
+   */
+  function describeOpen(acct, { run = [], journal = [], traded = [], failed = () => {}, history: withHistory = false } = {}) {
+    let tradeObjs = [];
+    let manageAlso = [];
+    if (!(acct && Array.isArray(acct.positions) && acct.positions.length)) return { acct, tradeObjs, manageAlso };
+    try {
+      // MNQ bars manage an NQ trade too (the same family); a contract with no bar this cycle has none.
+      const item = p => run.find(x => x.contractId === p.contractId) || run.find(x => famOf(x.contractId) === famOf(p.contractId));
+      // Its symbol's tick size even when its bar didn't close this cycle.
+      const sym = p => syms.find(x => x.contractId && famOf(x.contractId) === famOf(p.contractId));
+      const tickOf = p => (item(p) || sym(p) || {}).tickSize || null;
+      // The held trade: under its trail item's contract (the first lane's, as trailPosition keeps it); current when its
+      // last bar is that item's last closed bar this pass; with no such item this pass, as of its own last bar.
+      const trailItem = p => traded.find(x => x.lane === 0 && x.contractId === p.contractId) || traded.find(x => x.lane === 0 && famOf(x.contractId) === famOf(p.contractId));
+      const heldOf = p => { const x = trailItem(p) || item(p) || sym(p); const tr = state.trails || {}; return x && x.contractId ? tr[x.contractId] || null : Object.values(tr).find(h => h && h.key === positionKey(p)) || null; };
+      const lastBarFor = p => { const x = trailItem(p); return x && Array.isArray(x.bars) && x.bars.length ? x.bars[x.bars.length - 1].t : undefined; };
+      tradeObjs = openTrades({ positions: acct.positions, orders: acct.orders || [], entries: journal, barsFor: p => (item(p) ? item(p).bars : null), heldFor: heldOf, lastBarFor, tickFor: tickOf });
+      const history = t => { if (!withHistory) return null; try { return t.setup ? tradeHistory(t) : null; } catch (err) { failed(`${t.setup}'s backtest excursions for the open trade`, err); return null; } };
+      // Its read facts (trade-read.js) from its contract's bars: the pullback-vs-reversal read of an open trade.
+      // The trail the runner holds for the trade (state.trails: its exit plan's afterTarget), read as the runner reads it.
+      const read = t => {
+        const x = item({ contractId: t.contractId });
+        const held = x ? (state.trails || {})[x.contractId] : null;
+        const exit = held && held.plan ? held.plan.afterTarget || null : null;
+        return x ? tradeReadText(t, { bars: x.bars, base: x.minutes || cfg.timeframe, tickSize: tickOf({ contractId: t.contractId }), exit }) : null;
+      };
+      acct = { ...acct, openTrades: tradeObjs.map(t => describeOpenTrade(t, { tickSize: tickOf({ contractId: t.contractId }), et: etTime, history: history(t), read: read(t) })) };
+      manageAlso = [...new Set(tradeObjs.filter(t => !item({ contractId: t.contractId })).map(t => (sym({ contractId: t.contractId }) || {}).symbol || contractRoot(t.contractId)))];
+    } catch (err) {
+      failed('the open trades\' details', err);
+      acct = { ...acct, openTradesError: err.message };
+    }
+    return { acct, tradeObjs, manageAlso };
   }
 
   /** The managed cycle's STOP line (trading/stop-line.js) against each open trade's working stop: logged and emitted. */
@@ -1891,7 +1947,13 @@ function createRunner(deps) {
         // A premarket run never delays end of day.
         if (d.action === 'premarket' && decide(cfg, state, at, { killSwitch: isKillSwitchOn(), exitsOnly }).action === 'eod') break;
         if (limitFor(d.action, at) < 30000) { noTime(); continue; }
-        const acct = await accountSnapshot(at);
+        let acct = await accountSnapshot(at);
+        // Its open positions as trades (describeOpen: the held trade's Position line; never throws, never waits).
+        if (acct && Array.isArray(acct.positions) && acct.positions.length) {
+          let journal = [];
+          try { journal = journalEntries() || []; } catch (err) { log(`${d.action}: the journal is unavailable for the open trades (${err.message})`, 'error'); }
+          acct = describeOpen(acct, { journal, failed: (what, err) => log(`${d.action} prompt: ${what} unavailable (${err.message})`, 'error') }).acct;
+        }
         // The time limit counts from after the account read.
         // A premarket retry before the session ends before the session's first bar is polled (the first try of
         // the day keeps the premarket's limit).
@@ -2065,33 +2127,10 @@ function createRunner(deps) {
             if (x.scanError && !manageOnly) unavailable.push(`${x.symbol} strategy scan (${x.scanError}): what fired is unknown`);
             if (x.screenError) unavailable.push(`${x.symbol} policy screen (${x.screenError}): no verdict, so no entry for ${(x.notEntries || []).join(', ') || 'its strategies'} this bar`);
           }
-          // Each open position as a trade: setup, initial risk, stop, target, R now, best and worst, bars held.
-          let tradeObjs = [];
-          let manageAlso = [];
-          if (acct && Array.isArray(acct.positions) && acct.positions.length) {
-            try {
-              // MNQ bars manage an NQ trade too (the same family); a contract with no bar this cycle has none.
-              const item = p => run.find(x => x.contractId === p.contractId) || run.find(x => famOf(x.contractId) === famOf(p.contractId));
-              // Its symbol's tick size even when its bar didn't close this cycle.
-              const sym = p => syms.find(x => x.contractId && famOf(x.contractId) === famOf(p.contractId));
-              const tickOf = p => (item(p) || sym(p) || {}).tickSize || null;
-              tradeObjs = openTrades({ positions: acct.positions, orders: acct.orders || [], entries: journal, barsFor: p => (item(p) ? item(p).bars : null) });
-              const history = t => { try { return t.setup ? tradeHistory(t) : null; } catch (err) { failed(`${t.setup}'s backtest excursions for the open trade`, err); return null; } };
-              // Its read facts (trade-read.js) from its contract's bars: the pullback-vs-reversal read of an open trade.
-              // The trail the runner holds for the trade (state.trails: its exit plan's afterTarget), read as the runner reads it.
-              const read = t => {
-                const x = item({ contractId: t.contractId });
-                const held = x ? (state.trails || {})[x.contractId] : null;
-                const exit = held && held.plan ? held.plan.afterTarget || null : null;
-                return x ? tradeReadText(t, { bars: x.bars, base: x.minutes || cfg.timeframe, tickSize: tickOf({ contractId: t.contractId }), exit }) : null;
-              };
-              acct = { ...acct, openTrades: tradeObjs.map(t => describeOpenTrade(t, { tickSize: tickOf({ contractId: t.contractId }), et: etTime, history: history(t), read: read(t) })) };
-              manageAlso = [...new Set(tradeObjs.filter(t => !item({ contractId: t.contractId })).map(t => (sym({ contractId: t.contractId }) || {}).symbol || contractRoot(t.contractId)))];
-            } catch (err) {
-              failed('the open trades\' details', err);
-              acct = { ...acct, openTradesError: err.message };
-            }
-          }
+          // Each open position as a trade: its Position line, setup, initial risk, stop, target, bars held, its reads.
+          const described = describeOpen(acct, { run, journal, traded, failed, history: true });
+          acct = described.acct;
+          const { tradeObjs, manageAlso } = described;
           // Each strategy that fired carries its track record into the prompt.
           const withRecords = x => (Array.isArray(x.scan) ? x.scan.map(r => {
             if (!(r.candidate && r.direction)) return r;
