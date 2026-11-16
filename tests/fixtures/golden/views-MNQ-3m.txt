@@ -80,7 +80,7 @@ Detail by timeframe:
 [m15] version m15@2026-04-24T04:48:00.000Z, valid until 01:00 ET
   frame: {"trend":"range","bias":0,"swingPattern":"mixed","close":27039.75,"ema20":27054.18,"ema50":27036.71,"adx":19.46,"atr":29.9,"range":{"high":27135.75,"low":27016.25,"mid":27076}}
   alignment: {"long":"mixed","short":"mixed","bias":"neutral","score":0,"maxScore":6}
-  lastBreak: {"last":{"kind":"BOS","direction":"up","level":27053,"swingAt":"04-23 18:45","at":"04-23 19:30","barsAgo":20,"knownAt":"04-23 19:45"},"previous":{"kind":"CHoCH","direction":"up","level":26988.5,"swingAt":"04-23 16:00","at":"04-23 18:00","barsAgo":26,"knownAt":"04-23 18:15"}}
+  lastBreak: {"last":{"kind":"BOS","direction":"up","level":27053,"swingAt":"04-23 18:45","at":"04-23 19:30","barsAgo":20,"protected":{"side":"low","level":27033.5,"at":"04-23 19:15","brokenAt":"04-23 23:30"},"knownAt":"04-23 19:45"},"previous":{"kind":"CHoCH","direction":"up","level":26988.5,"swingAt":"04-23 16:00","at":"04-23 18:00","barsAgo":26,"protected":{"side":"low","level":26919.25,"at":"04-23 16:15","brokenAt":null},"knownAt":"04-23 18:15"}}
   indicators: {"regime":{"primary":"transition","volatility":"low"},"ema9":27047.2,"ema20":27054.18,"adx":19.46,"adxSlope":3.91,"supertrend":{"direction":"up","line":27023.44},"keltner":{"upper":27105.95,"mid":27054.18,"lower":27002.41},"atr14":29.9}
 [h1] version h1@2026-04-24T04:48:00.000Z, valid until 01:00 ET
   h1: {"trend":"range","bias":0,"swingPattern":"LH/LL","close":27032,"ema20":27029.47,"ema50":null,"adx":24.4,"atr":92.32,"range":{"high":27155.75,"low":26681.75,"mid":26918.75},"note":"no EMA50 vote, needs 50"}
@@ -186,7 +186,7 @@ Detail by timeframe:
 [m15] version m15@2026-04-27T14:33:00.000Z, valid until 10:45 ET
   frame: {"trend":"down","bias":-1,"swingPattern":"LH/LL","close":27359.5,"ema20":27424.64,"ema50":27432.55,"adx":32.56,"atr":39.36,"range":{"high":27500.25,"low":27298.5,"mid":27399.5}}
   alignment: {"long":"mixed","short":"mixed","bias":"short","score":-1,"maxScore":6}
-  lastBreak: {"last":{"kind":"CHoCH","direction":"down","level":27440,"swingAt":"06:00","at":"08:15","barsAgo":8,"knownAt":"08:30"},"previous":{"kind":"CHoCH","direction":"up","level":27466.25,"swingAt":"05:45","at":"06:30","barsAgo":15,"knownAt":"06:45"}}
+  lastBreak: {"last":{"kind":"CHoCH","direction":"down","level":27440,"swingAt":"06:00","at":"08:15","barsAgo":8,"protected":{"side":"high","level":27500.25,"at":"07:30","brokenAt":null},"knownAt":"08:30"},"previous":{"kind":"CHoCH","direction":"up","level":27466.25,"swingAt":"05:45","at":"06:30","barsAgo":15,"protected":{"side":"low","level":27440,"at":"06:00","brokenAt":"08:15"},"knownAt":"06:45"}}
   indicators: {"regime":{"primary":"transition","volatility":"normal"},"ema9":27403.15,"ema20":27424.64,"adx":32.56,"adxSlope":9.66,"supertrend":{"direction":"down","line":27483.43},"keltner":{"upper":27478.31,"mid":27424.64,"lower":27370.97},"atr14":39.36}
 [h1] version h1@2026-04-27T14:33:00.000Z, valid until 11:00 ET
   h1: {"trend":"range","bias":0,"swingPattern":"mixed","close":27401.5,"ema20":27414,"ema50":27297.83,"adx":21.68,"atr":68.08,"range":{"high":27542.5,"low":27298.5,"mid":27420.5}}
@@ -286,7 +286,7 @@ Detail by timeframe:
 [m15] version m15@2026-04-27T17:18:00.000Z, valid until 13:30 ET
   frame: {"trend":"range","bias":0,"swingPattern":"LH/LL","close":27413.25,"ema20":27394.41,"ema50":27412.53,"adx":41.8,"atr":38.24,"range":{"high":27467.25,"low":27298.5,"mid":27383}}
   alignment: {"long":"mixed","short":"mixed","bias":"neutral","score":0,"maxScore":6}
-  lastBreak: {"last":{"kind":"CHoCH","direction":"down","level":27440,"swingAt":"06:00","at":"08:15","barsAgo":19,"knownAt":"08:30"},"previous":{"kind":"CHoCH","direction":"up","level":27466.25,"swingAt":"05:45","at":"06:30","barsAgo":26,"knownAt":"06:45"}}
+  lastBreak: {"last":{"kind":"CHoCH","direction":"down","level":27440,"swingAt":"06:00","at":"08:15","barsAgo":19,"protected":{"side":"high","level":27500.25,"at":"07:30","brokenAt":null},"knownAt":"08:30"},"previous":{"kind":"CHoCH","direction":"up","level":27466.25,"swingAt":"05:45","at":"06:30","barsAgo":26,"protected":{"side":"low","level":27440,"at":"06:00","brokenAt":"08:15"},"knownAt":"06:45"}}
   indicators: {"regime":{"primary":"transition","volatility":"normal"},"ema9":27387.05,"ema20":27394.41,"adx":41.8,"adxSlope":-1.66,"supertrend":{"direction":"down","line":27478.61},"keltner":{"upper":27449.71,"mid":27394.41,"lower":27339.11},"atr14":38.24}
 [h1] version h1@2026-04-27T17:18:00.000Z, valid until 14:00 ET
   h1: {"trend":"range","bias":0,"swingPattern":"LH/LL","close":27390.5,"ema20":27404.15,"ema50":27306.62,"adx":21.08,"atr":69.13,"range":{"high":27542.5,"low":27298.5,"mid":27420.5}}
@@ -336,7 +336,7 @@ Summary (MNQ 3m, 19:21 ET):
 - Next swing above (R = the 3m reference stop): 15m 27501.5 (13.5 pts, 54 ticks, 2.91R), 1h/4h 27542.5 (54.5 pts, 218 ticks, 11.76R); below: 15m 27411.25 (76.75 pts, 307 ticks, 16.56R), 1h/4h 27298.5 (189.5 pts, 758 ticks, 40.9R).
 - Prior candle range (R = the 3m reference stop): 1h (closed 19:00) high 27501.5 (13.5 above, 2.91R), mid 27460.875 (27 below, 5.83R), low 27420.25 (67.75 below, 14.62R); 4h (closed 18:00) high 27454.75 (33.25 below, 7.18R), mid 27422.625 (65.25 below, 14.08R), low 27390.5 (97.5 below, 21.04R), high taken, closed above it.
 - FVGs near price or retested (completed candles): 1h bearish 27456-27508 (01:00) filled to 27501.5, retest closed inside.
-- Break quality (strength, not a forecast; `displacement`): 3m BOS down 27478.5 9 min ago: weak (small), closed back above 27478.5 6 min ago; cleared 0.23 ATR; FVG 27482.5-27485 filled (traded through); from protected high 27489.75: holds; leg 3 bars, efficiency 0.68, overlap 0.32.
+- Break quality (strength, not a forecast; `displacement`): 3m BOS down 27478.5 9 min ago: weak (small), closed back above 27478.5 6 min ago; cleared 0.23 ATR; FVG 27482.5-27485 traded through; from protected high 27489.75: holds; leg 3 bars, efficiency 0.68, overlap 0.32.
 - CISD (completed candles): 3m bullish at 27487.5 (closed 19:21, weak), no key-level sweep, a weak displacement: no zone; 15m bullish at 27444.75 (closed 18:15, strong), no key-level sweep, OTE 27430.25-27445.5 (mid 27437.75), waiting; 1h bullish at 27482 (closed 19:00, strong), no key-level sweep, OTE 27341.25-27375.75 (mid 27358.5), waiting.
 - 3m timing (long: the entry rule's side; context, the setup is the entry): 3m pullback: trending against the HTF side since 19:09 ET.
 - Pullback (15m, long leg 27411.25 -> 27501.5): depth 15% of the leg; 20 bars since the extreme, volume 0.43x the leg's per bar (falling), range 0.63x; swings since the extreme: 15m 27411.25 holds, 1h 27298.5 holds; 15m break against: none, 1h: CHoCH down 27388 (7 bars ago).
@@ -384,7 +384,7 @@ Detail by timeframe:
 [m15] version m15@2026-04-27T23:21:00.000Z, valid until 19:30 ET
   frame: {"trend":"up","bias":1,"swingPattern":"HH/HL","close":27479.25,"ema20":27445.19,"ema50":27430.38,"adx":23.12,"atr":26.97,"range":{"high":27501.5,"low":27380.25,"mid":27441}}
   alignment: {"long":"aligned","short":"counter","bias":"long","score":4,"maxScore":6}
-  lastBreak: {"last":{"kind":"BOS","direction":"up","level":27454.75,"swingAt":"15:45","at":"18:00","barsAgo":4,"knownAt":"18:15"},"previous":{"kind":"CHoCH","direction":"up","level":27439.75,"swingAt":"13:45","at":"15:45","barsAgo":9,"knownAt":"16:00"}}
+  lastBreak: {"last":{"kind":"BOS","direction":"up","level":27454.75,"swingAt":"15:45","at":"18:00","barsAgo":4,"protected":{"side":"low","level":27411.25,"at":"16:15","brokenAt":null},"knownAt":"18:15"},"previous":{"kind":"CHoCH","direction":"up","level":27439.75,"swingAt":"13:45","at":"15:45","barsAgo":9,"protected":{"side":"low","level":27390.5,"at":"15:00","brokenAt":null},"knownAt":"16:00"}}
   indicators: {"regime":{"primary":"trend-up","volatility":"normal"},"ema9":27466.11,"ema20":27445.19,"adx":23.12,"adxSlope":-0.91,"supertrend":{"direction":"up","line":27412.51},"keltner":{"upper":27488,"mid":27445.19,"lower":27402.38},"atr14":26.97}
 [h1] version h1@2026-04-27T23:21:00.000Z, valid until 20:00 ET
   h1: {"trend":"range","bias":0,"swingPattern":"LH/LL","close":27484.75,"ema20":27417.46,"ema50":27330.12,"adx":16.47,"atr":65.72,"range":{"high":27542.5,"low":27298.5,"mid":27420.5}}

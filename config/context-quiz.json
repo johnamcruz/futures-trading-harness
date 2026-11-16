@@ -1870,8 +1870,8 @@
         "displacement"
       ],
       "text": "Briefing lines (synthetic, 10:45 ET), flat:\n- Break quality (strength, not a forecast; `displacement`): 3m BOS up 21412.25 12 min ago: displaced, closed back below 21412.25 3 min ago; cleared 0.6 ATR; FVG 21405.5-21409 filled to 21406.75; from protected low 21380.5: holds.\nWhat is this break now?",
-      "rule": "closed back is a fact about the broken level, not an invalidation; the protected low decides; the break's strength stays displaced",
-      "anchor": "`closed back below X`: a close back through it since: a fact, not an invalidation.",
+      "rule": "a close back through the broken level is a fact about the break; its structure ends only at its protected swing (the protected low holds); its strength stays displaced",
+      "anchor": "the break's structure ends only at its protected swing.",
       "choices": [
         "a displaced BOS still holding its level",
         "invalidated: the close back below 21412.25 ends the up structure",
@@ -1887,9 +1887,9 @@
       "lookup": [
         "displacement"
       ],
-      "text": "Briefing lines (synthetic, 10:12 ET), flat:\n- Break quality (strength, not a forecast; `displacement`): 3m BOS up 21412.25 this bar: weak (closed mid, small), holding; cleared 0.05 ATR; no FVG yet; from protected low 21390.5: holds.\nWhat is this break?",
+      "text": "Briefing lines (synthetic, 10:18 ET), flat:\n- Break quality (strength, not a forecast; `displacement`): 15m BOS up 21412.25 (closed 10:15): weak (closed mid, small), holding; cleared 0.05 ATR; no FVG yet; from protected low 21390.5: holds.\nWhat is this 15m break?",
       "rule": "a weak BOS is still a BOS: structure confirms continuation, displacement says its strength (weak)",
-      "anchor": "`weak` BOS -> still a BOS: continuation, little conviction.",
+      "anchor": "`weak` BOS -> still a BOS: continuation by structure; weak strength.",
       "choices": [
         "not a BOS: a weak close does not break structure",
         "a confirmed reversal up",
@@ -1905,16 +1905,16 @@
       "lookup": [
         "displacement"
       ],
-      "text": "Briefing lines (synthetic, 10:27 ET), flat:\n- Break quality (strength, not a forecast; `displacement`): 3m CHoCH down 21350.5 6 min ago: displaced, holding; cleared 0.7 ATR; FVG 21356.25-21360 open; from protected high 21372.25: holds.\nWhat does this displaced CHoCH mean?",
-      "rule": "a displaced CHoCH is a potential reversal with conviction; only structure (a BOS the same way) confirms it; displacement alone never invalidates",
-      "anchor": "`displaced` CHoCH -> a potential reversal with conviction; unconfirmed until a BOS the same way.",
+      "text": "Briefing lines (synthetic, 10:33 ET), flat:\n- Break quality (strength, not a forecast; `displacement`): 15m CHoCH down 21350.5 (closed 10:30): displaced, holding; cleared 0.7 ATR; FVG 21356.25-21360 open; from protected high 21372.25: holds.\nWhat does this displaced 15m CHoCH mean?",
+      "rule": "a displaced CHoCH is a potential reversal with displaced strength; only structure (a BOS the same way) confirms it; displacement alone never invalidates",
+      "anchor": "`displaced` CHoCH -> a potential reversal, displaced strength; unconfirmed until a BOS the same way.",
       "choices": [
         "a confirmed reversal down: the displacement confirms it",
-        "a potential reversal down with strong displacement, unconfirmed until a BOS down",
+        "a potential reversal down with displaced strength, unconfirmed until a BOS down",
         "nothing: a CHoCH is noise",
         "the up structure is invalidated by the displacement"
       ],
-      "answer": "a potential reversal down with strong displacement, unconfirmed until a BOS down"
+      "answer": "a potential reversal down with displaced strength, unconfirmed until a BOS down"
     },
     {
       "id": "q139",
@@ -1925,14 +1925,14 @@
       ],
       "text": "Briefing lines (synthetic, 10:18 ET), flat:\n- CISD (completed candles): 15m bullish at 21430 (closed 10:15, weak), no key-level sweep, a weak displacement: no zone.\nWhat does this CISD read?",
       "rule": "a weak CISD is a delivery shift read by the same strength rule: weak, no zone",
-      "anchor": "`weak` -> a delivery shift, no zone.",
+      "anchor": "`weak` -> a delivery shift, weak strength, no zone.",
       "choices": [
-        "a delivery shift up with little conviction, no zone",
+        "a delivery shift up with weak strength, no zone",
         "no CISD: a weak one does not count",
         "a strong delivery shift up: buy its OTE",
         "a confirmed reversal up"
       ],
-      "answer": "a delivery shift up with little conviction, no zone"
+      "answer": "a delivery shift up with weak strength, no zone"
     },
     {
       "id": "q140",

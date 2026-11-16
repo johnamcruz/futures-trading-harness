@@ -82,7 +82,7 @@ Detail by timeframe:
 [m15] version m15@2025-02-20T11:33:00.000Z, valid until 06:45 ET
   frame: {"trend":"range","bias":0,"swingPattern":"HH/HL","close":2283.7,"ema20":2282.38,"ema50":2282.51,"adx":27.38,"atr":1.45,"range":{"high":2285,"low":2278.6,"mid":2281.8}}
   alignment: {"long":"mixed","short":"mixed","bias":"neutral","score":0,"maxScore":6}
-  lastBreak: {"last":{"kind":"BOS","direction":"up","level":2280.7,"swingAt":"02:15","at":"03:15","barsAgo":12,"knownAt":"03:30"},"previous":{"kind":"CHoCH","direction":"up","level":2279.6,"swingAt":"00:15","at":"01:45","barsAgo":18,"knownAt":"02:00"}}
+  lastBreak: {"last":{"kind":"BOS","direction":"up","level":2280.7,"swingAt":"02:15","at":"03:15","barsAgo":12,"protected":{"side":"low","level":2279.2,"at":"02:45","brokenAt":null},"knownAt":"03:30"},"previous":{"kind":"CHoCH","direction":"up","level":2279.6,"swingAt":"00:15","at":"01:45","barsAgo":18,"protected":{"side":"low","level":2278.2,"at":"01:00","brokenAt":null},"knownAt":"02:00"}}
   indicators: {"regime":{"primary":"trend-up","volatility":"low"},"ema9":2283.4,"ema20":2282.38,"adx":27.38,"adxSlope":4.09,"supertrend":{"direction":"up","line":2280.12},"keltner":{"upper":2284.71,"mid":2282.38,"lower":2280.05},"atr14":1.45}
 [h1] version h1@2025-02-20T11:33:00.000Z, valid until 07:00 ET
   h1: {"trend":"range","bias":0,"swingPattern":"HH/HL","close":2283.9,"ema20":2283.93,"ema50":null,"adx":5.13,"atr":4.5,"range":{"high":2297,"low":2275.6,"mid":2286.3},"note":"no EMA50 vote, needs 50"}
@@ -177,7 +177,7 @@ Detail by timeframe:
 [m15] version m15@2025-02-20T17:33:00.000Z, valid until 12:45 ET
   frame: {"trend":"down","bias":-1,"swingPattern":"LH/LL","close":2262.4,"ema20":2267.64,"ema50":2274.8,"adx":51.85,"atr":4.21,"range":{"high":2288,"low":2254.4,"mid":2271.2}}
   alignment: {"long":"mixed","short":"mixed","bias":"short","score":-1,"maxScore":6}
-  lastBreak: {"last":{"kind":"BOS","direction":"down","level":2258,"swingAt":"10:00","at":"10:45","barsAgo":6,"knownAt":"11:00"},"previous":{"kind":"CHoCH","direction":"down","level":2283.6,"swingAt":"08:00","at":"09:30","barsAgo":11,"knownAt":"09:45"}}
+  lastBreak: {"last":{"kind":"BOS","direction":"down","level":2258,"swingAt":"10:00","at":"10:45","barsAgo":6,"protected":{"side":"high","level":2267.4,"at":"10:15","brokenAt":null},"knownAt":"11:00"},"previous":{"kind":"CHoCH","direction":"down","level":2283.6,"swingAt":"08:00","at":"09:30","barsAgo":11,"protected":{"side":"high","level":2286.8,"at":"08:45","brokenAt":null},"knownAt":"09:45"}}
   indicators: {"regime":{"primary":"trend-down","volatility":"high"},"ema9":2261.89,"ema20":2267.64,"adx":51.85,"adxSlope":7.73,"supertrend":{"direction":"down","line":2271.73},"keltner":{"upper":2273.31,"mid":2267.64,"lower":2261.97},"atr14":4.21}
 [h1] version h1@2025-02-20T17:33:00.000Z, valid until 13:00 ET
   h1: {"trend":"range","bias":0,"swingPattern":"mixed","close":2256.4,"ema20":2277.42,"ema50":null,"adx":14.15,"atr":6.26,"range":{"high":2294.2,"low":2254.4,"mid":2274.3},"note":"no EMA50 vote, needs 50"}
@@ -275,7 +275,7 @@ Detail by timeframe:
 [m15] version m15@2025-02-21T14:51:00.000Z, valid until 10:00 ET
   frame: {"trend":"range","bias":0,"swingPattern":"mixed","close":2265.7,"ema20":2274.77,"ema50":2271.63,"adx":44.22,"atr":3.62,"range":{"high":2286.1,"low":2265.7,"mid":2275.9}}
   alignment: {"long":"counter","short":"mixed","bias":"short","score":-3,"maxScore":6}
-  lastBreak: {"last":{"kind":"CHoCH","direction":"down","level":2272.5,"swingAt":"08:00","at":"09:30","barsAgo":0,"knownAt":"09:45"},"previous":{"kind":"BOS","direction":"up","level":2275.4,"swingAt":"06:00","at":"08:00","barsAgo":6,"knownAt":"08:15"}}
+  lastBreak: {"last":{"kind":"CHoCH","direction":"down","level":2272.5,"swingAt":"08:00","at":"09:30","barsAgo":0,"protected":{"side":"high","level":2286.1,"at":"09:15","brokenAt":null},"knownAt":"09:45"},"previous":{"kind":"BOS","direction":"up","level":2275.4,"swingAt":"06:00","at":"08:00","barsAgo":6,"protected":{"side":"low","level":2269.5,"at":"07:00","brokenAt":"09:30"},"knownAt":"08:15"}}
   indicators: {"regime":{"primary":"transition","volatility":"normal"},"ema9":2276.54,"ema20":2274.77,"adx":44.22,"adxSlope":2.3,"supertrend":{"direction":"down","line":2285.97},"keltner":{"upper":2279.56,"mid":2274.77,"lower":2269.99},"atr14":3.62}
 [h1] version h1@2025-02-21T14:51:00.000Z, valid until 10:00 ET
   h1: {"trend":"range","bias":0,"swingPattern":"HH/HL","close":2282.2,"ema20":2271.1,"ema50":2276.15,"adx":26.58,"atr":5.73,"range":{"high":2286.5,"low":2256.1,"mid":2271.3}}
@@ -375,7 +375,7 @@ Detail by timeframe:
 [m15] version m15@2025-02-21T15:06:00.000Z, valid until 10:15 ET
   frame: {"trend":"range","bias":0,"swingPattern":"HH/HL","close":2260.3,"ema20":2273.39,"ema50":2271.19,"adx":43.05,"atr":4.08,"range":{"high":2286.1,"low":2259.6,"mid":2272.8}}
   alignment: {"long":"counter","short":"mixed","bias":"short","score":-3,"maxScore":6}
-  lastBreak: {"last":{"kind":"CHoCH","direction":"down","level":2272.5,"swingAt":"08:00","at":"09:30","barsAgo":1,"knownAt":"09:45"},"previous":{"kind":"BOS","direction":"up","level":2275.4,"swingAt":"06:00","at":"08:00","barsAgo":7,"knownAt":"08:15"}}
+  lastBreak: {"last":{"kind":"CHoCH","direction":"down","level":2272.5,"swingAt":"08:00","at":"09:30","barsAgo":1,"protected":{"side":"high","level":2286.1,"at":"09:15","brokenAt":null},"knownAt":"09:45"},"previous":{"kind":"BOS","direction":"up","level":2275.4,"swingAt":"06:00","at":"08:00","barsAgo":7,"protected":{"side":"low","level":2269.5,"at":"07:00","brokenAt":"09:30"},"knownAt":"08:15"}}
   indicators: {"regime":{"primary":"transition","volatility":"high"},"ema9":2273.3,"ema20":2273.39,"adx":43.05,"adxSlope":0.33,"supertrend":{"direction":"down","line":2278.97},"keltner":{"upper":2278.69,"mid":2273.39,"lower":2268.1},"atr14":4.08}
 [h1] version h1@2025-02-21T15:06:00.000Z, valid until 11:00 ET
   h1: {"trend":"range","bias":0,"swingPattern":"HH/HL","close":2260.3,"ema20":2270.07,"ema50":2275.53,"adx":25.55,"atr":7.22,"range":{"high":2286.5,"low":2258.5,"mid":2272.5}}

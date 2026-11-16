@@ -122,6 +122,9 @@ test('breakQuality at the break\'s close: displaced, cleared in ATR, the leg pro
   assert.strictEqual(x.displaced, true);
   assert.deepStrictEqual(x.why, []);
   assert.strictEqual(x.cleared, 1, '(107.75 - 105) / 2.75');
+  // cleared reads ATR of the candle before the break (as the word does), never the break candle's.
+  const at7 = flatAtr(13); at7[7] = 5.5;
+  assert.strictEqual(q(7, { atr: at7 }).cleared, 1, 'atr[i - 1], not atr[i]');
   // The leg from the protected low (bar 5) to the break: 3 candles; efficiency |107.75 - 100.25| / (2.25 + 2.5 + 5.75) =
   // 0.71; overlap: bar 6 in bar 5 1.75 / 2.5 = 0.7, bar 7 in bar 6 1 / 5.75 = 0.17: mean 0.44.
   assert.deepStrictEqual(x.leg, { bars: 3, eff: 0.71, overlap: 0.44 });
@@ -144,12 +147,24 @@ test('breakQuality: the FVG with one meaning each: open, filled to (traded into,
   const weak = ROWS.map((r, i) => (i === 7 ? [103, 108, 102.25, 105.5] : r));
   assert.strictEqual(q(8, { rows: weak }).fvg, null);
   assert.strictEqual(q(8, { rows: weak }).fvgPending, false, 'known now: no FVG');
+  // The gap's edge exactly reached (low 106.5 at bar 9) is still open: traded into means past the edge.
+  const edge = ROWS.slice(0, 9).concat([[108.5, 108.75, 106.5, 107]]);
+  assert.strictEqual(q(9, { rows: edge }).fvg.state, 'open');
+  // Not back to back (a feed gap between bars 7 and 8): no FVG across it.
+  const gapped = mk(ROWS.slice(0, 9)).map((c, i) => (i === 8 ? { ...c, t: new Date(T0 + 9 * 180000).toISOString() } : c));
+  const gb = SE.breaksOf(gapped).find(b => b.direction === 'up');
+  assert.strictEqual(D.breakQuality({ candles: gapped, brk: gb, atr: flatAtr(9), at: 8, minutes: 3 }).fvg, null);
+  // Without an ATR given, the candles' own ATR(14) (no throw).
+  assert.ok(D.breakQuality({ candles: mk(ROWS), brk: setup().brk, at: 8 }));
 });
 
 test('breakQuality: holding until a close back through the level, then closed back (the first such close, its age)', () => {
   assert.deepStrictEqual(q(9).status, { holding: true });
-  assert.deepStrictEqual(q(10).status, { closedBack: { at: mk(ROWS)[10].t, closedAt: mk(ROWS)[11].t, barsAgo: 0 } });
-  assert.deepStrictEqual(q(11).status, { closedBack: { at: mk(ROWS)[10].t, closedAt: mk(ROWS)[11].t, barsAgo: 1 } });
+  assert.deepStrictEqual(q(10).status, { closedBack: { at: mk(ROWS)[10].t, closedAt: mk(ROWS)[11].t, barsAgo: 0 }, reclaimed: false });
+  assert.deepStrictEqual(q(11).status, { closedBack: { at: mk(ROWS)[10].t, closedAt: mk(ROWS)[11].t, barsAgo: 1 }, reclaimed: false });
+  // Back above 105 after closing back under it: the first close back is kept, and the line says it is back above now.
+  const back = ROWS.slice(0, 11).concat([[104.75, 106.5, 104.5, 106.25]]);
+  assert.deepStrictEqual(q(11, { rows: back }).status, { closedBack: { at: mk(ROWS)[10].t, closedAt: mk(ROWS)[11].t, barsAgo: 1 }, reclaimed: true });
   // A wick back under 105 that closes above it is no close back: still holding.
   const wick = ROWS.map((r, i) => (i === 9 ? [108.5, 108.75, 104.75, 106.25] : r));
   assert.deepStrictEqual(q(9, { rows: wick }).status, { holding: true });
@@ -164,6 +179,9 @@ test('breakQuality: the origin\'s sweep is the briefing\'s sweep rule (structure
   // A sweep before the leg (bar 1 trades to 99.75 under 100 and closes back above) is not the leg's origin.
   const early = ROWS.map((r, i) => (i === 1 ? [100.75, 102, 99.75, 101.75] : r));
   assert.strictEqual(q(7, { rows: early, levels: [{ name: 'overnight low', price: 100, side: 'low', key: true }] }).origin.sweep, null);
+  // A sweep after the break (bar 12 trades under 100 and the level closes back later) is not the origin: causal at the break.
+  const later = ROWS.concat([[100, 101.5, 99.75, 101.25]]);
+  assert.strictEqual(q(13, { rows: later, levels: [{ name: 'overnight low', price: 99.9, side: 'low', key: true }] }).origin.sweep, null);
 });
 
 test('breakQuality is causal: candles after `at` change nothing; a break not yet in the candles is null', () => {
@@ -214,7 +232,7 @@ test('breakLine: strength, status, cleared, FVG, origin, body (when it agrees), 
   // A body 2.4x prior beside `weak` would read as a contradiction (M3): the number prints only when it agrees with the word.
   assert.strictEqual(wl, '- Break quality (strength, not a forecast; `displacement`): 3m CHoCH up 21412.25 this bar: weak (closed mid, small), closed back below 21412.25 3 min ago; cleared 0.6 ATR; no FVG yet; from protected low 21380.5: holds; leg 4 bars, efficiency 0.74, overlap 0.31.');
   const filled = base({ fvg: { side: 'bullish', low: 1, high: 2, at: 'x', state: 'filled' } });
-  assert.match(D.breakLine({ entry: { tf: '3m', brk: filled, minutes: 3 } }), /FVG 1-2 filled \(traded through\);/);
+  assert.match(D.breakLine({ entry: { tf: '3m', brk: filled, minutes: 3 } }), /FVG 1-2 traded through;/);
   const part = base({ fvg: { side: 'bullish', low: 1, high: 2, at: 'x', state: 'filled to', to: 1.5 } });
   assert.match(D.breakLine({ entry: { tf: '3m', brk: part, minutes: 3 } }), /FVG 1-2 filled to 1\.5;/);
   assert.match(D.breakLine({ entry: { tf: '3m', brk: base({ fvg: null }), minutes: 3 } }), /; no FVG;/);
@@ -243,6 +261,8 @@ test('breakLine: recency from config (recentEntry candles, recentSetup 15m candl
   const sb = D.breakLine({ setup: { tf: '15m', brk: back, minutes: 15 } }, { p, et: t => (t === '2026-03-02T15:45:00.000Z' ? '10:45' : '?') });
   assert.match(sb, /15m CHoCH up 21412\.25 \(closed \?\): displaced, closed back below 21412\.25 at 10:45;/);
   assert.doesNotMatch(sb, /this bar|min ago/);
+  const noTime = { ...setupBrk, quality: { ...setupBrk.quality, status: { closedBack: { at: 'x', closedAt: null, barsAgo: 0 } } } };
+  assert.doesNotMatch(D.breakLine({ setup: { tf: '15m', brk: noTime } }, { p }), /NaN|min ago|this bar/, 'no time given: none printed');
   assert.doesNotMatch(both, /3m BOS/, 'the stale 3m break is not printed');
   assert.strictEqual(D.breakLine({ entry: { tf: '3m', brk: null, minutes: 3 }, setup: { tf: '15m', brk: { ...setupBrk, barsAgo: 3 }, minutes: 15 } }, { p }), null);
   assert.strictEqual(D.breakLine({ entry: { tf: '3m', brk: { kind: 'BOS', direction: 'up', level: 1, barsAgo: 0 }, minutes: 3 } }, { p }), null, 'no quality: nothing to print');

@@ -43,9 +43,10 @@
  *                                            levels first), fvg (the latest FVG the break's way, market-snapshot fvgAt,
  *                                            its middle candle in the leg or the break candle, back to back: { side, low,
  *                                            high, at, state 'open' | 'filled to' (to: how far) | 'filled' (traded
- *                                            through, kept: the gap failed) } or null), fvgPending (the break's
+ *                                            through, kept: printed `traded through`) } or null), fvgPending (the break's
  *                                            own candle is the last: its gap needs the next candle), status { holding }
- *                                            | { closedBack { at, barsAgo } } (the first close back through the level) }
+ *                                            | { closedBack { at, closedAt, barsAgo }, reclaimed } (the first close back
+ *                                            through the level; reclaimed: the last close is past the level again) }
  *   invalidationQuality(candles, brk, prot, atr, p)   the strength of the close that broke the break's protected swing
  *                                            (prot.brokenAt), the break's opposite way: { displaced, why, barsAgo }, or null
  *   qualityOf(candles, lb, { minutes, levels, atr, p })   lastBreaks' { last, previous } with `quality` on last (and on
@@ -115,7 +116,7 @@ function legOf(cs, o, i, origin) {
   return { bars: i - o + 1, eff: sum > 0 ? r2(Math.abs(cs[i].c - origin) / sum) : null, overlap: n ? r2(ov / n) : null };
 }
 
-function breakQuality({ candles, brk, atr, at = candles.length - 1, minutes = null, levels = [], p = PARAMS }) {
+function breakQuality({ candles, brk, atr = ind.atr(candles), at = candles.length - 1, minutes = null, levels = [], p = PARAMS }) {
   if (!brk || !['up', 'down'].includes(brk.direction) || !Array.isArray(candles)) return null;
   const cs = candles.slice(0, at + 1);
   const i = cs.findIndex(c => c.t === brk.at);
@@ -142,7 +143,7 @@ function breakQuality({ candles, brk, atr, at = candles.length - 1, minutes = nu
     origin: prot ? { side, price: prot.level, at: prot.at, sweep: swept.length ? { name: swept[0].name, price: swept[0].price } : null } : null,
     fvg: o >= 0 ? fvgOf(cs, o, i, dir, atr, minutes) : null,
     fvgPending: i === cs.length - 1,
-    status: closedBack ? { closedBack } : { holding: true },
+    status: closedBack ? { closedBack, reclaimed: dir * (cs[cs.length - 1].c - brk.level) > 0 } : { holding: true },
   };
 }
 
@@ -172,13 +173,16 @@ const CUTS = Object.freeze(['body', 'leg', 'setup', 'sweep']);
 function clause({ tf, brk, minutes }, cut, et) {
   const x = brk.quality;
   // The entry frame says how long ago (its bars are the briefing's); the setup frame (brk.knownAt) the candle's close time.
-  const ago = (n, closedAt) => (brk.knownAt && closedAt ? `at ${et(closedAt)}` : minsAgo(n, minutes));
+  // A setup clause without a close time (none given) says none, never a 3m age.
+  const ago = (n, closedAt) => (brk.knownAt ? (closedAt ? `at ${et(closedAt)}` : '').trim() : minsAgo(n, minutes));
+  const sp = t => (t ? ` ${t}` : '');
   const when = brk.knownAt ? `(closed ${et(brk.knownAt)})` : minsAgo(brk.barsAgo, minutes);
-  const st = x.status && x.status.closedBack ? `closed back ${word(brk.direction, true)} ${brk.level} ${ago(x.status.closedBack.barsAgo, x.status.closedBack.closedAt)}` : 'holding';
-  const fvg = x.fvg ? `FVG ${x.fvg.low}-${x.fvg.high} ${x.fvg.state === 'filled' ? 'filled (traded through)' : x.fvg.state === 'filled to' ? `filled to ${x.fvg.to}` : 'open'}`
+  const cb = x.status && x.status.closedBack;
+  const st = cb ? `closed back ${word(brk.direction, true)} ${brk.level}${sp(ago(cb.barsAgo, cb.closedAt))}${x.status.reclaimed ? `, back ${word(brk.direction, false)} it since` : ''}` : 'holding';
+  const fvg = x.fvg ? `FVG ${x.fvg.low}-${x.fvg.high} ${x.fvg.state === 'filled' ? 'traded through' : x.fvg.state === 'filled to' ? `filled to ${x.fvg.to}` : 'open'}`
     : x.fvgPending ? 'no FVG yet' : 'no FVG';
   const pr = brk.protected && brk.protected.quality;
-  const held = pr ? `broken by a ${pr.displaced ? 'displaced' : 'weak'} close${pr.displaced ? '' : ` (${pr.why.join(', ')})`} ${ago(pr.barsAgo, pr.closedAt)}` : 'holds';
+  const held = pr ? `broken by a ${pr.displaced ? 'displaced' : 'weak'} close${pr.displaced ? '' : ` (${pr.why.join(', ')})`}${sp(ago(pr.barsAgo, pr.closedAt))}` : 'holds';
   const origin = x.origin ? `from protected ${x.origin.side} ${x.origin.price}${x.origin.sweep && !cut.has('sweep') ? ` (a sweep of ${x.origin.sweep.name} ${x.origin.sweep.price})` : ''}: ${held}` : null;
   const agrees = Number.isFinite(x.bodyX) && (x.displaced ? x.bodyX >= 1 : x.bodyX < 1);
   return [

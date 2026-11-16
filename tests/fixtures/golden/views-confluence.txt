@@ -87,7 +87,7 @@ Detail by timeframe:
 [m15] version m15@2026-04-24T04:48:00.000Z, valid until 01:00 ET
   frame: {"trend":"range","bias":0,"swingPattern":"mixed","close":27039.75,"ema20":27054.18,"ema50":27036.71,"adx":19.46,"atr":29.9,"range":{"high":27135.75,"low":27016.25,"mid":27076}}
   alignment: {"long":"mixed","short":"mixed","bias":"neutral","score":0,"maxScore":6}
-  lastBreak: {"last":{"kind":"BOS","direction":"up","level":27053,"swingAt":"04-23 18:45","at":"04-23 19:30","barsAgo":20,"knownAt":"04-23 19:45"},"previous":{"kind":"CHoCH","direction":"up","level":26988.5,"swingAt":"04-23 16:00","at":"04-23 18:00","barsAgo":26,"knownAt":"04-23 18:15"}}
+  lastBreak: {"last":{"kind":"BOS","direction":"up","level":27053,"swingAt":"04-23 18:45","at":"04-23 19:30","barsAgo":20,"protected":{"side":"low","level":27033.5,"at":"04-23 19:15","brokenAt":"04-23 23:30"},"knownAt":"04-23 19:45"},"previous":{"kind":"CHoCH","direction":"up","level":26988.5,"swingAt":"04-23 16:00","at":"04-23 18:00","barsAgo":26,"protected":{"side":"low","level":26919.25,"at":"04-23 16:15","brokenAt":null},"knownAt":"04-23 18:15"}}
   indicators: {"regime":{"primary":"transition","volatility":"low"},"ema9":27047.2,"ema20":27054.18,"adx":19.46,"adxSlope":3.91,"supertrend":{"direction":"up","line":27023.44},"keltner":{"upper":27105.95,"mid":27054.18,"lower":27002.41},"atr14":29.9}
 [h1] version h1@2026-04-24T04:48:00.000Z, valid until 01:00 ET
   h1: {"trend":"range","bias":0,"swingPattern":"LH/LL","close":27032,"ema20":27029.47,"ema50":null,"adx":24.4,"atr":92.32,"range":{"high":27155.75,"low":26681.75,"mid":26918.75},"note":"no EMA50 vote, needs 50"}
@@ -197,7 +197,7 @@ Detail by timeframe:
 [m15] version m15@2026-04-27T14:33:00.000Z, valid until 10:45 ET
   frame: {"trend":"down","bias":-1,"swingPattern":"LH/LL","close":27359.5,"ema20":27424.64,"ema50":27432.55,"adx":32.56,"atr":39.36,"range":{"high":27500.25,"low":27298.5,"mid":27399.5}}
   alignment: {"long":"mixed","short":"mixed","bias":"short","score":-1,"maxScore":6}
-  lastBreak: {"last":{"kind":"CHoCH","direction":"down","level":27440,"swingAt":"06:00","at":"08:15","barsAgo":8,"knownAt":"08:30"},"previous":{"kind":"CHoCH","direction":"up","level":27466.25,"swingAt":"05:45","at":"06:30","barsAgo":15,"knownAt":"06:45"}}
+  lastBreak: {"last":{"kind":"CHoCH","direction":"down","level":27440,"swingAt":"06:00","at":"08:15","barsAgo":8,"protected":{"side":"high","level":27500.25,"at":"07:30","brokenAt":null},"knownAt":"08:30"},"previous":{"kind":"CHoCH","direction":"up","level":27466.25,"swingAt":"05:45","at":"06:30","barsAgo":15,"protected":{"side":"low","level":27440,"at":"06:00","brokenAt":"08:15"},"knownAt":"06:45"}}
   indicators: {"regime":{"primary":"transition","volatility":"normal"},"ema9":27403.15,"ema20":27424.64,"adx":32.56,"adxSlope":9.66,"supertrend":{"direction":"down","line":27483.43},"keltner":{"upper":27478.31,"mid":27424.64,"lower":27370.97},"atr14":39.36}
 [h1] version h1@2026-04-27T14:33:00.000Z, valid until 11:00 ET
   h1: {"trend":"range","bias":0,"swingPattern":"mixed","close":27401.5,"ema20":27414,"ema50":27297.83,"adx":21.68,"atr":68.08,"range":{"high":27542.5,"low":27298.5,"mid":27420.5}}

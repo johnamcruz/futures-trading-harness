@@ -32,7 +32,8 @@ const PINS = [
   '3. An FVG marks a past displacement. It does not make the current move displaced; the break\'s own word does.',
   'An invalidating close reads its displacement too: the close decides, displacement tells how strongly. Displacement alone never invalidates.',
   'BOS, CHoCH, CISD and the invalidating close each read strength by this one rule.',
-  '`closed back below X`: a close back through it since: a fact, not an invalidation.',
+  'For a breakout trade that close is `breakout`\'s failure; the break\'s structure ends only at its protected swing.',
+  'By timeframe the break\'s own weight is `bos-vs-choch`\'s (a 3m break is a candle fact; a 15m break is the working structure); its strength reads the same on every timeframe.',
   'a retrace into the gap is observed (`filled to`), never waited for.',
 ];
 
@@ -41,15 +42,15 @@ test('displacement skill: frontmatter, sections in order, a short description; i
   assert.ok(String(data.description).length <= 160, `description ${String(data.description).length}`);
   const at = ['## When to Use', '## How It Works', '## Examples'].map(h => TEXT.indexOf(`\n${h}\n`));
   assert.ok(at.every(i => i > 0) && at[0] < at[1] && at[1] < at[2]);
-  // 6629 bytes at the measured need (the owner's framework quoted whole, the separation, the line's words, the evidence and
+  // 7287 bytes at the measured need (the owner's framework quoted whole, the separation, the line's words, the evidence and
   // eight worked examples); looked up in index mode, loaded by the two analysts' bodies otherwise.
-  assert.ok(Buffer.byteLength(body) <= 6629, `${Buffer.byteLength(body)} bytes`);
+  assert.ok(Buffer.byteLength(body) <= 7287, `${Buffer.byteLength(body)} bytes`);
 });
 
 test('displacement skill: the key sentences are pinned; a changed one fails', () => {
   for (const p of PINS) assert.ok(F.includes(flat(p)), p.slice(0, 80));
   for (const p of PINS) {
-    const changed = /\b(never|not|no|alone|each|one)\b/.test(p) ? p.replace(/\b(never|not|no|alone|each|one)\b/, 'often') : p.replace('strength', 'speed');
+    const changed = /\b(never|not|no|alone|each|one|only)\b/.test(p) ? p.replace(/\b(never|not|no|alone|each|one|only)\b/, 'often') : p.replace('strength', 'speed');
     assert.notStrictEqual(changed, p, p.slice(0, 60));
     assert.ok(!F.replace(flat(p), flat(changed)).includes(flat(p)), p.slice(0, 60));
   }
@@ -83,13 +84,13 @@ test('displacement skill: the line\'s words are the code\'s (displacement.js pri
     line({}, { protected: { side: 'low', level: 0.5, brokenAt: 'x', quality: { displaced: true, why: [], barsAgo: 0 } } }),
     line({}, { protected: { side: 'low', level: 0.5, brokenAt: 'x', quality: { displaced: false, why: ['wicks'], barsAgo: 0 } } }),
   ].join('\n');
-  for (const w of ['displaced', 'weak (', 'holding', 'closed back below', 'cleared', 'FVG', 'open', 'filled to', 'filled (traded through)', 'no FVG yet', 'no FVG', 'from protected low', 'holds', 'broken by a displaced close', 'broken by a weak close']) {
+  for (const w of ['displaced', 'weak (', 'holding', 'closed back below', 'cleared', 'FVG', 'open', 'filled to', 'traded through', 'no FVG yet', 'no FVG', 'from protected low', 'holds', 'broken by a displaced close', 'broken by a weak close']) {
     assert.ok(printed.includes(w), `the code prints ${w}`);
     assert.ok(F.includes(w), `the skill names ${w}`);
   }
   // The skill's example line is the code's shape.
-  assert.ok(F.includes('Break quality (strength, not a forecast; `displacement`): 3m BOS up 21412.25 6 min ago: displaced, holding; cleared 0.6 ATR; FVG 21405.50-21409.00 open; from protected low 21380.50 (a sweep of overnight low 21381.00): holds; body 2.1x prior; leg 4 bars, efficiency 0.74, overlap 0.31.'));
-  assert.ok(D.breakLine({ entry: { tf: '3m', brk: brk({ cleared: 0.6, bodyX: 2.1, leg: { bars: 4, eff: 0.74, overlap: 0.31 }, fvg: { low: '21405.50', high: '21409.00', state: 'open' }, origin: { side: 'low', price: '21380.50', sweep: { name: 'overnight low', price: '21381.00' } } }, { level: '21412.25', barsAgo: 2 }), minutes: 3 } }).startsWith('- Break quality (strength, not a forecast; `displacement`): 3m BOS up 21412.25 6 min ago: displaced, holding; cleared 0.6 ATR; FVG 21405.50-21409.00 open; from protected low 21380.50 (a sweep of overnight low 21381.00): holds; body 2.1x prior; leg 4 bars, efficiency 0.74, overlap 0.31.'), 'the skill\'s example is the code\'s line');
+  assert.ok(F.includes('Break quality (strength, not a forecast; `displacement`): 3m BOS up 21412.25 6 min ago: displaced, holding; cleared 0.6 ATR; FVG 21405.5-21409 open; from protected low 21380.5 (a sweep of overnight low 21381): holds; body 2.1x prior; leg 4 bars, efficiency 0.74, overlap 0.31.'));
+  assert.ok(D.breakLine({ entry: { tf: '3m', brk: brk({ cleared: 0.6, bodyX: 2.1, leg: { bars: 4, eff: 0.74, overlap: 0.31 }, fvg: { low: 21405.5, high: 21409, state: 'open' }, origin: { side: 'low', price: 21380.5, sweep: { name: 'overnight low', price: 21381 } } }, { level: 21412.25, barsAgo: 2 }), minutes: 3 } }).startsWith('- Break quality (strength, not a forecast; `displacement`): 3m BOS up 21412.25 6 min ago: displaced, holding; cleared 0.6 ATR; FVG 21405.5-21409 open; from protected low 21380.5 (a sweep of overnight low 21381): holds; body 2.1x prior; leg 4 bars, efficiency 0.74, overlap 0.31.'), 'the skill\'s example is the code\'s line');
   // One term per idea: never "strong" for a break (the CISD line's `strong` is named as the same word), never "retraced"
   // for a gap state, never "confirmed" beside displaced.
   assert.doesNotMatch(F.replace(/the CISD line's `strong` is `displaced`/i, '').replace(/`strong` CISD/g, '').replace(/A CISD prints `strong` or `weak`/, ''), /`strong`/);
@@ -100,7 +101,7 @@ test('displacement skill: the line\'s words are the code\'s (displacement.js pri
 test('displacement skill: worked examples for BOS, CHoCH, CISD, the invalidation, a close back and the two traps', () => {
   const ex = body.slice(body.indexOf('## Examples'));
   for (const k of ['BOS:', 'Weak BOS:', 'CHoCH:', 'CISD:', 'Invalidation:', 'Closed back:', 'Trap 1:', 'Trap 2:']) assert.match(ex, new RegExp(`^${k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'm'), k);
-  for (const m of ex.matchAll(/\b(\d{5}\.\d\d)\b/g)) assert.ok(Number.isInteger(Number(m[1]) / 0.25), `${m[1]} on the 0.25 tick`);
+  for (const m of ex.matchAll(/\b(\d{5}(?:\.\d+)?)\b/g)) assert.ok(Number.isInteger(Number(m[1]) / 0.25), `${m[1]} on the 0.25 tick`);
   assert.doesNotMatch(ex, /\b(?:wait|waits|waiting)\b/i, 'no example waits');
 });
 

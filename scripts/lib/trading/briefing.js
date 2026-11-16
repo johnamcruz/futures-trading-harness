@@ -560,8 +560,9 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
       data: {
         frame: brief(f15, level),
         alignment: read15.alignment,
-        // The 15m break's displacement read: its origin sweep of the session's key levels only (its own swings are 3m).
-        lastBreak: atClose(qualityOf(c15, lastBreaks(c15), { levels: sweepLevels.filter(x => x.key) }), 15),
+        // The 15m break's displacement read and its protected swing (as the 3m's): its origin sweep of the session's key
+        // levels only (its own swings are 3m).
+        lastBreak: atClose(qualityOf(c15, withProtected(c15, lastBreaks(c15)), { levels: sweepLevels.filter(x => x.key) }), 15),
         // The 15m candles' own indicators (completed candles only): EMA9 and EMA20, as on the trigger bars.
         indicators: snap15 ? {
           regime: snap15.regime && { primary: snap15.regime.primary, volatility: snap15.regime.volatility },
