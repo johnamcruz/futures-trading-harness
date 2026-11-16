@@ -42,9 +42,11 @@ test('displacement skill: frontmatter, sections in order, a short description; i
   assert.ok(String(data.description).length <= 160, `description ${String(data.description).length}`);
   const at = ['## When to Use', '## How It Works', '## Examples'].map(h => TEXT.indexOf(`\n${h}\n`));
   assert.ok(at.every(i => i > 0) && at[0] < at[1] && at[1] < at[2]);
-  // 7320 bytes at the measured need (the owner's framework quoted whole, the separation, the line's words, the evidence and
-  // eight worked examples); looked up in index mode, loaded by the two analysts' bodies otherwise.
-  assert.ok(Buffer.byteLength(body) <= 7320, `${Buffer.byteLength(body)} bytes`);
+  // 7508 bytes at the measured need (the owner's framework quoted whole, the separation, the line's words, the evidence and
+  // eight worked examples; 7320 before the rebase onto #341: the CHoCH read names what a BOS confirms (the transition) and
+  // what a close through the old protected level confirms (the reversal), and the tie at a protected level); looked up in
+  // index mode, loaded by the two analysts' bodies otherwise.
+  assert.ok(Buffer.byteLength(body) <= 7508, `${Buffer.byteLength(body)} bytes`);
 });
 
 test('displacement skill: the key sentences are pinned; a changed one fails', () => {
@@ -83,8 +85,9 @@ test('displacement skill: the line\'s words are the code\'s (displacement.js pri
     line({ fvg: { low: 1, high: 2, state: 'open' } }), line({ fvg: { low: 1, high: 2, state: 'filled to', to: 1.5 } }), line({ fvg: { low: 1, high: 2, state: 'filled' } }), line({ fvgPending: true }),
     line({}, { protected: { side: 'low', level: 0.5, brokenAt: 'x', quality: { displaced: true, why: [], barsAgo: 0 } } }),
     line({}, { protected: { side: 'low', level: 0.5, brokenAt: 'x', quality: { displaced: false, why: ['wicks'], barsAgo: 0 } } }),
+    line({}, { protected: { side: 'low', level: 0.5, brokenAt: 'x', quality: { tie: true } } }),
   ].join('\n');
-  for (const w of ['displaced', 'weak (', 'holding', 'closed back below', 'cleared', 'FVG', 'open', 'filled to', 'traded through', 'no FVG yet', 'no FVG', 'from protected low', 'holds', 'broken by a displaced close', 'broken by a weak close']) {
+  for (const w of ['displaced', 'weak (', 'holding', 'closed back below', 'cleared', 'FVG', 'open', 'filled to', 'traded through', 'no FVG yet', 'no FVG', 'from protected low', 'holds', 'holds (tested, a tie)', 'broken by a displaced close', 'broken by a weak close']) {
     assert.ok(printed.includes(w), `the code prints ${w}`);
     assert.ok(F.includes(w), `the skill names ${w}`);
   }
@@ -130,4 +133,14 @@ test('displacement skill: indexed by the two analysts (core or index, and their 
   assert.match(read('workspace/AGENTS.md'), /`displacement`|\bdisplacement\b: /);
   const { SITUATIONAL } = require('../../scripts/lib/trading/skills-loaded');
   assert.ok(!JSON.stringify(SITUATIONAL).includes('"displacement"'), 'no gate requirement reads the read');
+});
+
+test('the separation in print: no Market state or Break quality line, on every golden, says displacement confirms (strength only; structure confirms)', () => {
+  const dir = path.join(ROOT, 'tests', 'fixtures', 'golden');
+  const lines = fs.readdirSync(dir).filter(f => f.endsWith('.txt')).flatMap(f => fs.readFileSync(path.join(dir, f), 'utf8').split('\n'))
+    .filter(l => /Market state \(|Break quality \(/.test(l));
+  assert.ok(lines.some(l => /Break quality \(/.test(l)) && lines.some(l => /Market state \(/.test(l)), 'both lines are in the goldens');
+  // A clause (between , ; : and parentheses) naming displacement and confirmation together breaks the separation.
+  for (const l of lines) for (const c of l.split(/[,;:()]/)) assert.doesNotMatch(c, /displac\w*.*\bconfirm|\bconfirm\w*.*displac/i, `${c} (in: ${l.slice(0, 160)})`);
+  assert.doesNotMatch(D.breakLine({ entry: { tf: '3m', brk: { kind: 'CHoCH', direction: 'down', level: 2, barsAgo: 0, quality: { displaced: true, why: [], cleared: 1, bodyX: 2, leg: null, origin: null, fvg: null, fvgPending: false, status: { holding: true } } }, minutes: 3 } }), /confirm/i);
 });

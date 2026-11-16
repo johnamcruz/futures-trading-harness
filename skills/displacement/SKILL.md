@@ -82,7 +82,8 @@ body 2.1x prior; leg 4 bars, efficiency 0.74, overlap 0.31.
   candle's own gap needs the next candle).
 - `from protected low Y`: this break's own protected swing, where its move
   started (`a sweep of` a key level when the leg swept one; each break has
-  one: `bos-vs-choch`). `holds`, or `broken by a displaced close` /
+  one: `bos-vs-choch`). `holds` (`holds (tested, a tie)`: a close within
+  the Market state's tie), or `broken by a displaced close` /
   `broken by a weak close (why)`: broken either way. A BOS's broken swing
   ends that BOS's read; a CHoCH's means the shift failed. The Market
   state's leg level is its own (the Market state line).
@@ -99,8 +100,9 @@ a retrace into the gap is observed (`filled to`), never waited for.
 
 - `displaced` BOS -> continuation by structure; displaced strength.
 - `weak` BOS -> still a BOS: continuation by structure; weak strength.
-- `displaced` CHoCH -> a potential reversal, displaced strength;
-  unconfirmed until a BOS the same way.
+- `displaced` CHoCH -> a potential reversal, displaced strength; only
+  structure confirms: a BOS the same way confirms the transition, a close
+  through the old leg's protected level the reversal (`bos-vs-choch`).
 - `weak` CHoCH -> still a CHoCH, a potential reversal; weak strength.
 - `strong` CISD -> a delivery shift, displaced strength (its zone:
   `cisd`); `weak` -> a delivery shift, weak strength, no zone.
@@ -128,8 +130,8 @@ Weak BOS: 15m BOS up 21412.25 (closed 10:15): weak (closed mid, small), holding.
   Read: still a BOS, continuation by structure; weak strength.
 CHoCH: 15m CHoCH down 21350.5 (closed 10:30): displaced, holding; from
   protected high 21372.25: holds.
-  Read: a potential reversal down, displaced strength; unconfirmed until a
-  BOS down. Against the 4h + 1h it is context (never counter).
+  Read: a potential reversal down, displaced strength; a BOS down would
+  confirm the transition. Against the 4h + 1h it is context (never counter).
 CISD: 15m bullish at 21430 (closed 10:15, weak), a weak displacement: no zone.
   Read: a delivery shift up, weak strength; no zone (`cisd`).
 Invalidation: 3m BOS up 21412.25 15 min ago: ...; from protected low

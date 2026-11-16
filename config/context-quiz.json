@@ -1906,15 +1906,15 @@
         "displacement"
       ],
       "text": "Briefing lines (synthetic, 10:33 ET), flat:\n- Break quality (strength, not a forecast; `displacement`): 15m CHoCH down 21350.5 (closed 10:30): displaced, holding; cleared 0.7 ATR; FVG 21356.25-21360 open; from protected high 21372.25: holds.\nWhat does this displaced 15m CHoCH mean?",
-      "rule": "a displaced CHoCH is a potential reversal with displaced strength; only structure (a BOS the same way) confirms it; displacement alone never invalidates",
-      "anchor": "`displaced` CHoCH -> a potential reversal, displaced strength; unconfirmed until a BOS the same way.",
+      "rule": "a displaced CHoCH is a potential reversal with displaced strength; only structure confirms (a BOS the same way confirms the transition, a close through the old protected level the reversal); displacement alone never confirms or invalidates",
+      "anchor": "structure confirms: a BOS the same way confirms the transition, a close",
       "choices": [
         "a confirmed reversal down: the displacement confirms it",
-        "a potential reversal down with displaced strength, unconfirmed until a BOS down",
+        "a potential reversal down with displaced strength; a BOS down would confirm the transition",
         "nothing: a CHoCH is noise",
         "the up structure is invalidated by the displacement"
       ],
-      "answer": "a potential reversal down with displaced strength, unconfirmed until a BOS down"
+      "answer": "a potential reversal down with displaced strength; a BOS down would confirm the transition"
     },
     {
       "id": "q139",

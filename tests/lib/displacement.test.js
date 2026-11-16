@@ -242,6 +242,36 @@ test('qualityOf: the field `quality` on lastBreak.last, and on its protected sta
   assert.strictEqual(D.invalidationQuality(w, bos, { ...pw, brokenAt: null }, flatAtr(13)), null);
 });
 
+test('the tie at the protected level (the Market state\'s, structure-layers.js): a close through it within equalAtr x ATR is no break, both lines say holds; the first close past it is the invalidating one', () => {
+  const SL = require('../../scripts/lib/trading/structure-layers');
+  const MS = AN.marketState;
+  assert.strictEqual(D.PARAMS.equalAtr, MS.equalAtr, 'one tie: the Market state\'s config value');
+  // ATR 6: the tie is 0.05 x 6 = 0.30. Bar 12 closes at 100, 0.25 under the protected low 100.25: inside the tie.
+  const c = mk(ROWS);
+  const atr = new Array(13).fill(6);
+  const bos = SE.breaksOf(c).find(b => b.direction === 'up');
+  const prot = SE.protectedOf(c, bos);
+  assert.strictEqual(prot.brokenAt, c[12].t, 'protectedOf counts any close beyond');
+  assert.deepStrictEqual(D.invalidationQuality(c, bos, prot, atr, D.PARAMS, 3), { tie: true });
+  const state = SL.structureSeries(c, SL.rthBreaks(c, 0, atr, MS), 0, atr, MS)[12];
+  assert.deepStrictEqual([state.status, state.level], ['intact', 100.25], 'the state: the level holds');
+  const lb = D.qualityOf(c, { last: { ...bos, protected: prot }, previous: null }, { minutes: 3, atr });
+  assert.match(D.breakLine({ entry: { tf: '3m', brk: { ...lb.last, barsAgo: 5 }, minutes: 3 } }), /from protected low 100\.25: holds \(tested, a tie\);/);
+  // Bar 13 closes at 99.5, 0.75 under it: past the tie. The state flips; the line reads that close (body 0.5 of 1.0: wicks; range 1 < 6: small).
+  const c2 = mk([...ROWS, [100, 100.25, 99.25, 99.5]]);
+  const a2 = new Array(14).fill(6);
+  const p2 = SE.protectedOf(c2, bos);
+  assert.strictEqual(p2.brokenAt, c2[12].t);
+  assert.deepStrictEqual(D.invalidationQuality(c2, bos, p2, a2, D.PARAMS, 3), { displaced: false, why: ['wicks', 'small'], barsAgo: 0, closedAt: new Date(T0 + 14 * 180000).toISOString() });
+  assert.strictEqual(SL.structureSeries(c2, SL.rthBreaks(c2, 0, a2, MS), 0, a2, MS)[13].status, 'broken', 'the state: broken at the same close');
+  // A down break mirrors it: the tie is the close above a protected high by no more than the tie.
+  const dn = { direction: 'down' };
+  const hi = mk([[100, 101, 99, 100.25]]);
+  hi.unshift({ t: new Date(T0 - 180000).toISOString(), o: 100, h: 100, l: 100, c: 100, v: 1 });
+  assert.deepStrictEqual(D.invalidationQuality(hi, dn, { level: 100, brokenAt: hi[1].t }, [6, 6], D.PARAMS), { tie: true });
+  assert.notDeepStrictEqual(D.invalidationQuality(hi, dn, { level: 100, brokenAt: hi[1].t }, [1, 1], D.PARAMS), { tie: true }, 'tie 0.05 < 0.25: broken');
+});
+
 // The line: the shapes printed, the separation's words (strength only, never "confirmed"), recency, the cut order.
 const base = (o = {}) => ({ kind: 'BOS', direction: 'up', level: 21412.25, barsAgo: 2, quality: { displaced: true, why: [], cleared: 0.6, bodyX: 2.1, leg: { bars: 4, eff: 0.74, overlap: 0.31 }, origin: { side: 'low', price: 21380.5, at: 'x', sweep: { name: 'overnight low', price: 21381 } }, fvg: { side: 'bullish', low: 21405.5, high: 21409, at: 'x', state: 'open' }, fvgPending: false, status: { holding: true }, ...o } });
 

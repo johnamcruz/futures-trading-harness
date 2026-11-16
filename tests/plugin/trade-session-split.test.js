@@ -593,12 +593,13 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // level, in bos-vs-choch and trend-vs-range), at the measured need: the market-structure analyst 110333 -> 110750 full,
 // 47963 -> 48148 index; the trend-momentum analyst 68877 -> 69294 full, 44094 -> 44279 index; every other role falls or stays.
 // Then feat/displacement (the owner's one strength rule for BOS, CHoCH, CISD and the invalidating close: the `displacement`
-// skill in the two analysts' index, embedded in full mode, one index line otherwise), at the measured need: the
-// market-structure analyst 110750 -> 117643 full, 48148 -> 48156 index; the trend-momentum analyst 69294 -> 76265 full,
-// 44279 -> 44287 index; every other role falls or stays.
+// skill in the two analysts' index, embedded in full mode, one index line otherwise; bos-vs-choch's Fields name the last
+// break's `quality` and the 15m last break's `protected`), at the measured need: the market-structure analyst 110750 ->
+// 118341 full, 48148 -> 48429 index; the trend-momentum analyst 69294 -> 76963 full, 44279 -> 44560 index; every other
+// role falls or stays.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 117643, 'news-calendar-analyst': 10868, 'risk-manager': 95294, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9400, 'trend-momentum-analyst': 76265, 'volume-liquidity-analyst': 50521 },
-  index: { 'market-structure-analyst': 48156, 'news-calendar-analyst': 10868, 'risk-manager': 81182, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9400, 'trend-momentum-analyst': 44287, 'volume-liquidity-analyst': 35153 },
+  full: { 'market-structure-analyst': 118341, 'news-calendar-analyst': 10868, 'risk-manager': 95294, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9400, 'trend-momentum-analyst': 76963, 'volume-liquidity-analyst': 50521 },
+  index: { 'market-structure-analyst': 48429, 'news-calendar-analyst': 10868, 'risk-manager': 81182, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9400, 'trend-momentum-analyst': 44560, 'volume-liquidity-analyst': 35153 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

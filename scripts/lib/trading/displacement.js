@@ -28,7 +28,7 @@
  * At cisd.minRangeAtr 1.0 the ATR at the candle and at the candle before give the same word unless the candle gaps
  * (Wilder smoothing; tested).
  *
- *   PARAMS                                   the defaults: cisd.minBody, cisd.minRangeAtr, displacement.*
+ *   PARAMS                                   the defaults: cisd.minBody, cisd.minRangeAtr, displacement.*, marketState.equalAtr
  *   candleDisplaced(k, prev, dir, atr, p)    cisd.js strongCandle (dir 1 up, -1 down)
  *   strengthAt(candles, i, dir, atr, p)      { displaced, why } of candle i the dir way, on atr[i - 1]; why: the parts that
  *                                            failed, in order: 'opposite colour', 'wicks' (body under minBody of the
@@ -48,7 +48,10 @@
  *                                            | { closedBack { at, closedAt, barsAgo }, reclaimed } (the latest close back
  *                                            through the level; reclaimed: the last close is past the level again) }
  *   invalidationQuality(candles, brk, prot, atr, p)   the strength of the close that broke the break's protected swing
- *                                            (prot.brokenAt), the break's opposite way: { displaced, why, barsAgo }, or null
+ *                                            (the first close from prot.brokenAt past the Market state's tie, equalAtr x
+ *                                            ATR of its candle), the break's opposite way: { displaced, why, barsAgo }; {
+ *                                            tie: true } when every close through it is within the tie (printed `holds
+ *                                            (tested, a tie)`, as the state says holds); or null
  *   qualityOf(candles, lb, { minutes, levels, atr, p })   lastBreaks' { last, previous } with `quality` on last (and on
  *                                            last.protected once it is broken)
  *   breakLine({ entry, setup }, { p, et })   the summary's Break quality line (entry: { tf, brk, minutes }, setup the same
@@ -64,7 +67,8 @@ const { fvgAt } = require('./market-snapshot');
 
 const AN = require('../tunables').analysis();
 
-const PARAMS = Object.freeze({ minBody: AN.cisd.minBody, minRangeAtr: AN.cisd.minRangeAtr, ...AN.displacement });
+// equalAtr: the Market state's tie at a protected level (config marketState.equalAtr), so both lines say one status.
+const PARAMS = Object.freeze({ minBody: AN.cisd.minBody, minRangeAtr: AN.cisd.minRangeAtr, ...AN.displacement, equalAtr: AN.marketState.equalAtr });
 const candleDisplaced = cisd.strongCandle;
 
 const sgn = d => (d === 'up' ? 1 : -1);
@@ -152,8 +156,14 @@ function breakQuality({ candles, brk, atr = ind.atr(candles), at = candles.lengt
 
 function invalidationQuality(candles, brk, prot, atr, p = PARAMS, minutes = null) {
   if (!brk || !prot || !prot.brokenAt) return null;
-  const j = candles.findIndex(c => c.t === prot.brokenAt);
-  if (j < 1) return null;
+  const first = candles.findIndex(c => c.t === prot.brokenAt);
+  if (first < 1) return null;
+  // The Market state's tie (structure-layers.js): a close through the level by no more than equalAtr x ATR(14) of its
+  // candle is a tie, not a break, so the line says `holds` as the state does; the invalidating close is the first past it.
+  const past = k => -sgn(brk.direction) * (candles[k].c - prot.level) > p.equalAtr * (atr && Number.isFinite(atr[k]) ? atr[k] : 0);
+  let j = first;
+  while (j < candles.length && !past(j)) j += 1;
+  if (j >= candles.length) return { tie: true };
   const closedAt = minutes ? new Date(Date.parse(candles[j].t) + minutes * 60000).toISOString() : null;
   return { ...strengthAt(candles, j, -sgn(brk.direction), atr, p), barsAgo: candles.length - 1 - j, closedAt };
 }
@@ -185,7 +195,7 @@ function clause({ tf, brk, minutes }, cut, et) {
   const fvg = x.fvg ? `FVG ${x.fvg.low}-${x.fvg.high} ${x.fvg.state === 'filled' ? 'traded through' : x.fvg.state === 'filled to' ? `filled to ${x.fvg.to}` : 'open'}`
     : x.fvgPending ? 'no FVG yet' : 'no FVG';
   const pr = brk.protected && brk.protected.quality;
-  const held = pr ? `broken by a ${pr.displaced ? 'displaced' : 'weak'} close${pr.displaced ? '' : ` (${pr.why.join(', ')})`}${sp(ago(pr.barsAgo, pr.closedAt))}` : 'holds';
+  const held = pr && pr.tie ? 'holds (tested, a tie)' : pr ? `broken by a ${pr.displaced ? 'displaced' : 'weak'} close${pr.displaced ? '' : ` (${pr.why.join(', ')})`}${sp(ago(pr.barsAgo, pr.closedAt))}` : 'holds';
   const origin = x.origin ? `from protected ${x.origin.side} ${x.origin.price}${x.origin.sweep && !cut.has('sweep') ? ` (a sweep of ${x.origin.sweep.name} ${x.origin.sweep.price})` : ''}: ${held}` : null;
   const agrees = Number.isFinite(x.bodyX) && (x.displaced ? x.bodyX >= 1 : x.bodyX < 1);
   return [
