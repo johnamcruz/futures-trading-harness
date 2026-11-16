@@ -1186,7 +1186,7 @@ A CISD (`cisd`) is an earlier sign than the CHoCH; depth in fib terms: `fib-retr
 - Under 2 weakening signs, no reversal: a pullback → hold.
 - Weakening: 2+ signs, one per kind (`failed extreme`: a 15m lower high;
   `pushes fading`; `deep retrace`; `compression against`; `HTF flip`).
-- Reversal: a 15m break against, or a 15m `displacement` through the swing.
+- Reversal: a 15m break against, or a 15m `displacement` label through the swing.
 
 **Evidence** (docs/research/mtf-setup-catalog.md, docs/research/pullback-read-evidence.md):
 depth alone is no edge; buying a 50% or 62% retrace with the 4h trend lost

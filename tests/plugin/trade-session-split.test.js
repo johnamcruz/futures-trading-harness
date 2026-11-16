@@ -434,7 +434,9 @@ const OLD_AGENTS_MD = 24466;
 // not the class (+146, the measured need of the worst path).
 // Round 20 (PREREG addendum 28, same rule): the setup rows for the layers' state words (range, in the up leg, transition)
 // and chop's end with displacement (+144, the measured need of the worst path).
-const RAISED = 154 + 130 + 1625 + 336 + 382 + 939 + 843 + 1621 + 138 + 146 + 144;
+// feat/displacement (same rule): the `displacement` skill's index line in workspace/AGENTS.md, the head trader's catalog
+// (+202, the measured need of the worst path; the skill itself is looked up, never on the per-cycle load).
+const RAISED = 154 + 130 + 1625 + 336 + 382 + 939 + 843 + 1621 + 138 + 146 + 144 + 202;
 const EVERY_CYCLE = ['multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'trader-process', 'htf-to-ltf', 'autonomous-trading'];
 const PATHS = {
   'full cycle, no candidate': ['role-round', 'setup-judgment', 'day-context'],
@@ -590,9 +592,13 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // Then the follow-up to #340 (round 20c: a CHoCH then BOS confirms a transition, a reversal only through the protected
 // level, in bos-vs-choch and trend-vs-range), at the measured need: the market-structure analyst 110333 -> 110750 full,
 // 47963 -> 48148 index; the trend-momentum analyst 68877 -> 69294 full, 44094 -> 44279 index; every other role falls or stays.
+// Then feat/displacement (the owner's one strength rule for BOS, CHoCH, CISD and the invalidating close: the `displacement`
+// skill in the two analysts' index, embedded in full mode, one index line otherwise), at the measured need: the
+// market-structure analyst 110750 -> 116952 full, 48148 -> 48156 index; the trend-momentum analyst 69294 -> 75574 full,
+// 44279 -> 44287 index; every other role falls or stays.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 110750, 'news-calendar-analyst': 10868, 'risk-manager': 95294, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9400, 'trend-momentum-analyst': 69294, 'volume-liquidity-analyst': 50521 },
-  index: { 'market-structure-analyst': 48148, 'news-calendar-analyst': 10868, 'risk-manager': 81182, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9400, 'trend-momentum-analyst': 44279, 'volume-liquidity-analyst': 35153 },
+  full: { 'market-structure-analyst': 116952, 'news-calendar-analyst': 10868, 'risk-manager': 95294, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9400, 'trend-momentum-analyst': 75574, 'volume-liquidity-analyst': 50521 },
+  index: { 'market-structure-analyst': 48156, 'news-calendar-analyst': 10868, 'risk-manager': 81182, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9400, 'trend-momentum-analyst': 44287, 'volume-liquidity-analyst': 35153 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

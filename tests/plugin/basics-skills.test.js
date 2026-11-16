@@ -714,8 +714,11 @@ test('basics skills: the fib numbers have one home: fib-retracement states the c
   // The CISD skill's run and wait are the code's defaults.
   const c = flat(read(file('cisd')));
   assert.ok(c.includes(`at least ${cisd.PARAMS.minRun} consecutive bearish completed candles`) && c.includes(`within ${cisd.PARAMS.maxWait} candles of the run`));
-  // Its strong displacement is the code's: the body share, the extreme third, the range against ATR(14), engulfing.
-  assert.ok(c.includes(`body at least ${cisd.PARAMS.minBody} of the range, the close in the top third, and a range of at least ${cisd.PARAMS.minRangeAtr.toFixed(1)} x ATR(14) of that timeframe or a body engulfing the prior one`));
+  // Its strong displacement is the code's: the body share, the extreme third, the range against ATR(14), engulfing; stated
+  // once, in the `displacement` skill (feat/displacement: one rule for BOS, CHoCH, CISD and the invalidating close), which
+  // cisd points to.
+  assert.ok(flat(read(file('displacement'))).includes(`its body is at least ${cisd.PARAMS.minBody} of its range, its close is in the extreme third, and its range is at least ${cisd.PARAMS.minRangeAtr.toFixed(1)} x ATR(14) of its timeframe or its body engulfs the prior candle's`));
+  assert.ok(c.includes('Strong: the `displacement` skill\'s one rule, the same as a break\'s displaced.'));
   // Every bare field the cisd skill names is in a real briefing's m3.cisd entry (or its leg), and every status it names
   // is one the code sets: a field the briefing drops fails.
   const entries = briefings().flatMap(b => Object.values(b.sections.m3.data.cisd || {}).filter(x => x && typeof x === 'object'));

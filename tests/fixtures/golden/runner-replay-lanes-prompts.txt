@@ -1264,7 +1264,7 @@ A CISD (`cisd`) is an earlier sign than the CHoCH; depth in fib terms: `fib-retr
 - Under 2 weakening signs, no reversal: a pullback → hold.
 - Weakening: 2+ signs, one per kind (`failed extreme`: a 15m lower high;
   `pushes fading`; `deep retrace`; `compression against`; `HTF flip`).
-- Reversal: a 15m break against, or a 15m `displacement` through the swing.
+- Reversal: a 15m break against, or a 15m `displacement` label through the swing.
 
 **Evidence** (docs/research/mtf-setup-catalog.md, docs/research/pullback-read-evidence.md):
 depth alone is no edge; buying a 50% or 62% retrace with the 4h trend lost
@@ -2720,7 +2720,7 @@ A CISD (`cisd`) is an earlier sign than the CHoCH; depth in fib terms: `fib-retr
 - Under 2 weakening signs, no reversal: a pullback → hold.
 - Weakening: 2+ signs, one per kind (`failed extreme`: a 15m lower high;
   `pushes fading`; `deep retrace`; `compression against`; `HTF flip`).
-- Reversal: a 15m break against, or a 15m `displacement` through the swing.
+- Reversal: a 15m break against, or a 15m `displacement` label through the swing.
 
 **Evidence** (docs/research/mtf-setup-catalog.md, docs/research/pullback-read-evidence.md):
 depth alone is no edge; buying a 50% or 62% retrace with the 4h trend lost
@@ -4185,7 +4185,7 @@ A CISD (`cisd`) is an earlier sign than the CHoCH; depth in fib terms: `fib-retr
 - Under 2 weakening signs, no reversal: a pullback → hold.
 - Weakening: 2+ signs, one per kind (`failed extreme`: a 15m lower high;
   `pushes fading`; `deep retrace`; `compression against`; `HTF flip`).
-- Reversal: a 15m break against, or a 15m `displacement` through the swing.
+- Reversal: a 15m break against, or a 15m `displacement` label through the swing.
 
 **Evidence** (docs/research/mtf-setup-catalog.md, docs/research/pullback-read-evidence.md):
 depth alone is no edge; buying a 50% or 62% retrace with the 4h trend lost
@@ -5641,7 +5641,7 @@ A CISD (`cisd`) is an earlier sign than the CHoCH; depth in fib terms: `fib-retr
 - Under 2 weakening signs, no reversal: a pullback → hold.
 - Weakening: 2+ signs, one per kind (`failed extreme`: a 15m lower high;
   `pushes fading`; `deep retrace`; `compression against`; `HTF flip`).
-- Reversal: a 15m break against, or a 15m `displacement` through the swing.
+- Reversal: a 15m break against, or a 15m `displacement` label through the swing.
 
 **Evidence** (docs/research/mtf-setup-catalog.md, docs/research/pullback-read-evidence.md):
 depth alone is no edge; buying a 50% or 62% retrace with the 4h trend lost
@@ -7106,7 +7106,7 @@ A CISD (`cisd`) is an earlier sign than the CHoCH; depth in fib terms: `fib-retr
 - Under 2 weakening signs, no reversal: a pullback → hold.
 - Weakening: 2+ signs, one per kind (`failed extreme`: a 15m lower high;
   `pushes fading`; `deep retrace`; `compression against`; `HTF flip`).
-- Reversal: a 15m break against, or a 15m `displacement` through the swing.
+- Reversal: a 15m break against, or a 15m `displacement` label through the swing.
 
 **Evidence** (docs/research/mtf-setup-catalog.md, docs/research/pullback-read-evidence.md):
 depth alone is no edge; buying a 50% or 62% retrace with the 4h trend lost
@@ -8562,7 +8562,7 @@ A CISD (`cisd`) is an earlier sign than the CHoCH; depth in fib terms: `fib-retr
 - Under 2 weakening signs, no reversal: a pullback → hold.
 - Weakening: 2+ signs, one per kind (`failed extreme`: a 15m lower high;
   `pushes fading`; `deep retrace`; `compression against`; `HTF flip`).
-- Reversal: a 15m break against, or a 15m `displacement` through the swing.
+- Reversal: a 15m break against, or a 15m `displacement` label through the swing.
 
 **Evidence** (docs/research/mtf-setup-catalog.md, docs/research/pullback-read-evidence.md):
 depth alone is no edge; buying a 50% or 62% retrace with the 4h trend lost
@@ -10018,7 +10018,7 @@ A CISD (`cisd`) is an earlier sign than the CHoCH; depth in fib terms: `fib-retr
 - Under 2 weakening signs, no reversal: a pullback → hold.
 - Weakening: 2+ signs, one per kind (`failed extreme`: a 15m lower high;
   `pushes fading`; `deep retrace`; `compression against`; `HTF flip`).
-- Reversal: a 15m break against, or a 15m `displacement` through the swing.
+- Reversal: a 15m break against, or a 15m `displacement` label through the swing.
 
 **Evidence** (docs/research/mtf-setup-catalog.md, docs/research/pullback-read-evidence.md):
 depth alone is no edge; buying a 50% or 62% retrace with the 4h trend lost
@@ -10425,9 +10425,8 @@ hypotheses; a missing field is `unknown`.
    candles of the run (`confirmedClose`).
 
 **Only a strong displacement has a zone** (`displacement`, `engulfing`).
-Strong: body at least 0.6 of the range, the close in the top third, and a
-range of at least 1.0 x ATR(14) of that timeframe or a body engulfing the
-prior one.
+Strong: the `displacement` skill's one rule, the same as a break's
+displaced.
   A doji, a small body or a mid-range close is weak: no zone,
 no fib (`status` `weak`).
 
@@ -11571,7 +11570,7 @@ A CISD (`cisd`) is an earlier sign than the CHoCH; depth in fib terms: `fib-retr
 - Under 2 weakening signs, no reversal: a pullback → hold.
 - Weakening: 2+ signs, one per kind (`failed extreme`: a 15m lower high;
   `pushes fading`; `deep retrace`; `compression against`; `HTF flip`).
-- Reversal: a 15m break against, or a 15m `displacement` through the swing.
+- Reversal: a 15m break against, or a 15m `displacement` label through the swing.
 
 **Evidence** (docs/research/mtf-setup-catalog.md, docs/research/pullback-read-evidence.md):
 depth alone is no edge; buying a 50% or 62% retrace with the 4h trend lost
@@ -11975,9 +11974,8 @@ hypotheses; a missing field is `unknown`.
    candles of the run (`confirmedClose`).
 
 **Only a strong displacement has a zone** (`displacement`, `engulfing`).
-Strong: body at least 0.6 of the range, the close in the top third, and a
-range of at least 1.0 x ATR(14) of that timeframe or a body engulfing the
-prior one.
+Strong: the `displacement` skill's one rule, the same as a break's
+displaced.
   A doji, a small body or a mid-range close is weak: no zone,
 no fib (`status` `weak`).
 
@@ -13121,7 +13119,7 @@ A CISD (`cisd`) is an earlier sign than the CHoCH; depth in fib terms: `fib-retr
 - Under 2 weakening signs, no reversal: a pullback → hold.
 - Weakening: 2+ signs, one per kind (`failed extreme`: a 15m lower high;
   `pushes fading`; `deep retrace`; `compression against`; `HTF flip`).
-- Reversal: a 15m break against, or a 15m `displacement` through the swing.
+- Reversal: a 15m break against, or a 15m `displacement` label through the swing.
 
 **Evidence** (docs/research/mtf-setup-catalog.md, docs/research/pullback-read-evidence.md):
 depth alone is no edge; buying a 50% or 62% retrace with the 4h trend lost
@@ -13519,9 +13517,8 @@ hypotheses; a missing field is `unknown`.
    candles of the run (`confirmedClose`).
 
 **Only a strong displacement has a zone** (`displacement`, `engulfing`).
-Strong: body at least 0.6 of the range, the close in the top third, and a
-range of at least 1.0 x ATR(14) of that timeframe or a body engulfing the
-prior one.
+Strong: the `displacement` skill's one rule, the same as a break's
+displaced.
   A doji, a small body or a mid-range close is weak: no zone,
 no fib (`status` `weak`).
 
@@ -14665,7 +14662,7 @@ A CISD (`cisd`) is an earlier sign than the CHoCH; depth in fib terms: `fib-retr
 - Under 2 weakening signs, no reversal: a pullback → hold.
 - Weakening: 2+ signs, one per kind (`failed extreme`: a 15m lower high;
   `pushes fading`; `deep retrace`; `compression against`; `HTF flip`).
-- Reversal: a 15m break against, or a 15m `displacement` through the swing.
+- Reversal: a 15m break against, or a 15m `displacement` label through the swing.
 
 **Evidence** (docs/research/mtf-setup-catalog.md, docs/research/pullback-read-evidence.md):
 depth alone is no edge; buying a 50% or 62% retrace with the 4h trend lost
@@ -14990,9 +14987,8 @@ hypotheses; a missing field is `unknown`.
    candles of the run (`confirmedClose`).
 
 **Only a strong displacement has a zone** (`displacement`, `engulfing`).
-Strong: body at least 0.6 of the range, the close in the top third, and a
-range of at least 1.0 x ATR(14) of that timeframe or a body engulfing the
-prior one.
+Strong: the `displacement` skill's one rule, the same as a break's
+displaced.
   A doji, a small body or a mid-range close is weak: no zone,
 no fib (`status` `weak`).
 
@@ -16136,7 +16132,7 @@ A CISD (`cisd`) is an earlier sign than the CHoCH; depth in fib terms: `fib-retr
 - Under 2 weakening signs, no reversal: a pullback → hold.
 - Weakening: 2+ signs, one per kind (`failed extreme`: a 15m lower high;
   `pushes fading`; `deep retrace`; `compression against`; `HTF flip`).
-- Reversal: a 15m break against, or a 15m `displacement` through the swing.
+- Reversal: a 15m break against, or a 15m `displacement` label through the swing.
 
 **Evidence** (docs/research/mtf-setup-catalog.md, docs/research/pullback-read-evidence.md):
 depth alone is no edge; buying a 50% or 62% retrace with the 4h trend lost
@@ -16543,9 +16539,8 @@ hypotheses; a missing field is `unknown`.
    candles of the run (`confirmedClose`).
 
 **Only a strong displacement has a zone** (`displacement`, `engulfing`).
-Strong: body at least 0.6 of the range, the close in the top third, and a
-range of at least 1.0 x ATR(14) of that timeframe or a body engulfing the
-prior one.
+Strong: the `displacement` skill's one rule, the same as a break's
+displaced.
   A doji, a small body or a mid-range close is weak: no zone,
 no fib (`status` `weak`).
 
@@ -17689,7 +17684,7 @@ A CISD (`cisd`) is an earlier sign than the CHoCH; depth in fib terms: `fib-retr
 - Under 2 weakening signs, no reversal: a pullback → hold.
 - Weakening: 2+ signs, one per kind (`failed extreme`: a 15m lower high;
   `pushes fading`; `deep retrace`; `compression against`; `HTF flip`).
-- Reversal: a 15m break against, or a 15m `displacement` through the swing.
+- Reversal: a 15m break against, or a 15m `displacement` label through the swing.
 
 **Evidence** (docs/research/mtf-setup-catalog.md, docs/research/pullback-read-evidence.md):
 depth alone is no edge; buying a 50% or 62% retrace with the 4h trend lost
@@ -18087,9 +18082,8 @@ hypotheses; a missing field is `unknown`.
    candles of the run (`confirmedClose`).
 
 **Only a strong displacement has a zone** (`displacement`, `engulfing`).
-Strong: body at least 0.6 of the range, the close in the top third, and a
-range of at least 1.0 x ATR(14) of that timeframe or a body engulfing the
-prior one.
+Strong: the `displacement` skill's one rule, the same as a break's
+displaced.
   A doji, a small body or a mid-range close is weak: no zone,
 no fib (`status` `weak`).
 
@@ -19233,7 +19227,7 @@ A CISD (`cisd`) is an earlier sign than the CHoCH; depth in fib terms: `fib-retr
 - Under 2 weakening signs, no reversal: a pullback → hold.
 - Weakening: 2+ signs, one per kind (`failed extreme`: a 15m lower high;
   `pushes fading`; `deep retrace`; `compression against`; `HTF flip`).
-- Reversal: a 15m break against, or a 15m `displacement` through the swing.
+- Reversal: a 15m break against, or a 15m `displacement` label through the swing.
 
 **Evidence** (docs/research/mtf-setup-catalog.md, docs/research/pullback-read-evidence.md):
 depth alone is no edge; buying a 50% or 62% retrace with the 4h trend lost
@@ -19631,9 +19625,8 @@ hypotheses; a missing field is `unknown`.
    candles of the run (`confirmedClose`).
 
 **Only a strong displacement has a zone** (`displacement`, `engulfing`).
-Strong: body at least 0.6 of the range, the close in the top third, and a
-range of at least 1.0 x ATR(14) of that timeframe or a body engulfing the
-prior one.
+Strong: the `displacement` skill's one rule, the same as a break's
+displaced.
   A doji, a small body or a mid-range close is weak: no zone,
 no fib (`status` `weak`).
 
@@ -20777,7 +20770,7 @@ A CISD (`cisd`) is an earlier sign than the CHoCH; depth in fib terms: `fib-retr
 - Under 2 weakening signs, no reversal: a pullback → hold.
 - Weakening: 2+ signs, one per kind (`failed extreme`: a 15m lower high;
   `pushes fading`; `deep retrace`; `compression against`; `HTF flip`).
-- Reversal: a 15m break against, or a 15m `displacement` through the swing.
+- Reversal: a 15m break against, or a 15m `displacement` label through the swing.
 
 **Evidence** (docs/research/mtf-setup-catalog.md, docs/research/pullback-read-evidence.md):
 depth alone is no edge; buying a 50% or 62% retrace with the 4h trend lost
@@ -21184,9 +21177,8 @@ hypotheses; a missing field is `unknown`.
    candles of the run (`confirmedClose`).
 
 **Only a strong displacement has a zone** (`displacement`, `engulfing`).
-Strong: body at least 0.6 of the range, the close in the top third, and a
-range of at least 1.0 x ATR(14) of that timeframe or a body engulfing the
-prior one.
+Strong: the `displacement` skill's one rule, the same as a break's
+displaced.
   A doji, a small body or a mid-range close is weak: no zone,
 no fib (`status` `weak`).
 
@@ -22255,7 +22247,7 @@ A CISD (`cisd`) is an earlier sign than the CHoCH; depth in fib terms: `fib-retr
 - Under 2 weakening signs, no reversal: a pullback → hold.
 - Weakening: 2+ signs, one per kind (`failed extreme`: a 15m lower high;
   `pushes fading`; `deep retrace`; `compression against`; `HTF flip`).
-- Reversal: a 15m break against, or a 15m `displacement` through the swing.
+- Reversal: a 15m break against, or a 15m `displacement` label through the swing.
 
 **Evidence** (docs/research/mtf-setup-catalog.md, docs/research/pullback-read-evidence.md):
 depth alone is no edge; buying a 50% or 62% retrace with the 4h trend lost
@@ -22653,9 +22645,8 @@ hypotheses; a missing field is `unknown`.
    candles of the run (`confirmedClose`).
 
 **Only a strong displacement has a zone** (`displacement`, `engulfing`).
-Strong: body at least 0.6 of the range, the close in the top third, and a
-range of at least 1.0 x ATR(14) of that timeframe or a body engulfing the
-prior one.
+Strong: the `displacement` skill's one rule, the same as a break's
+displaced.
   A doji, a small body or a mid-range close is weak: no zone,
 no fib (`status` `weak`).
 
@@ -23724,7 +23715,7 @@ A CISD (`cisd`) is an earlier sign than the CHoCH; depth in fib terms: `fib-retr
 - Under 2 weakening signs, no reversal: a pullback → hold.
 - Weakening: 2+ signs, one per kind (`failed extreme`: a 15m lower high;
   `pushes fading`; `deep retrace`; `compression against`; `HTF flip`).
-- Reversal: a 15m break against, or a 15m `displacement` through the swing.
+- Reversal: a 15m break against, or a 15m `displacement` label through the swing.
 
 **Evidence** (docs/research/mtf-setup-catalog.md, docs/research/pullback-read-evidence.md):
 depth alone is no edge; buying a 50% or 62% retrace with the 4h trend lost
@@ -25103,7 +25094,7 @@ A CISD (`cisd`) is an earlier sign than the CHoCH; depth in fib terms: `fib-retr
 - Under 2 weakening signs, no reversal: a pullback → hold.
 - Weakening: 2+ signs, one per kind (`failed extreme`: a 15m lower high;
   `pushes fading`; `deep retrace`; `compression against`; `HTF flip`).
-- Reversal: a 15m break against, or a 15m `displacement` through the swing.
+- Reversal: a 15m break against, or a 15m `displacement` label through the swing.
 
 **Evidence** (docs/research/mtf-setup-catalog.md, docs/research/pullback-read-evidence.md):
 depth alone is no edge; buying a 50% or 62% retrace with the 4h trend lost
