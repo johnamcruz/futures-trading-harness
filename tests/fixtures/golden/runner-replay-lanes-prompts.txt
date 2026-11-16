@@ -1392,7 +1392,9 @@ under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
 a 5m lane's briefing has it in its `bar` part.
   Each: `kind` (`BOS` or
 `CHoCH`), `direction` (`up` or `down`), `level`, `barsAgo` (that
-timeframe's candles); the 3m ones also `protected` (`level`, `brokenAt`).
+timeframe's candles); the 3m ones and the 15m `last` also `protected`
+(`level`, `brokenAt`); the 3m and 15m `last` also `quality`, its
+strength (`displacement`).
   The 4h has swings only (`h1.h4.swingPattern`).
 
 **By timeframe.** No one timeframe is the signal; read them top-down.
@@ -2848,7 +2850,9 @@ under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
 a 5m lane's briefing has it in its `bar` part.
   Each: `kind` (`BOS` or
 `CHoCH`), `direction` (`up` or `down`), `level`, `barsAgo` (that
-timeframe's candles); the 3m ones also `protected` (`level`, `brokenAt`).
+timeframe's candles); the 3m ones and the 15m `last` also `protected`
+(`level`, `brokenAt`); the 3m and 15m `last` also `quality`, its
+strength (`displacement`).
   The 4h has swings only (`h1.h4.swingPattern`).
 
 **By timeframe.** No one timeframe is the signal; read them top-down.
@@ -4313,7 +4317,9 @@ under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
 a 5m lane's briefing has it in its `bar` part.
   Each: `kind` (`BOS` or
 `CHoCH`), `direction` (`up` or `down`), `level`, `barsAgo` (that
-timeframe's candles); the 3m ones also `protected` (`level`, `brokenAt`).
+timeframe's candles); the 3m ones and the 15m `last` also `protected`
+(`level`, `brokenAt`); the 3m and 15m `last` also `quality`, its
+strength (`displacement`).
   The 4h has swings only (`h1.h4.swingPattern`).
 
 **By timeframe.** No one timeframe is the signal; read them top-down.
@@ -5769,7 +5775,9 @@ under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
 a 5m lane's briefing has it in its `bar` part.
   Each: `kind` (`BOS` or
 `CHoCH`), `direction` (`up` or `down`), `level`, `barsAgo` (that
-timeframe's candles); the 3m ones also `protected` (`level`, `brokenAt`).
+timeframe's candles); the 3m ones and the 15m `last` also `protected`
+(`level`, `brokenAt`); the 3m and 15m `last` also `quality`, its
+strength (`displacement`).
   The 4h has swings only (`h1.h4.swingPattern`).
 
 **By timeframe.** No one timeframe is the signal; read them top-down.
@@ -7234,7 +7242,9 @@ under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
 a 5m lane's briefing has it in its `bar` part.
   Each: `kind` (`BOS` or
 `CHoCH`), `direction` (`up` or `down`), `level`, `barsAgo` (that
-timeframe's candles); the 3m ones also `protected` (`level`, `brokenAt`).
+timeframe's candles); the 3m ones and the 15m `last` also `protected`
+(`level`, `brokenAt`); the 3m and 15m `last` also `quality`, its
+strength (`displacement`).
   The 4h has swings only (`h1.h4.swingPattern`).
 
 **By timeframe.** No one timeframe is the signal; read them top-down.
@@ -8690,7 +8700,9 @@ under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
 a 5m lane's briefing has it in its `bar` part.
   Each: `kind` (`BOS` or
 `CHoCH`), `direction` (`up` or `down`), `level`, `barsAgo` (that
-timeframe's candles); the 3m ones also `protected` (`level`, `brokenAt`).
+timeframe's candles); the 3m ones and the 15m `last` also `protected`
+(`level`, `brokenAt`); the 3m and 15m `last` also `quality`, its
+strength (`displacement`).
   The 4h has swings only (`h1.h4.swingPattern`).
 
 **By timeframe.** No one timeframe is the signal; read them top-down.
@@ -10146,7 +10158,9 @@ under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
 a 5m lane's briefing has it in its `bar` part.
   Each: `kind` (`BOS` or
 `CHoCH`), `direction` (`up` or `down`), `level`, `barsAgo` (that
-timeframe's candles); the 3m ones also `protected` (`level`, `brokenAt`).
+timeframe's candles); the 3m ones and the 15m `last` also `protected`
+(`level`, `brokenAt`); the 3m and 15m `last` also `quality`, its
+strength (`displacement`).
   The 4h has swings only (`h1.h4.swingPattern`).
 
 **By timeframe.** No one timeframe is the signal; read them top-down.
@@ -11698,7 +11712,9 @@ under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
 a 5m lane's briefing has it in its `bar` part.
   Each: `kind` (`BOS` or
 `CHoCH`), `direction` (`up` or `down`), `level`, `barsAgo` (that
-timeframe's candles); the 3m ones also `protected` (`level`, `brokenAt`).
+timeframe's candles); the 3m ones and the 15m `last` also `protected`
+(`level`, `brokenAt`); the 3m and 15m `last` also `quality`, its
+strength (`displacement`).
   The 4h has swings only (`h1.h4.swingPattern`).
 
 **By timeframe.** No one timeframe is the signal; read them top-down.
@@ -13247,7 +13263,9 @@ under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
 a 5m lane's briefing has it in its `bar` part.
   Each: `kind` (`BOS` or
 `CHoCH`), `direction` (`up` or `down`), `level`, `barsAgo` (that
-timeframe's candles); the 3m ones also `protected` (`level`, `brokenAt`).
+timeframe's candles); the 3m ones and the 15m `last` also `protected`
+(`level`, `brokenAt`); the 3m and 15m `last` also `quality`, its
+strength (`displacement`).
   The 4h has swings only (`h1.h4.swingPattern`).
 
 **By timeframe.** No one timeframe is the signal; read them top-down.
@@ -14790,7 +14808,9 @@ under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
 a 5m lane's briefing has it in its `bar` part.
   Each: `kind` (`BOS` or
 `CHoCH`), `direction` (`up` or `down`), `level`, `barsAgo` (that
-timeframe's candles); the 3m ones also `protected` (`level`, `brokenAt`).
+timeframe's candles); the 3m ones and the 15m `last` also `protected`
+(`level`, `brokenAt`); the 3m and 15m `last` also `quality`, its
+strength (`displacement`).
   The 4h has swings only (`h1.h4.swingPattern`).
 
 **By timeframe.** No one timeframe is the signal; read them top-down.
@@ -16260,7 +16280,9 @@ under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
 a 5m lane's briefing has it in its `bar` part.
   Each: `kind` (`BOS` or
 `CHoCH`), `direction` (`up` or `down`), `level`, `barsAgo` (that
-timeframe's candles); the 3m ones also `protected` (`level`, `brokenAt`).
+timeframe's candles); the 3m ones and the 15m `last` also `protected`
+(`level`, `brokenAt`); the 3m and 15m `last` also `quality`, its
+strength (`displacement`).
   The 4h has swings only (`h1.h4.swingPattern`).
 
 **By timeframe.** No one timeframe is the signal; read them top-down.
@@ -17812,7 +17834,9 @@ under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
 a 5m lane's briefing has it in its `bar` part.
   Each: `kind` (`BOS` or
 `CHoCH`), `direction` (`up` or `down`), `level`, `barsAgo` (that
-timeframe's candles); the 3m ones also `protected` (`level`, `brokenAt`).
+timeframe's candles); the 3m ones and the 15m `last` also `protected`
+(`level`, `brokenAt`); the 3m and 15m `last` also `quality`, its
+strength (`displacement`).
   The 4h has swings only (`h1.h4.swingPattern`).
 
 **By timeframe.** No one timeframe is the signal; read them top-down.
@@ -19355,7 +19379,9 @@ under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
 a 5m lane's briefing has it in its `bar` part.
   Each: `kind` (`BOS` or
 `CHoCH`), `direction` (`up` or `down`), `level`, `barsAgo` (that
-timeframe's candles); the 3m ones also `protected` (`level`, `brokenAt`).
+timeframe's candles); the 3m ones and the 15m `last` also `protected`
+(`level`, `brokenAt`); the 3m and 15m `last` also `quality`, its
+strength (`displacement`).
   The 4h has swings only (`h1.h4.swingPattern`).
 
 **By timeframe.** No one timeframe is the signal; read them top-down.
@@ -20898,7 +20924,9 @@ under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
 a 5m lane's briefing has it in its `bar` part.
   Each: `kind` (`BOS` or
 `CHoCH`), `direction` (`up` or `down`), `level`, `barsAgo` (that
-timeframe's candles); the 3m ones also `protected` (`level`, `brokenAt`).
+timeframe's candles); the 3m ones and the 15m `last` also `protected`
+(`level`, `brokenAt`); the 3m and 15m `last` also `quality`, its
+strength (`displacement`).
   The 4h has swings only (`h1.h4.swingPattern`).
 
 **By timeframe.** No one timeframe is the signal; read them top-down.
@@ -22375,7 +22403,9 @@ under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
 a 5m lane's briefing has it in its `bar` part.
   Each: `kind` (`BOS` or
 `CHoCH`), `direction` (`up` or `down`), `level`, `barsAgo` (that
-timeframe's candles); the 3m ones also `protected` (`level`, `brokenAt`).
+timeframe's candles); the 3m ones and the 15m `last` also `protected`
+(`level`, `brokenAt`); the 3m and 15m `last` also `quality`, its
+strength (`displacement`).
   The 4h has swings only (`h1.h4.swingPattern`).
 
 **By timeframe.** No one timeframe is the signal; read them top-down.
@@ -23843,7 +23873,9 @@ under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
 a 5m lane's briefing has it in its `bar` part.
   Each: `kind` (`BOS` or
 `CHoCH`), `direction` (`up` or `down`), `level`, `barsAgo` (that
-timeframe's candles); the 3m ones also `protected` (`level`, `brokenAt`).
+timeframe's candles); the 3m ones and the 15m `last` also `protected`
+(`level`, `brokenAt`); the 3m and 15m `last` also `quality`, its
+strength (`displacement`).
   The 4h has swings only (`h1.h4.swingPattern`).
 
 **By timeframe.** No one timeframe is the signal; read them top-down.
@@ -25222,7 +25254,9 @@ under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
 a 5m lane's briefing has it in its `bar` part.
   Each: `kind` (`BOS` or
 `CHoCH`), `direction` (`up` or `down`), `level`, `barsAgo` (that
-timeframe's candles); the 3m ones also `protected` (`level`, `brokenAt`).
+timeframe's candles); the 3m ones and the 15m `last` also `protected`
+(`level`, `brokenAt`); the 3m and 15m `last` also `quality`, its
+strength (`displacement`).
   The 4h has swings only (`h1.h4.swingPattern`).
 
 **By timeframe.** No one timeframe is the signal; read them top-down.
