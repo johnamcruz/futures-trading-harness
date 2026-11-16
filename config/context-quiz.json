@@ -1967,16 +1967,16 @@
         ],
         "workingOrders": 1
       },
-      "text": "Prompt lines (a managed cycle, recorded 2021-09-01 09:57 ET):\nPosition (code facts): MNQ long 1 @ 15659.5, 1R 9.5 pts; now +1.39R at 15672.75; MFE +4.16R at 15699 (09:48 ET bar); MAE -0.29R; giveback 2.77R (67% of MFE); working stop 15662.75 (+0.34R; a fill there is 3.82R off the best); target reached (lock +0.34R); code floor: last confirmed 15m swing 15620.5 is behind the lock: the stop rests at the lock.\nWhat is the trade's giveback in R, and what does the code floor's stop rest on?",
-      "rule": "the Position line's fields, cited: giveback = MFE less now (4.16 - 1.39 = 2.77R), never recomputed; the code floor line: the last confirmed 15m swing is behind the lock, so the stop rests at the lock (q143 of the design folded in: one more question breaks the quiz gate's pinned Monte Carlo)",
+      "text": "Prompt lines (a managed cycle, recorded 2021-09-01 09:57 ET):\nPosition (code facts): MNQ long 1 @ 15659.5, 1R 9.5 pts; now +1.39R at 15672.75; MFE +4.16R at 15699 (09:48 ET bar); MAE -0.29R; giveback 2.77R (67% of MFE); working stop 15662.75 (+0.34R; a fill there is 3.82R off the best); target reached (lock +0.34R); code floor: last confirmed 15m swing 15620.5 is behind the lock: the stop rests at the lock.\nWhat is the trade's giveback in R?",
+      "rule": "the Position line's giveback: MFE less now, cited (4.16 - 1.39 = 2.77), never recomputed from another basis",
       "anchor": "giveback = MFE less now, in R and as a share of MFE",
       "choices": [
-        "2.77R; the lock",
-        "2.77R; the 15m swing 15620.5",
-        "1.39R; the lock",
-        "3.82R; the initial stop"
+        "2.77R",
+        "1.39R",
+        "3.82R",
+        "4.16R"
       ],
-      "answer": "2.77R; the lock"
+      "answer": "2.77R"
     },
     {
       "id": "q142",
@@ -2014,6 +2014,32 @@
             "contractId": "MNQ",
             "type": 1,
             "size": 1,
+            "averagePrice": 15659.5
+          }
+        ],
+        "workingOrders": 1
+      },
+      "text": "Prompt lines (a managed cycle, recorded 2021-09-01 09:54 ET):\nPosition (code facts): MNQ long 1 @ 15659.5, 1R 9.5 pts; now +3.34R at 15691.25; MFE +4.16R at 15699 (09:48 ET bar); MAE -0.29R; giveback 0.82R (20% of MFE); working stop 15662.75 (+0.34R; a fill there is 3.82R off the best); target reached (lock +0.34R); code floor: last confirmed 15m swing 15620.5 is behind the lock: the stop rests at the lock.\nWhat does the code floor's stop rest on?",
+      "rule": "the code floor line: the last confirmed 15m swing is behind the lock, so the stop rests at the lock",
+      "anchor": "code floor = what the stop rests on (the initial stop, a 15m swing, or the lock)",
+      "choices": [
+        "the lock",
+        "the 15m swing 15620.5",
+        "the initial stop",
+        "the best price 15699"
+      ],
+      "answer": "the lock"
+    },
+    {
+      "id": "q144",
+      "layer": "manage",
+      "prompt": "situational",
+      "state": {
+        "positions": [
+          {
+            "contractId": "MNQ",
+            "type": 1,
+            "size": 1,
             "averagePrice": 11990
           }
         ],
@@ -2031,7 +2057,7 @@
       "answer": "STOP hold: hold"
     },
     {
-      "id": "q144",
+      "id": "q145",
       "layer": "manage",
       "prompt": "situational",
       "state": {
@@ -2057,7 +2083,7 @@
       "answer": "STOP hold: hold"
     },
     {
-      "id": "q145",
+      "id": "q146",
       "layer": "manage",
       "prompt": "situational",
       "state": {
@@ -2081,32 +2107,6 @@
         "STOP 15662.25: weakening"
       ],
       "answer": "STOP hold: hold"
-    },
-    {
-      "id": "q146",
-      "layer": "manage",
-      "prompt": "situational",
-      "state": {
-        "positions": [
-          {
-            "contractId": "MNQ",
-            "type": 2,
-            "size": 1,
-            "averagePrice": 18250
-          }
-        ],
-        "workingOrders": 1
-      },
-      "text": "Prompt lines (synthetic, a managed cycle, 10:51 ET):\nPosition (code facts): MNQ short 1 @ 18250, 1R 12 pts; now +1.98R at 18226.25; MFE +2.42R at 18221 (10:42 ET bar); MAE -0.15R; giveback 0.44R (18% of MFE); working stop 18262 (-1R; a fill there is 3.42R off the best); target not reached; code floor: before the target: the initial stop holds.\nTrade read (closed bars since entry; pullback-vs-reversal): best 18221; under two 15m pushes; no confirmed 15m push; pullback 41% of the last impulse 18235.75-18221; structure against since entry: 3m CHoCH up 18229.5 2 bars ago, 15m CHoCH up 18232.5 1 bars ago; 15m displacement against: none; compression against: none; HTF bias at entry 4h down, now 4h down (no flip against). Weakening signs: 1 of 5 (deep retrace), 2 needed; reversal: 15m CHoCH up. Manage read (answer every cycle with one line \"STOP <price|hold>: <reason>\"; modify_order only when tighter): code floor: no early lock; 15m BOS down since entry: protected swing 18248.5 holds, stop beyond it 18248.75 (tighter than the working stop); 15m CHoCH against since entry: through 18232.5; warning giveback (0.5R behind the best): 18227 (tighter than the working stop).\nYour STOP line?",
-      "rule": "a 15m CHoCH against with a placeable warning giveback level (tighter, not past the price): the stop to that level, not an exit (today's taught behaviour; review R2)",
-      "anchor": "not an exit: choch-against.",
-      "choices": [
-        "STOP 18227: choch-against",
-        "STOP hold: hold",
-        "close_position at market",
-        "STOP 18248.75: protected-swing"
-      ],
-      "answer": "STOP 18227: choch-against"
     }
   ],
   "partB": [

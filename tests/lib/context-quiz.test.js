@@ -560,7 +560,7 @@ test('summary: correct on all K, answered both ways, the totals, the bar; compar
   // 88 since q87-q112 less q100 (feat/pullback-concept, closed choices); 100 since q113-q126 less q120 and q122 (feat/chop-read): 100 x 5
   // runs, one missed = 499. 107 with q134-q140 (the displacement read: the two traps, closed back, BOS, CHoCH, CISD, a weak
   // invalidating close).
-  // 113 with q141-q146 (the Position line: three fields in two items, four managed-cycle decisions).
+  // 113 with q141-q146 (the Position line: three fields, three managed-cycle holds).
   assert.deepStrictEqual([all.partA.allCorrect, all.partA.bothWays, all.partB.allCorrect, all.meetsBar], [113, 0, 8, true]);
   const one = rows.map(r => (r.id === 'q6' && r.k === 2 ? { ...r, pass: false } : r));
   const s = Q.summarize(QUIZ, one, 5);
