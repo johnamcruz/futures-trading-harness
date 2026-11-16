@@ -119,7 +119,9 @@ test('context quiz: every layer asked, ids unique, the bar the whole quiz at K 5
   // bound under maxSlips 10. q112, q121 (known gaps) and q91 (at the line in the probes) stay. Round 18 (PREREG addendum
   // 24): q118a (q118's briefing, the action) added; at 101 the gate's Monte Carlo misses its caught-broken bound (seed 1,
   // 536 of 600), so q94 (not aligned: unclear, 6/6 on every k=6; q112 asks the same row on the same printed class) retired.
-  assert.strictEqual(QUIZ.questions.length, 100);
+  // 107 with q134-q140 (feat/displacement: the owner's two traps, a close back through the level, a weak BOS, a displaced
+  // CHoCH, a weak CISD and a weak close through the protected swing; closed choices, the skill looked up).
+  assert.strictEqual(QUIZ.questions.length, 107);
   assert.ok(!QUIZ.questions.some(x => ['q55', 'q59', 'q94', 'q108', 'q113'].includes(x.id)), 'q55, q59, q94, q108 and q113 retired');
   assert.ok(QUIZ.questions.some(x => x.id === 'q118a'), 'q118a added');
   assert.ok(['q91', 'q112', 'q121'].every(id => QUIZ.questions.some(x => x.id === id)), 'q91, q112 and q121 kept');

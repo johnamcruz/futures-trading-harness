@@ -46,7 +46,7 @@
   "gate": {
     "flagDrop": 0.4,
     "alpha": 0.05,
-    "maxSlips": 10,
+    "maxSlips": 11,
     "confirmRuns": 10,
     "redMaxShare": 0.4,
     "greenMinShare": 0.8,
@@ -63,7 +63,7 @@
   },
   "passBar": {
     "partA": {
-      "allCorrect": 100,
+      "allCorrect": 107,
       "bothWays": 0
     },
     "partB": {
@@ -1825,6 +1825,132 @@
         "a confirmed transition up: the CHoCH up was followed by a BOS up"
       ],
       "answer": "a confirmed transition up: the CHoCH up was followed by a BOS up"
+    },
+    {
+      "id": "q134",
+      "layer": "setup",
+      "prompt": "lookup",
+      "lookup": [
+        "displacement"
+      ],
+      "text": "Briefing lines (synthetic, 10:21 ET), flat:\n- 3m (closed 10:21): displacement, close top third, range 1.8 ATR, vol 1.6x.\n- m3.lastBreak: last BOS up at 21412.25 (barsAgo 9).\n- No Break quality line on this bar.\nThe last 3m candle is a large up candle. Did it break structure?",
+      "rule": "a big candle with no structure break is a candle, not a BOS (the owner's trap 1)",
+      "anchor": "A big candle that breaks no swing is a candle (`candle-reading`), not a structure change.",
+      "choices": [
+        "yes: a displaced candle is a BOS up",
+        "no: a big candle that breaks no swing is a candle, not a structure change",
+        "yes: it confirms the up trend",
+        "unclear: wait for the next candle"
+      ],
+      "answer": "no: a big candle that breaks no swing is a candle, not a structure change"
+    },
+    {
+      "id": "q135",
+      "layer": "setup",
+      "prompt": "lookup",
+      "lookup": [
+        "displacement"
+      ],
+      "text": "Briefing lines (synthetic, 10:33 ET), flat:\n- FVGs near price or retested (completed candles): 15m bullish 21405.5-21409 (09:45) open.\n- Break quality (strength, not a forecast; `displacement`): 3m BOS up 21418.75 this bar: weak (wicks, closed mid), holding; cleared 0.08 ATR; no FVG yet; from protected low 21398.25: holds.\nIs the current 3m break displaced?",
+      "rule": "an FVG marks a past displacement; the current break's own word (weak) says how it broke (the owner's trap 2)",
+      "anchor": "An FVG marks a past displacement. It does not make the current move displaced; the break's own word does.",
+      "choices": [
+        "no: the FVG marks an earlier displacement; this break is weak",
+        "yes: the open 15m FVG shows displacement now",
+        "yes: a BOS beside an FVG is displaced",
+        "unclear: the FVG and the break disagree"
+      ],
+      "answer": "no: the FVG marks an earlier displacement; this break is weak"
+    },
+    {
+      "id": "q136",
+      "layer": "setup",
+      "prompt": "lookup",
+      "lookup": [
+        "displacement"
+      ],
+      "text": "Briefing lines (synthetic, 10:45 ET), flat:\n- Break quality (strength, not a forecast; `displacement`): 3m BOS up 21412.25 12 min ago: displaced, closed back below 21412.25 3 min ago; cleared 0.6 ATR; FVG 21405.5-21409 filled to 21406.75; from protected low 21380.5: holds.\nWhat is this break now?",
+      "rule": "closed back is a fact about the broken level, not an invalidation; the protected low decides; the break's strength stays displaced",
+      "anchor": "`closed back below X`: a close back through it since: a fact, not an invalidation.",
+      "choices": [
+        "a displaced BOS still holding its level",
+        "invalidated: the close back below 21412.25 ends the up structure",
+        "a displaced BOS whose level price has since closed back below; the protected low 21380.5 holds",
+        "a weak BOS: the close back made it weak"
+      ],
+      "answer": "a displaced BOS whose level price has since closed back below; the protected low 21380.5 holds"
+    },
+    {
+      "id": "q137",
+      "layer": "bias",
+      "prompt": "lookup",
+      "lookup": [
+        "displacement"
+      ],
+      "text": "Briefing lines (synthetic, 10:12 ET), flat:\n- Break quality (strength, not a forecast; `displacement`): 3m BOS up 21412.25 this bar: weak (closed mid, small), holding; cleared 0.05 ATR; no FVG yet; from protected low 21390.5: holds.\nWhat is this break?",
+      "rule": "a weak BOS is still a BOS: structure confirms continuation, displacement says its strength (weak)",
+      "anchor": "`weak` BOS -> still a BOS: continuation, little conviction.",
+      "choices": [
+        "not a BOS: a weak close does not break structure",
+        "a confirmed reversal up",
+        "a BOS up confirmed by displacement",
+        "a BOS up (continuation by structure) with weak strength"
+      ],
+      "answer": "a BOS up (continuation by structure) with weak strength"
+    },
+    {
+      "id": "q138",
+      "layer": "bias",
+      "prompt": "lookup",
+      "lookup": [
+        "displacement"
+      ],
+      "text": "Briefing lines (synthetic, 10:27 ET), flat:\n- Break quality (strength, not a forecast; `displacement`): 3m CHoCH down 21350.5 6 min ago: displaced, holding; cleared 0.7 ATR; FVG 21356.25-21360 open; from protected high 21372.25: holds.\nWhat does this displaced CHoCH mean?",
+      "rule": "a displaced CHoCH is a potential reversal with conviction; only structure (a BOS the same way) confirms it; displacement alone never invalidates",
+      "anchor": "`displaced` CHoCH -> a potential reversal with conviction; unconfirmed until a BOS the same way.",
+      "choices": [
+        "a confirmed reversal down: the displacement confirms it",
+        "a potential reversal down with strong displacement, unconfirmed until a BOS down",
+        "nothing: a CHoCH is noise",
+        "the up structure is invalidated by the displacement"
+      ],
+      "answer": "a potential reversal down with strong displacement, unconfirmed until a BOS down"
+    },
+    {
+      "id": "q139",
+      "layer": "setup",
+      "prompt": "lookup",
+      "lookup": [
+        "displacement"
+      ],
+      "text": "Briefing lines (synthetic, 10:18 ET), flat:\n- CISD (completed candles): 15m bullish at 21430 (closed 10:15, weak), no key-level sweep, a weak displacement: no zone.\nWhat does this CISD read?",
+      "rule": "a weak CISD is a delivery shift read by the same strength rule: weak, no zone",
+      "anchor": "`weak` -> a delivery shift, no zone.",
+      "choices": [
+        "a delivery shift up with little conviction, no zone",
+        "no CISD: a weak one does not count",
+        "a strong delivery shift up: buy its OTE",
+        "a confirmed reversal up"
+      ],
+      "answer": "a delivery shift up with little conviction, no zone"
+    },
+    {
+      "id": "q140",
+      "layer": "stop",
+      "prompt": "lookup",
+      "lookup": [
+        "displacement"
+      ],
+      "text": "Briefing lines (synthetic, 11:03 ET), flat:\n- Break quality (strength, not a forecast; `displacement`): 3m BOS up 21412.25 15 min ago: displaced, closed back below 21412.25 9 min ago; cleared 0.6 ATR; no FVG; from protected low 21380.5: broken by a weak close (wicks) 3 min ago.\nIs the protected low 21380.5 broken?",
+      "rule": "a close through the protected swing breaks it, weak or displaced; displacement says how strongly",
+      "anchor": "An invalidating close reads its displacement too: the close decides, displacement tells how strongly.",
+      "choices": [
+        "no: a weak close does not break it",
+        "only once a displaced close breaks it",
+        "yes: the close broke it; that close was weak",
+        "unclear: wait for a second close"
+      ],
+      "answer": "yes: the close broke it; that close was weak"
     }
   ],
   "partB": [
