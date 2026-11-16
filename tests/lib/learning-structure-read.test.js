@@ -105,7 +105,7 @@ test('goldAnswer: the code-built answer verifies against its own truth; promptOf
     assert.ok(p.startsWith(`${b}\n\n`) && p.includes('a bar briefing for MES at'));
     for (const f of SR.FIELDS[kind]) assert.ok(SR.INSTRUCTIONS[kind].includes(`"${f}"`), `${kind} names ${f}`);
   }
-  assert.ok(SR.INSTRUCTIONS.structure.includes(`at or after ${SR.RTH_OPEN} ET`));
+  assert.ok(SR.INSTRUCTIONS.structure.includes(`at or after ${SR.CASH_OPEN_ET} ET`));
   assert.throws(() => SR.promptOf('no header', 'sequence'), /names its symbol/);
 });
 

@@ -39,7 +39,7 @@ const { SESSION_ALIASES } = require('../trading/clock');
 
 const KINDS = Object.freeze(['structure', 'sequence']);
 // The New York cash open (the clock's one home of the session boundaries), as the briefing prints its times.
-const RTH_OPEN = SESSION_ALIASES.ny.split('-').shift();
+const CASH_OPEN_ET = SESSION_ALIASES.ny.split('-').shift();
 
 const BREAKS = '"BOS up", "BOS down", "CHoCH up", "CHoCH down" or "none"';
 const INSTRUCTIONS = Object.freeze({
@@ -58,7 +58,7 @@ Fields (use exactly these keys and only the allowed values):
 - "alt_choch": "yes" if the 3m last break and the one before it are both CHoCH, else "no".
 - "day_so_far": the Day so far line's read word as printed (for example "too early", "rotational", "trending up", "trending down"), or "none" when the briefing prints no Day so far line.
 - "vwap_crosses": the RTH VWAP crosses the Day so far line prints (an integer), or "none" when it prints none.
-- "guard15": "yes" if a 15m BOS became known today at or after ${RTH_OPEN} ET (the 15m last or previous break), else "no".
+- "guard15": "yes" if a 15m BOS became known today at or after ${CASH_OPEN_ET} ET (the 15m last or previous break), else "no".
 `,
   sequence: `The text above is a bar briefing for MNQ at one 3-minute bar close. Answer ONLY from that briefing, using the owner's structure table: a BOS is a break in the same direction as the previous break (continuation); a CHoCH is a break against the previous break (a potential reversal); a CHoCH then a BOS the same way is a confirmed reversal; a CHoCH then a CHoCH back is a failed reversal (structural chop evidence, not chop by itself). A break is invalidated only by a close through its protected swing (a BOS: the leg's higher low / lower high; a CHoCH: the swing that started the shift); a wick is not.
 Write one JSON object and nothing else (no prose, no code fence), with exactly these keys:
@@ -113,7 +113,7 @@ const line = (text, re) => (text.match(re) || [])[0] || null;
 const brk = x => (isObj(x) && (x.kind === 'BOS' || x.kind === 'CHoCH') && (x.direction === 'up' || x.direction === 'down') ? `${x.kind} ${x.direction}` : 'none');
 // A CISD whose displacement is neither strong nor weak can't be read (null: no truth), never guessed weak.
 const cis = x => (isObj(x) && (x.dir === 'bullish' || x.dir === 'bearish') ? (['strong', 'weak'].includes(x.displacement) ? `${x.dir} ${x.displacement}` : null) : 'none');
-const today = k => typeof k === 'string' && /^\d\d:\d\d$/.test(k) && k >= RTH_OPEN;
+const today = k => typeof k === 'string' && /^\d\d:\d\d$/.test(k) && k >= CASH_OPEN_ET;
 
 function sequenceOf(lb) {
   const L = isObj(lb) && isObj(lb.last) ? lb.last : null;
@@ -224,4 +224,4 @@ function goldAnswer(kind, truth) {
   return JSON.stringify(Object.fromEntries(FIELDS[kind].map(f => [f, truth[f]])));
 }
 
-module.exports = { KINDS, INSTRUCTIONS, FIELDS, RTH_OPEN, briefingOf, symbolOf, asOf, truthOf, promptOf, verifyAnswer, goldAnswer, sequenceOf };
+module.exports = { KINDS, INSTRUCTIONS, FIELDS, CASH_OPEN_ET, briefingOf, symbolOf, asOf, truthOf, promptOf, verifyAnswer, goldAnswer, sequenceOf };
