@@ -27,7 +27,7 @@ test('parseStopLine: prose, a missing line or a malformed one is not stated, and
   assert.strictEqual(parseStopLine('stop 21500: i think we stop here').stated, false, 'lower-case prose is never the line');
 });
 
-// stopLines (DESIGN 5.1-5.3): every line-start STOP line, plus the last STOP tail of a line that starts `9 Manage:`; a
+// stopLines: every line-start STOP line, plus the last STOP tail of a line that starts `9 Manage:`; a
 // line-start one wins over an inline one, among inline the last. Quoted text (an example after "->") never parses.
 const { stopLines } = require('../../scripts/lib/trading/stop-line');
 const RECORDED = require('../fixtures/stop-lines-recorded.json').cycles;
@@ -60,10 +60,19 @@ test('stopLines: line-start beats inline; among inline the last; the record says
   assert.strictEqual(parseStopLine('STOP hold: hold').inline, false);
 });
 
-test('stopLines: an example after "->" (a skill\'s quoted line) never parses; a bullet or a quote still does', () => {
-  for (const t of ['  -> STOP 21516.75: protected-swing; modify_order the stop to 21516.75', '-> STOP hold: hold', '--> STOP hold: hold']) {
+test('stopLines: an indented example after "->" (a skill\'s quoted line) never parses; the model\'s own "-> STOP" at the line start, a bullet or a quote does', () => {
+  for (const t of ['  -> STOP 21516.75: protected-swing; modify_order the stop to 21516.75', ' -> STOP hold: hold', '--> STOP hold: hold', 'trade_lifecycle long +2.1R -> STOP hold: hold']) {
     assert.deepStrictEqual(stopLines(t), [], t);
     assert.strictEqual(parseStopLine(t).stated, false, t);
   }
-  for (const t of ['- STOP hold: hold', '> STOP hold: hold', '- > STOP hold: hold', '* STOP hold: hold']) assert.strictEqual(parseStopLine(t).stated, true, t);
+  for (const t of ['- STOP hold: hold', '> STOP hold: hold', '- > STOP hold: hold', '* STOP hold: hold', '-> STOP hold: hold', '->STOP 21511.5: choch-against']) assert.strictEqual(parseStopLine(t).stated, true, t);
+  assert.strictEqual(parseStopLine('-> STOP 21511.5: choch-against').stop, 21511.5);
+});
+
+test('stopLines: an inline STOP counts only at a clause start of the 9 Manage: line (after the label, a ";" or a "."), so a conditional after a hold is no tighten', () => {
+  const cond = parseStopLine('9 Manage: invalidation 15620.5; STOP hold: hold; if the 15m breaks I would STOP 21511.50: choch-against');
+  assert.deepStrictEqual([cond.stated, cond.hold, cond.inline], [true, true, true]);
+  assert.strictEqual(parseStopLine('9 Manage: STOP 21511.5: choch-against').stop, 21511.5, 'right after the label');
+  assert.strictEqual(parseStopLine('9 Manage: x. STOP 21511.5: choch-against').stop, 21511.5, 'after a period');
+  assert.strictEqual(parseStopLine('9 Manage: I would STOP 21511.5: choch-against').stated, false, 'mid-clause only: none');
 });

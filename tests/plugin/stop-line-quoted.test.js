@@ -1,6 +1,6 @@
 'use strict';
 
-// Quoted text never parses as the model's STOP line (DESIGN 5.2): no skill, agent, rule, command or generated prompt
+// Quoted text never parses as the model's STOP line: no skill, agent, rule, command or generated prompt
 // text holds a form trading/stop-line.js stopLines returns, so a model that echoes its instructions never states a line
 // it did not decide (a skill's example "-> STOP 21516.75: ..." was a line start before the arrow was excluded).
 
