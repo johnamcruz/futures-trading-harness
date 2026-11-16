@@ -5,7 +5,7 @@
  * the answer states for the trade, each attributed to the field the words before it name (now, MFE or best, MAE or
  * worst, giveback, the stop or the lock), and whether it equals the line's value (to the cent of an R). The broker
  * snapshot's own R (its other risk basis) is flagged when the answer states it. For the behaviour check's field-reading
- * bar (PREREG addendum 3) and the six-morning run. Pure.
+ * bar and the paired morning runs. Pure.
  *
  *   positionQuote(answer, read, { snapshot })   { quoted: [{ field, value, ok }], n, ok, share (null with none), snapshot }
  *     read: the Position read's numbers { nowR, mfeR, maeR, give, workR, atStopGive, lockR }; snapshot: R values of the
@@ -19,7 +19,7 @@ const FIELDS = [
   ['stop', /\b(?:stop|lock)\b/gi],
   ['now', /\b(?:now|currently|at the close)\b/gi],
 ];
-const R_TOKEN = /([-+]?\d+(?:\.\d+)?)\s?R\b/g;
+const R_NUMBER = /([-+]?\d+(?:\.\d+)?)\s?R\b/g;
 const cents = x => Math.round(x * 100);
 const near = (a, b) => cents(a) === cents(b); // to the cent of an R, as the line prints it
 
@@ -38,7 +38,7 @@ const DEFINED = /^\s*(?:=|\()/;
 function positionQuote(answer, read = {}, { snapshot = [] } = {}) {
   const text = String(answer || '').replace(/\u2212/g, '-'); // a typographic minus is a minus
   const quoted = [];
-  for (const m of text.matchAll(R_TOKEN)) {
+  for (const m of text.matchAll(R_NUMBER)) {
     // The field the clause before it names: the last field word since the clause began (a ';', '.', newline or ',').
     const before = text.slice(0, m.index);
     const clause = before.slice(Math.max(before.lastIndexOf(';'), before.lastIndexOf('\n'), before.lastIndexOf(', '), before.search(/\.\s[^.]*$/)) + 1);
@@ -53,7 +53,7 @@ function positionQuote(answer, read = {}, { snapshot = [] } = {}) {
     const want = wantOf(field, read).filter(Number.isFinite);
     quoted.push({ field, value, ok: want.some(x => near(x, value)) });
   }
-  const values = [...text.matchAll(R_TOKEN)].map(m => Number(m[1]));
+  const values = [...text.matchAll(R_NUMBER)].map(m => Number(m[1]));
   const ok = quoted.filter(x => x.ok).length;
   return { quoted, n: quoted.length, ok, share: quoted.length ? Math.round((ok / quoted.length) * 1000) / 1000 : null, snapshot: (snapshot || []).filter(s => values.some(v => near(Math.abs(v), Math.abs(s)))) };
 }

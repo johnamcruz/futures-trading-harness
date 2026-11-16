@@ -203,11 +203,6 @@ test('the prompt: the blocks at its end, just before the result line, everything
   assert.ok(p.endsWith(`${data}${RESULT_LINE}`));
   assert.strictEqual(p.slice(0, plain.length - RESULT_LINE.length), plain.slice(0, -RESULT_LINE.length), 'the prefix is the prompt as built');
   assert.ok(data.includes(CD.INTRO));
-  // The broker's account reads carry their own risk and R fields (from the broker's stop record): the section says whose
-  // they are, so the open trade has one R basis, the Position line's (review B1; the re-ask's "1R = 9 pts" quote).
-  assert.ok(data.includes(CD.BROKER_BASIS));
-  assert.match(CD.BROKER_BASIS, /Position line/);
-  assert.ok(!CD.render({ blocks: got.blocks.filter(b => b.tool === 'bar_briefing') }).includes(CD.BROKER_BASIS), 'no broker read: no note');
   assert.deepStrictEqual([...p.matchAll(/\n--- ([a-z_]+) \{/g)].map(m => m[1]), ['bar_briefing', ...CD.READS], 'briefing first, then the account');
   // No data: the prompt as it was; a prompt without its result line is refused (the caller gives it unchanged).
   assert.strictEqual(withCycleData(plain, ''), plain);

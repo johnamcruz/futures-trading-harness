@@ -263,9 +263,6 @@ async function collect({ symbols = [], accountId = null, env, root, broker = nul
 }
 
 const INTRO = 'This cycle\'s reads, already made: the runner called these tools for you just before your run, with your own tools\' settings, and each block below holds exactly the text the tool returned (its arguments and as-of time in its header). Take them as your own reads of those tools; call a tool again only for anything more, or for anything newer than its as-of time.';
-// A broker read's own risk, R and excursion fields are measured from the broker's own stop record; the open trade's R is
-// the Position line's (trading/position-read.js: the runner's held trade). Said once, under the broker's reads.
-const BROKER_BASIS = 'A broker read\'s own risk, R and excursion fields are measured from the broker\'s stop record; the open trade\'s R, MFE and MAE are the Position line\'s.';
 const header = b => `--- ${b.tool} ${argsText(b.args)} as of ${b.asOf} ---`;
 const footer = b => `--- end of ${b.tool} ${argsText(b.args)} (sha256 ${sha256(b.text)}) ---`;
 
@@ -280,7 +277,6 @@ function render({ blocks = [], missing = [], note = null } = {}, { intro = INTRO
   if (!blocks.length && !missing.length && !note) return '';
   const lines = [`\n=== ${intro} ===`];
   for (const b of blocks) lines.push(header(b), b.text, footer(b));
-  if (blocks.some(b => READS.includes(b.tool))) lines.push(BROKER_BASIS);
   for (const m of missing) lines.push(`Not collected: ${m.tool} ${argsText(m.args)} (${m.why}); read it yourself if you need it.`);
   if (note) lines.push(note);
   lines.push('=== end of this cycle\'s reads ===\n');
@@ -370,4 +366,4 @@ const deskFailed = (roles, why) => Object.freeze(Object.fromEntries(roles.map(ro
 /** A desk role's data section in its request ('' without a record for it). */
 const deskText = (role, rec) => (rec ? render(rec, { intro: introOf(role) }) : '');
 
-module.exports = { BROKER_BASIS, READS, BRIEFING, INTRO, DESK_INTRO, MAX_BYTES, VOLATILE, PER_RUN, PRELOAD, kindOf, on, sha256, keyOf, cycleOf, briefingServed, onlyText, createStore, collect, frameServed, deskReads, collectDesk, deskFailed, deskText, capped, render, records, failed, skipped };
+module.exports = { READS, BRIEFING, INTRO, DESK_INTRO, MAX_BYTES, VOLATILE, PER_RUN, PRELOAD, kindOf, on, sha256, keyOf, cycleOf, briefingServed, onlyText, createStore, collect, frameServed, deskReads, collectDesk, deskFailed, deskText, capped, render, records, failed, skipped };

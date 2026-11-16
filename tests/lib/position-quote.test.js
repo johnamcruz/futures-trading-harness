@@ -1,6 +1,6 @@
 'use strict';
 
-// The field-reading score (scripts/lib/eval/position-quote.js, DESIGN 4.8, review m8): the R numbers an answer states
+// The field-reading score (scripts/lib/eval/position-quote.js): the R numbers an answer states
 // for the open trade against the Position line's, and any use of the broker snapshot's own R.
 
 const test = require('node:test');
