@@ -51,14 +51,16 @@ description: Use when a position is open - its stop, the plan's management, the 
   process failure. Tighter than the working stop → `modify_order` the
   bracket stop that cycle (trade-executor); equal or looser → no call.
   Levels: the prompt's "Manage read".
-- **The read decides** (structure confirms, displacement is strength, the
-  protected swing invalidates: `bos-vs-choch`, `pullback-vs-reversal`):
+- **The read decides** (displacement measures strength, structure
+  determines confirmation, the protected swing determines invalidation:
+  `displacement`, `bos-vs-choch`, `pullback-vs-reversal`):
   - 15m BOS the trade's way → a tick beyond its protected swing (that is
     the room): protected-swing.
   - 15m CHoCH against → `warning_giveback_r` behind the best (the Manage
     read's warning giveback), not an exit: choch-against.
-  - 15m displacement against, or weakening (2+ signs; an HTF flip alone
-    is one) → the same giveback. Weakening and stalling at a key level or
+  - A displaced 15m candle against (the Break quality line's word, a read),
+    or weakening (2+ signs; an HTF flip alone is one) → the same giveback:
+    a warning, never an exit. Weakening and stalling at a key level or
     opposing liquidity → take the base hit at market.
   - A 15m close through the protected swing (Manage read: BROKEN) → the
     reversal: `close_position`, then the full top-down flow decides anew.
