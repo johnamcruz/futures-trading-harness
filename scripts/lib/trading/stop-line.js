@@ -8,11 +8,14 @@
  * failure by the caller: it never blocks the cycle and never moves a stop (the model's modify_order does that, gated).
  *
  *   REASONS                     the reasons the skill teaches
+ *   STOP_START                  a line that starts with STOP
  *   parseStopLine(text)         { stated: true, hold, stop (price or null), reason, text } | { stated: false, why }
  */
 
 const REASONS = Object.freeze(['protected-swing', 'choch-against', 'displacement-against', 'weakening', 'hold']);
 // A line start may carry markdown (a bullet, a quote, bold); STOP itself is upper case (prose's "stop" never counts).
+/** A line that starts with STOP (markdown allowed before it): the lines a caller hands parseStopLine. */
+const STOP_START = /^[ \t]*(?:[-*>][ \t]*)*(?:\*\*)?STOP\b/;
 const LINE = /^[ \t]*(?:[-*>][ \t]*)*(?:\*\*)?STOP[ \t]+((?:[Hh][Oo][Ll][Dd])|\$?\d[\d,]*(?:\.\d+)?)[ \t]*:[ \t]*(\S.*?)[ \t]*(?:\*\*)?[ \t]*$/gm;
 
 function parseStopLine(text) {
@@ -25,4 +28,4 @@ function parseStopLine(text) {
   return { stated: true, hold, stop, reason: REASONS.includes(first) ? first : 'other', text: why };
 }
 
-module.exports = { REASONS, parseStopLine };
+module.exports = { REASONS, STOP_START, parseStopLine };

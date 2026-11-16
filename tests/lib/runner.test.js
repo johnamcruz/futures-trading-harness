@@ -702,17 +702,17 @@ test('a managed cycle\'s STOP line is recorded every cycle (stated, reason, tigh
   assert.ok(none.cycles.filter(c => c === 'trade').length >= 1, 'the cycles still run');
 });
 
-test('the STOP line is read from the model\'s own text in a structured transcript (an opencode or Claude Code event stream), not from its escaped JSON', async () => {
+test('the STOP line is read from the cycle run\'s stopText (the head\'s own STOP-led lines, cycle-log.js stopLineText) before the raw transcript, whose JSON escapes the newline', async () => {
   // A harness run's transcript is its standard output: JSON events whose text holds the line with an escaped newline.
-  const oc = [{ type: 'text', sessionID: 's1', timestamp: 1, part: { type: 'text', sessionID: 's1', text: 'reads...\nSTOP 21495: protected-swing 15m BOS up\nCYCLE RESULT: managed - held' } }].map(e => JSON.stringify(e)).join('\n');
-  const cc = [{ type: 'assistant', message: { role: 'assistant', model: 'm', content: [{ type: 'text', text: 'STOP hold: hold (a pullback)\nCYCLE RESULT: managed - held' }] } }, { type: 'result', result: 'CYCLE RESULT: managed - held' }].map(e => JSON.stringify(e)).join('\n');
-  for (const [name, transcript, want] of [['opencode', oc, [true, 21495, 'protected-swing']], ['claude', cc, [true, null, 'hold']]]) {
-    const r = await trailSim({ tape: {}, until: et(10, 8), outcome: () => ({ ok: true, timedOut: false, result: 'CYCLE RESULT: managed - held', transcript }) });
-    const ev = r.events.filter(e => e.kind === 'stop_line');
-    assert.ok(ev.length >= 1, name);
-    assert.deepStrictEqual([ev[0].stated, ev[0].stop, ev[0].reason], want, `${name}: ${JSON.stringify(ev[0])}`);
-    assert.ok(!r.logs.some(l => /process failure: no STOP line/.test(l)), `${name}: no false process failure`);
-  }
+  const transcript = JSON.stringify({ type: 'text', sessionID: 's1', timestamp: 1, part: { type: 'text', text: 'reads...\nSTOP 21495: protected-swing 15m BOS up\nCYCLE RESULT: managed - held' } });
+  const r = await trailSim({ tape: {}, until: et(10, 8), outcome: () => ({ ok: true, timedOut: false, result: 'CYCLE RESULT: managed - held', transcript, stopText: 'STOP 21495: protected-swing 15m BOS up' }) });
+  const ev = r.events.filter(e => e.kind === 'stop_line');
+  assert.ok(ev.length >= 1);
+  assert.deepStrictEqual([ev[0].stated, ev[0].stop, ev[0].reason], [true, 21495, 'protected-swing'], JSON.stringify(ev[0]));
+  assert.ok(!r.logs.some(l => /process failure: no STOP line/.test(l)), 'no false process failure');
+  // stopText '' (the run's own text has none): a process failure, read as hold, whatever the raw transcript holds.
+  const none = await trailSim({ tape: {}, until: et(10, 8), outcome: () => ({ ok: true, timedOut: false, result: 'CYCLE RESULT: managed - held', transcript: 'a role said\nSTOP 21495: protected-swing', stopText: '' }) });
+  assert.ok(none.events.filter(e => e.kind === 'stop_line').every(e => e.stated === false));
 });
 
 test('exit mode target_then_trail, live: the ratchet moves the resting stop to the best R less the giveback, as exit-trail.js steps the same bars', async () => {

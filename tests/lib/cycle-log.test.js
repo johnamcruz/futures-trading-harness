@@ -431,3 +431,16 @@ test('cycleId: a role the runner runs after the head trader for its cycle carrie
   for (const bad of ['', 'abc', 'ZZZZZZZZZZZZZZZZ', `${head}0`, ' ']) assert.strictEqual(cycleId({ FTH_CYCLE_TRANSCRIPT: '/h/logs/cycle-transcript-executor.jsonl', FTH_CYCLE_ID: bad }), own, JSON.stringify(bad));
   assert.strictEqual(cycleId({ FTH_CYCLE_ID: head }), head);
 });
+
+test('stopLineText: only the STOP-led lines of the head trader\'s own text (an opencode or Claude Code stream, or plain text): never its STATE line, a role\'s report or a tool reply', () => {
+  const { stopLineText } = require('../../scripts/lib/cycle-log');
+  const oc = [
+    { type: 'tool_use', sessionID: 's1', timestamp: 1, part: { type: 'tool', tool: 'task', state: { status: 'completed', output: 'STOP 1: a role\'s report' } } },
+    { type: 'text', sessionID: 's1', timestamp: 2, part: { type: 'text', text: 'STATE: up leg\nreads...\n- STOP 21495: protected-swing 15m BOS up\nCYCLE RESULT: managed - held' } },
+  ].map(e => JSON.stringify(e)).join('\n');
+  assert.strictEqual(stopLineText(oc), '- STOP 21495: protected-swing 15m BOS up');
+  const cc = [{ type: 'assistant', message: { role: 'assistant', model: 'm', content: [{ type: 'text', text: 'STATE: range\nSTOP hold: hold (a pullback)\nCYCLE RESULT: managed - held' }] } }].map(e => JSON.stringify(e)).join('\n');
+  assert.strictEqual(stopLineText(cc), 'STOP hold: hold (a pullback)');
+  assert.strictEqual(stopLineText('STATE: x\nSTOP hold: hold\nCYCLE RESULT: managed - held'), 'STOP hold: hold');
+  assert.strictEqual(stopLineText('no line here; the stop stays'), '');
+});

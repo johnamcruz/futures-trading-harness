@@ -14,7 +14,7 @@
   the harness) is cancelled, not waited on (the `order-mechanics` skill); one its
   record or prompt marks "bracket attached on fill" is bracketed: keep it.
 - Never widen a stop, never average down, never add to a loser. Tighten it
-  only as the managed cycle's STOP line says (`manage-position`), never to breakeven by feel.
+  only as the STOP line says (`manage-position`), never to breakeven by feel.
 - Use micro contracts (MNQ, MES, MYM, M2K, MGC, MCL) and size 1 until the
   journal shows positive expectancy over at least 30 closed trades of that
   setup.

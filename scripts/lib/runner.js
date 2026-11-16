@@ -50,7 +50,6 @@
 
 const { openTrades, describeOpenTrade, tradeReadText } = require('./trading/open-trades');
 const { parseStopLine } = require('./trading/stop-line');
-const { headOwnText } = require('./cycle-log');
 const { workingEntryLines } = require('./trading/working-entries');
 const { zonedParts } = require('./trading/clock');
 const { decide, recordRun, prompts, signalDecision, dayKey, endOfDayAt, historyShownLines, cycleLoaded } = require('./autotrader');
@@ -899,9 +898,10 @@ function createRunner(deps) {
 
   /** The managed cycle's STOP line (trading/stop-line.js) against each open trade's working stop: logged and emitted. */
   function recordStopLine(r, trades) {
-    // The model's own text (cycle-log.js headOwnText: a structured transcript's text parts, a plain one as is), never
-    // the raw event stream, whose JSON escapes the newline the line must start after.
-    const line = parseStopLine(r.transcript ? headOwnText(r.transcript) : r.result || '');
+    // The run's STOP-led lines of the head's own text (cycle-run.js stopText, cycle-log.js stopLineText: never the raw
+    // event stream, whose JSON escapes the newline a line must start after, and never the rest of its text); a run
+    // without it (a test's or an old caller's), its transcript or result as before.
+    const line = parseStopLine(typeof r.stopText === 'string' ? r.stopText : r.transcript || r.result || '');
     for (const t of trades) {
       const tighter = line.stated && !line.hold && Number.isFinite(t.stop) ? t.sign * (line.stop - t.stop) > 0 : null;
       emit('stop_line', { contractId: t.contractId, side: t.side, working: t.stop, stated: line.stated, ...(line.stated ? { stop: line.stop, hold: line.hold, reason: line.reason, text: line.text, tighter } : { why: line.why }) });

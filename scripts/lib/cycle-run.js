@@ -31,7 +31,7 @@ const { harnessHome } = require('./paths');
 const { roleSkills, withSkillsMissing, missingLine, reloadedLine } = require('./role-skills-record');
 const CD = require('./cycle-data');
 const { runHarness } = require('./harness-run');
-const { writeCycleLog } = require('./cycle-log');
+const { writeCycleLog, stopLineText } = require('./cycle-log');
 const { runTiming } = require('./cycle-timing');
 const { loadConfig } = require('./trading/config');
 const { roleCalls } = require('./trading/roles-ran');
@@ -244,7 +244,9 @@ async function runCycle(cfg, action, prompt, opts, limits = {}, deps = {}) {
   // run's end, and the reads before its spawn.)
   const turn = confirm ? confirmTurnOf(res, spawnMs, runEndMs) : null;
   const confirmed = confirm ? { confirm: { outcome: res.ok && !res.timedOut ? 'done' : res.timedOut ? 'timeout' : 'error', ms: Math.max(0, endedMs - startedMs), fellBack: false, late, ...turn, readsMs: Math.max(0, spawnMs - startedMs) } } : measureLate ? { late } : {};
-  return { ...cycleOutcome(res, { result, intact, action, lookups, reportedResult, resultNote }), ...(phase1Refused ? { phase1Refused: true } : {}), ...confirmed };
+  // The managed cycle's STOP line: only the STOP-led lines of the head's own text (cycle-log.js stopLineText).
+  const stopText = action === 'eod' ? null : stopLineText(res.output || '');
+  return { ...cycleOutcome(res, { result, intact, action, lookups, reportedResult, resultNote }), ...(stopText === null ? {} : { stopText }), ...(phase1Refused ? { phase1Refused: true } : {}), ...confirmed };
 }
 
 /** A confirm's own turn (cycle-timing.js confirmTurn) from its run's stream and line times; nulls when unreadable. */
