@@ -702,6 +702,19 @@ test('a managed cycle\'s STOP line is recorded every cycle (stated, reason, tigh
   assert.ok(none.cycles.filter(c => c === 'trade').length >= 1, 'the cycles still run');
 });
 
+test('the STOP line is read from the model\'s own text in a structured transcript (an opencode or Claude Code event stream), not from its escaped JSON', async () => {
+  // A harness run's transcript is its standard output: JSON events whose text holds the line with an escaped newline.
+  const oc = [{ type: 'text', sessionID: 's1', timestamp: 1, part: { type: 'text', sessionID: 's1', text: 'reads...\nSTOP 21495: protected-swing 15m BOS up\nCYCLE RESULT: managed - held' } }].map(e => JSON.stringify(e)).join('\n');
+  const cc = [{ type: 'assistant', message: { role: 'assistant', model: 'm', content: [{ type: 'text', text: 'STOP hold: hold (a pullback)\nCYCLE RESULT: managed - held' }] } }, { type: 'result', result: 'CYCLE RESULT: managed - held' }].map(e => JSON.stringify(e)).join('\n');
+  for (const [name, transcript, want] of [['opencode', oc, [true, 21495, 'protected-swing']], ['claude', cc, [true, null, 'hold']]]) {
+    const r = await trailSim({ tape: {}, until: et(10, 8), outcome: () => ({ ok: true, timedOut: false, result: 'CYCLE RESULT: managed - held', transcript }) });
+    const ev = r.events.filter(e => e.kind === 'stop_line');
+    assert.ok(ev.length >= 1, name);
+    assert.deepStrictEqual([ev[0].stated, ev[0].stop, ev[0].reason], want, `${name}: ${JSON.stringify(ev[0])}`);
+    assert.ok(!r.logs.some(l => /process failure: no STOP line/.test(l)), `${name}: no false process failure`);
+  }
+});
+
 test('exit mode target_then_trail, live: the ratchet moves the resting stop to the best R less the giveback, as exit-trail.js steps the same bars', async () => {
   // The 2026-10-24 replay's MNQ short: from 14530.5, 1R = 98 ticks (24.5 points), its own target (the bracket, 196 ticks)
   // at 14481.5 = 2R. Giveback 1.5R, a loose 3R trail, so the ratchet is the stop past the target.
@@ -1054,6 +1067,21 @@ test('after the session window: the bracket stop fills, and the leftover target 
   assert.ok(!r.limits.some(l => (l[0] === 'trade' || l[0] === 'manage') && l[1] >= et(12, 0) + 30000), 'no cycle after the window');
   // Before the fill nothing is cancelled (the position is still open: its target and stop stay).
   assert.ok(!(r.cancelTries || []).some(([, t]) => t < et(12, 2)));
+});
+
+test('a position entered inside 09:30-12:00 is managed past 12:00 until its trail exits or the end-of-day flatten, never closed at the window\'s end', async () => {
+  // The shipped exit (target_then_trail): a long filled at 11:50 (21500, stop 21490, its own target 21520 at 2R). The
+  // window ends at 12:00; the price reaches the target after it and keeps rising: the runner keeps trailing the stop
+  // (modify_order past 12:00, no cycle), nothing closes it at 12:00, and the end-of-day flatten closes it at 15:50.
+  const EXIT = { mode: 'target_then_trail', lock_giveback_r: 1.5, trail_by: 'r', trail_r: 1 };
+  const tape = {};
+  for (let m = 111; m <= 360; m += 3) { const px = 21500 + Math.max(0, m - 120) * 0.25; tape[m] = [px + 1, px - 1, px]; }
+  const r = await trailSim({ tape, exit: EXIT, record: { targetTicks: 80 }, startAt: et(11, 51) + 2000, fillAt: et(11, 50), until: et(15, 55), cfgOver: { sessions: ['09:30-12:00@America/New_York'], eodAt: '15:50@America/New_York' } });
+  assert.ok(r.modified.length >= 3, `the stop trailed: ${JSON.stringify(r.modified)}`);
+  assert.ok(r.modified[r.modified.length - 1] > 21520, 'trailed well past the target, after 12:00');
+  assert.ok(!r.closed.some(t => t < et(15, 50)), `no close before the end-of-day flatten: ${r.closed.map(t => new Date(t).toISOString())}`);
+  assert.ok(r.closed.some(t => t >= et(15, 50) && t < et(15, 55)), 'closed by the end-of-day flatten');
+  assert.ok(!r.limits.some(l => (l[0] === 'trade' || l[0] === 'manage') && l[1] >= et(12, 0) + 30000), 'no model cycle after the window: the code manages it');
 });
 
 test('after the session window: a cancel the broker refuses is logged and retried on the next bar, never given up', async () => {

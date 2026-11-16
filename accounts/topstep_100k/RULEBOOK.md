@@ -33,8 +33,8 @@ policies:                       # each policy strategy that trades this account 
       trail_r: 1                # target_then_trail: R behind the best price (trail_by r; with structure only when no swing's stop is under the close, over it for a short)
       swing_tf: 15m             # target_then_trail with trail_by structure: the swings the stop trails behind
       ratchet: off              # target_then_trail: on lifts the lock to the best R reached less lock_giveback_r; off (opt in only): the lock above
-      lock_at_r: 1              # target_then_trail: once the best price reached this many R (before the target too) ...
-      lock_to_ticks: 2          # ... the stop is at least the entry plus this many ticks (covers the stop's slippage); off with lock_at_r: no early lock
+      lock_at_r: off            # target_then_trail, opt in: once the best price reached this many R (before the target too) ...
+      lock_to_ticks: off        # ... the stop is at least the entry plus this many ticks (covers the stop's slippage); off with lock_at_r: no early lock (the default)
       warning_giveback_r: 0.5   # target_then_trail, taught: on a warning the model may tighten to this many R behind the best price (no code moves it)
     multipliers: []             # enforced size multipliers folded into the verdict: none yet
 enforced: [daily_loss_soft, loss_streak_stop, sizing, exit, multipliers, target_stop, consistency_stop, one_position, hard_stops, trend_rule, trend_fade, entry_rule]
@@ -140,9 +140,10 @@ each trade from its recorded path, prop/attempts.js exitAs):
 
   A swing trail farther in profit than the ratchet still wins. With `off`
   the stop stays at 14518.25 past the target until the trail passes it.
-  The early lock (`lock_at_r` 1, `lock_to_ticks` 2; target_then_trail only,
-  both set or both `off`; the owner, 2026-11-15: "We can't let green trades
-  turn red"): once the best price (closed bars' extremes) has reached
+  The early lock (`lock_at_r`, `lock_to_ticks`; target_then_trail only,
+  both set or both `off`; **off by default**: the owner, 2026-11-15, "Maybe
+  this default is good for now", after the measurement below; opt in with
+  `lock_at_r: 1`, `lock_to_ticks: 2`): once the best price (closed bars' extremes) has reached
   `lock_at_r`, before the target too, the stop is at least the entry plus
   `lock_to_ticks` ticks, so a breakeven exit still fills at or over the entry
   with 2 ticks of slippage (keep it at least `stop_slippage_ticks`). It
@@ -173,8 +174,9 @@ each trade from its recorded path, prop/attempts.js exitAs):
   6.5% / 5.1% -> 5.5% / 3.8%. On the model's own entries of the arm-B run
   (52, all tuning; fills as the replay broker's) the R fell from 27.8 to
   13.2 (paired -0.28R a trade, 90% {-0.64, +0.04}): the lock scratched
-  runners that came back to the entry before running. At 3 ticks of stop slippage every lock exit is a
-  loss. The owner's call to keep it, with these numbers.
+  runners that came back to the entry before running, and the goal
+  regression's R caught fell (0.214 -> 0.097). At 3 ticks of stop slippage
+  every lock exit is a loss. So it ships off: the shipped exit stands.
   `warning_giveback_r`
   (0.5, taught, no code moves a stop by it) is the stop the model may
   tighten to on a warning (`manage-position`): that many R behind the best

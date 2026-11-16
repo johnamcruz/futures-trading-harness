@@ -16,7 +16,7 @@
  *
  * The size and management steps have no read: position-sizing's true read is a size within the record's cap and its
  * false one a size over it ([max-risk]); manage-position's is a stop tightened on the filled trade and its false one a
- * stop loosened ([modify-protection]). A skill with no true instance on these bars is a test.todo with the reason
+ * stop loosened ([modify-stop]: looser than the runner's confirmed resting stop). A skill with no true instance on these bars is a test.todo with the reason
  * (TODO); the guard at the end fails when a crosswalk skill has neither, so a new skill can't slip through untested.
  */
 
@@ -175,7 +175,7 @@ test('skill scenario, position-sizing: the most the cap allows (4 x 148 ticks x 
 });
 
 // The management step: manage-position's read is the stop tightened toward price on the filled trade; loosened, refused.
-test('skill scenario, manage-position: on the filled composed long, the stop tightened goes and the exit goes; the stop loosened is refused ([modify-protection])', async () => {
+test('skill scenario, manage-position: on the filled composed long, the stop tightened goes and the exit goes; the stop loosened is refused ([modify-stop])', async () => {
   const w = D.world();
   await D.pass(w, D.decisionAt(SIZED.bar), composedCycle(w, SIZED));
   const stop = D.working(w).find(o => o.type === 4);
@@ -190,7 +190,7 @@ test('skill scenario, manage-position: on the filled composed long, the stop tig
     { result: 'CYCLE RESULT: managed - stop tightened, then out' },
   ]);
   assert.deepStrictEqual(r.ctx.calls.map(c => [c.tool, c.ok]), [['modify_order', true], ['modify_order', false], ['place_order', true]]);
-  assert.match(r.ctx.calls[1].text, /\[modify-protection\]/);
+  assert.match(r.ctx.calls[1].text, /\[modify-stop\] stopPrice \S+ is looser than the resting stop/);
   assert.strictEqual(D.position(w), null, 'flat');
 });
 

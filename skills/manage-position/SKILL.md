@@ -91,5 +91,5 @@ trade_lifecycle long +3.0R, 15m BOS up, protected swing 21517.00, working 21505.
 trade_lifecycle long +1.6R, 15m CHoCH down, protected swing holds, warning giveback 21511.50
   -> STOP 21511.50: choch-against; modify_order (not an exit)
 trade_lifecycle long +1.4R, Manage read: protected swing BROKEN by a close -> close_position
-trade_lifecycle long +1.2R, warning giveback 21499.75, working 21500.50 (the lock) -> STOP hold: hold (not tighter)
+trade_lifecycle long +1.2R, warning giveback 21499.75, working 21500.50 -> STOP hold: hold (not tighter)
 ```

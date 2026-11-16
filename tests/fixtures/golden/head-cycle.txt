@@ -235,8 +235,8 @@ prompt (sha256 aca1a7af1b7d36ce02c4abf7b4bb93b5c7e6a217e203b16a2f77dcd7a67a3355,
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 the run's prompt is the runner's: true
 the cycle log's prompt is the runner's: true
-argv: ["claude","-p","<prompt>","--plugin-dir","<root>","--append-system-prompt-file","<home>/head-prompt/claude-head-99c4a4d4afde3825c0b2011fb0c897009d34e62d2395e26a637540c16d4574e3.md","--output-format","stream-json","--verbose","--permission-mode","dontAsk","--allowedTools","mcp__broker,mcp__harness,Skill,Agent,WebSearch,WebFetch(domain:bls.gov),WebFetch(domain:bea.gov),WebFetch(domain:federalreserve.gov),WebFetch(domain:eia.gov),WebFetch(domain:treasurydirect.gov),WebFetch(domain:cmegroup.com),WebFetch(domain:census.gov),WebFetch(domain:dol.gov),Read(/<root>/**),Read(/<home>/bars/**),Read(/<home>/logs/**),Read(/<home>/bars-scratch/**),Bash(node <root>/scripts/strategies.js:*),Bash(node <root>/scripts/market-snapshot.js:*),Bash(node <root>/scripts/mtf.js:*),Bash(node <root>/scripts/blackouts.js:*),Bash(node <root>/scripts/bars.js:*),Bash(node <root>/scripts/reconcile.js:*),Bash(node <root>/scripts/lessons.js:*),Bash(node <root>/scripts/combine.js status:*)","--disallowedTools","SendMessage,ListAgents,Edit(/<home>/**),Write(/<home>/**),Read(//proc/**),Read(/<user-home>/.claude/**),Read(/<user-home>/.claude.json),Read(/<user-home>/.qwen/**),Read(/<user-home>/.codex/**),Read(/<user-home>/.ssh/**),Read(/<root>/**/.env),Read(/<user-home>/.futures-trading-harness/.env),Read(/<home>/.env),Edit(/<root>/**),Write(/<root>/**),Edit(/<user-home>/.futures-trading-harness/**),Write(/<user-home>/.futures-trading-harness/**),Edit(/<user-home>/.<name-ad45f8>-mcp/journal.jsonl),Write(/<user-home>/.<name-ad45f8>-mcp/journal.jsonl),Edit(/<user-home>/.claude/**),Write(/<user-home>/.claude/**)"]
-head file sha256: 99c4a4d4afde3825c0b2011fb0c897009d34e62d2395e26a637540c16d4574e3
+argv: ["claude","-p","<prompt>","--plugin-dir","<root>","--append-system-prompt-file","<home>/head-prompt/claude-head-7eb3dd9569d4ceda8d63dcd9376e22a8f53221e8147f91b9781e90f068307bb4.md","--output-format","stream-json","--verbose","--permission-mode","dontAsk","--allowedTools","mcp__broker,mcp__harness,Skill,Agent,WebSearch,WebFetch(domain:bls.gov),WebFetch(domain:bea.gov),WebFetch(domain:federalreserve.gov),WebFetch(domain:eia.gov),WebFetch(domain:treasurydirect.gov),WebFetch(domain:cmegroup.com),WebFetch(domain:census.gov),WebFetch(domain:dol.gov),Read(/<root>/**),Read(/<home>/bars/**),Read(/<home>/logs/**),Read(/<home>/bars-scratch/**),Bash(node <root>/scripts/strategies.js:*),Bash(node <root>/scripts/market-snapshot.js:*),Bash(node <root>/scripts/mtf.js:*),Bash(node <root>/scripts/blackouts.js:*),Bash(node <root>/scripts/bars.js:*),Bash(node <root>/scripts/reconcile.js:*),Bash(node <root>/scripts/lessons.js:*),Bash(node <root>/scripts/combine.js status:*)","--disallowedTools","SendMessage,ListAgents,Edit(/<home>/**),Write(/<home>/**),Read(//proc/**),Read(/<user-home>/.claude/**),Read(/<user-home>/.claude.json),Read(/<user-home>/.qwen/**),Read(/<user-home>/.codex/**),Read(/<user-home>/.ssh/**),Read(/<root>/**/.env),Read(/<user-home>/.futures-trading-harness/.env),Read(/<home>/.env),Edit(/<root>/**),Write(/<root>/**),Edit(/<user-home>/.futures-trading-harness/**),Write(/<user-home>/.futures-trading-harness/**),Edit(/<user-home>/.<name-ad45f8>-mcp/journal.jsonl),Write(/<user-home>/.<name-ad45f8>-mcp/journal.jsonl),Edit(/<user-home>/.claude/**),Write(/<user-home>/.claude/**)"]
+head file sha256: 7eb3dd9569d4ceda8d63dcd9376e22a8f53221e8147f91b9781e90f068307bb4
 env:
   CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
   CLAUDE_CODE_PROMPT_CACHE_TTL=5m
@@ -248,7 +248,7 @@ env:
   FTH_CYCLE_DESK=market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager
   FTH_CYCLE_TRANSCRIPT=<home>/logs/cycle-transcript-<pid>-<rand>.jsonl
   FTH_EARLY_CLOSE_DATES=2026-11-27,2026-12-24,2027-11-26
-  FTH_HEAD_PROMPT={"harness":"claude","config":"<home>/head-prompt/claude-head-99c4a4d4afde3825c0b2011fb0c897009d34e62d2395e26a637540c16d4574e3.md","sha256":"99c4a4d4afde3825c0b2011fb0c897009d34e62d2395e26a637540c16d4574e3","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"],"cycle":"<cycle>"}
+  FTH_HEAD_PROMPT={"harness":"claude","config":"<home>/head-prompt/claude-head-7eb3dd9569d4ceda8d63dcd9376e22a8f53221e8147f91b9781e90f068307bb4.md","sha256":"7eb3dd9569d4ceda8d63dcd9376e22a8f53221e8147f91b9781e90f068307bb4","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"],"cycle":"<cycle>"}
   FTH_HOME=<home>
   FTH_ROLE_SKILLS=full
   FTH_ROOT=<root>
@@ -298,8 +298,8 @@ Phase 1: flat, budget 2 trades
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 the run's prompt is the runner's: true
 the cycle log's prompt is the runner's: true
-argv: ["claude","-p","<prompt>","--plugin-dir","<root>","--append-system-prompt-file","<home>/head-prompt/claude-head-99c4a4d4afde3825c0b2011fb0c897009d34e62d2395e26a637540c16d4574e3.md","--output-format","stream-json","--verbose","--permission-mode","dontAsk","--allowedTools","mcp__broker,mcp__harness,Skill,Agent,WebSearch,WebFetch(domain:bls.gov),WebFetch(domain:bea.gov),WebFetch(domain:federalreserve.gov),WebFetch(domain:eia.gov),WebFetch(domain:treasurydirect.gov),WebFetch(domain:cmegroup.com),WebFetch(domain:census.gov),WebFetch(domain:dol.gov),Read(/<root>/**),Read(/<home>/bars/**),Read(/<home>/logs/**),Read(/<home>/bars-scratch/**),Bash(node <root>/scripts/strategies.js:*),Bash(node <root>/scripts/market-snapshot.js:*),Bash(node <root>/scripts/mtf.js:*),Bash(node <root>/scripts/blackouts.js:*),Bash(node <root>/scripts/bars.js:*),Bash(node <root>/scripts/reconcile.js:*),Bash(node <root>/scripts/lessons.js:*),Bash(node <root>/scripts/combine.js status:*)","--disallowedTools","SendMessage,ListAgents,Edit(/<home>/**),Write(/<home>/**),Read(//proc/**),Read(/<user-home>/.claude/**),Read(/<user-home>/.claude.json),Read(/<user-home>/.qwen/**),Read(/<user-home>/.codex/**),Read(/<user-home>/.ssh/**),Read(/<root>/**/.env),Read(/<user-home>/.futures-trading-harness/.env),Read(/<home>/.env),Edit(/<root>/**),Write(/<root>/**),Edit(/<user-home>/.futures-trading-harness/**),Write(/<user-home>/.futures-trading-harness/**),Edit(/<user-home>/.<name-ad45f8>-mcp/journal.jsonl),Write(/<user-home>/.<name-ad45f8>-mcp/journal.jsonl),Edit(/<user-home>/.claude/**),Write(/<user-home>/.claude/**)"]
-head file sha256: 99c4a4d4afde3825c0b2011fb0c897009d34e62d2395e26a637540c16d4574e3
+argv: ["claude","-p","<prompt>","--plugin-dir","<root>","--append-system-prompt-file","<home>/head-prompt/claude-head-7eb3dd9569d4ceda8d63dcd9376e22a8f53221e8147f91b9781e90f068307bb4.md","--output-format","stream-json","--verbose","--permission-mode","dontAsk","--allowedTools","mcp__broker,mcp__harness,Skill,Agent,WebSearch,WebFetch(domain:bls.gov),WebFetch(domain:bea.gov),WebFetch(domain:federalreserve.gov),WebFetch(domain:eia.gov),WebFetch(domain:treasurydirect.gov),WebFetch(domain:cmegroup.com),WebFetch(domain:census.gov),WebFetch(domain:dol.gov),Read(/<root>/**),Read(/<home>/bars/**),Read(/<home>/logs/**),Read(/<home>/bars-scratch/**),Bash(node <root>/scripts/strategies.js:*),Bash(node <root>/scripts/market-snapshot.js:*),Bash(node <root>/scripts/mtf.js:*),Bash(node <root>/scripts/blackouts.js:*),Bash(node <root>/scripts/bars.js:*),Bash(node <root>/scripts/reconcile.js:*),Bash(node <root>/scripts/lessons.js:*),Bash(node <root>/scripts/combine.js status:*)","--disallowedTools","SendMessage,ListAgents,Edit(/<home>/**),Write(/<home>/**),Read(//proc/**),Read(/<user-home>/.claude/**),Read(/<user-home>/.claude.json),Read(/<user-home>/.qwen/**),Read(/<user-home>/.codex/**),Read(/<user-home>/.ssh/**),Read(/<root>/**/.env),Read(/<user-home>/.futures-trading-harness/.env),Read(/<home>/.env),Edit(/<root>/**),Write(/<root>/**),Edit(/<user-home>/.futures-trading-harness/**),Write(/<user-home>/.futures-trading-harness/**),Edit(/<user-home>/.<name-ad45f8>-mcp/journal.jsonl),Write(/<user-home>/.<name-ad45f8>-mcp/journal.jsonl),Edit(/<user-home>/.claude/**),Write(/<user-home>/.claude/**)"]
+head file sha256: 7eb3dd9569d4ceda8d63dcd9376e22a8f53221e8147f91b9781e90f068307bb4
 env:
   CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
   CLAUDE_CODE_PROMPT_CACHE_TTL=5m
@@ -312,7 +312,7 @@ env:
   FTH_CYCLE_ROLES=/roles/r.json
   FTH_CYCLE_TRANSCRIPT=<home>/logs/cycle-transcript-<pid>-<rand>.jsonl
   FTH_EARLY_CLOSE_DATES=2026-11-27,2026-12-24,2027-11-26
-  FTH_HEAD_PROMPT={"harness":"claude","config":"<home>/head-prompt/claude-head-99c4a4d4afde3825c0b2011fb0c897009d34e62d2395e26a637540c16d4574e3.md","sha256":"99c4a4d4afde3825c0b2011fb0c897009d34e62d2395e26a637540c16d4574e3","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"],"cycle":"<cycle>"}
+  FTH_HEAD_PROMPT={"harness":"claude","config":"<home>/head-prompt/claude-head-7eb3dd9569d4ceda8d63dcd9376e22a8f53221e8147f91b9781e90f068307bb4.md","sha256":"7eb3dd9569d4ceda8d63dcd9376e22a8f53221e8147f91b9781e90f068307bb4","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"],"cycle":"<cycle>"}
   FTH_HOME=<home>
   FTH_ROLE_SKILLS=full
   FTH_ROOT=<root>
@@ -362,8 +362,8 @@ Phase 1: flat, budget 2 trades
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 the run's prompt is the runner's: true
 the cycle log's prompt is the runner's: true
-argv: ["claude","-p","<prompt>","--plugin-dir","<root>","--append-system-prompt-file","<home>/head-prompt/claude-head-99c4a4d4afde3825c0b2011fb0c897009d34e62d2395e26a637540c16d4574e3.md","--output-format","stream-json","--verbose","--permission-mode","dontAsk","--allowedTools","mcp__broker,mcp__harness,Skill,Agent,WebSearch,WebFetch(domain:bls.gov),WebFetch(domain:bea.gov),WebFetch(domain:federalreserve.gov),WebFetch(domain:eia.gov),WebFetch(domain:treasurydirect.gov),WebFetch(domain:cmegroup.com),WebFetch(domain:census.gov),WebFetch(domain:dol.gov),Read(/<root>/**),Read(/<home>/bars/**),Read(/<home>/logs/**),Read(/<home>/bars-scratch/**),Bash(node <root>/scripts/strategies.js:*),Bash(node <root>/scripts/market-snapshot.js:*),Bash(node <root>/scripts/mtf.js:*),Bash(node <root>/scripts/blackouts.js:*),Bash(node <root>/scripts/bars.js:*),Bash(node <root>/scripts/reconcile.js:*),Bash(node <root>/scripts/lessons.js:*),Bash(node <root>/scripts/combine.js status:*)","--disallowedTools","SendMessage,ListAgents,Edit(/<home>/**),Write(/<home>/**),Read(//proc/**),Read(/<user-home>/.claude/**),Read(/<user-home>/.claude.json),Read(/<user-home>/.qwen/**),Read(/<user-home>/.codex/**),Read(/<user-home>/.ssh/**),Read(/<root>/**/.env),Read(/<user-home>/.futures-trading-harness/.env),Read(/<home>/.env),Edit(/<root>/**),Write(/<root>/**),Edit(/<user-home>/.futures-trading-harness/**),Write(/<user-home>/.futures-trading-harness/**),Edit(/<user-home>/.<name-ad45f8>-mcp/journal.jsonl),Write(/<user-home>/.<name-ad45f8>-mcp/journal.jsonl),Edit(/<user-home>/.claude/**),Write(/<user-home>/.claude/**)"]
-head file sha256: 99c4a4d4afde3825c0b2011fb0c897009d34e62d2395e26a637540c16d4574e3
+argv: ["claude","-p","<prompt>","--plugin-dir","<root>","--append-system-prompt-file","<home>/head-prompt/claude-head-7eb3dd9569d4ceda8d63dcd9376e22a8f53221e8147f91b9781e90f068307bb4.md","--output-format","stream-json","--verbose","--permission-mode","dontAsk","--allowedTools","mcp__broker,mcp__harness,Skill,Agent,WebSearch,WebFetch(domain:bls.gov),WebFetch(domain:bea.gov),WebFetch(domain:federalreserve.gov),WebFetch(domain:eia.gov),WebFetch(domain:treasurydirect.gov),WebFetch(domain:cmegroup.com),WebFetch(domain:census.gov),WebFetch(domain:dol.gov),Read(/<root>/**),Read(/<home>/bars/**),Read(/<home>/logs/**),Read(/<home>/bars-scratch/**),Bash(node <root>/scripts/strategies.js:*),Bash(node <root>/scripts/market-snapshot.js:*),Bash(node <root>/scripts/mtf.js:*),Bash(node <root>/scripts/blackouts.js:*),Bash(node <root>/scripts/bars.js:*),Bash(node <root>/scripts/reconcile.js:*),Bash(node <root>/scripts/lessons.js:*),Bash(node <root>/scripts/combine.js status:*)","--disallowedTools","SendMessage,ListAgents,Edit(/<home>/**),Write(/<home>/**),Read(//proc/**),Read(/<user-home>/.claude/**),Read(/<user-home>/.claude.json),Read(/<user-home>/.qwen/**),Read(/<user-home>/.codex/**),Read(/<user-home>/.ssh/**),Read(/<root>/**/.env),Read(/<user-home>/.futures-trading-harness/.env),Read(/<home>/.env),Edit(/<root>/**),Write(/<root>/**),Edit(/<user-home>/.futures-trading-harness/**),Write(/<user-home>/.futures-trading-harness/**),Edit(/<user-home>/.<name-ad45f8>-mcp/journal.jsonl),Write(/<user-home>/.<name-ad45f8>-mcp/journal.jsonl),Edit(/<user-home>/.claude/**),Write(/<user-home>/.claude/**)"]
+head file sha256: 7eb3dd9569d4ceda8d63dcd9376e22a8f53221e8147f91b9781e90f068307bb4
 env:
   CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
   CLAUDE_CODE_PROMPT_CACHE_TTL=5m
@@ -376,7 +376,7 @@ env:
   FTH_CYCLE_ROLES=/roles/r.json
   FTH_CYCLE_TRANSCRIPT=<home>/logs/cycle-transcript-<pid>-<rand>.jsonl
   FTH_EARLY_CLOSE_DATES=2026-11-27,2026-12-24,2027-11-26
-  FTH_HEAD_PROMPT={"harness":"claude","config":"<home>/head-prompt/claude-head-99c4a4d4afde3825c0b2011fb0c897009d34e62d2395e26a637540c16d4574e3.md","sha256":"99c4a4d4afde3825c0b2011fb0c897009d34e62d2395e26a637540c16d4574e3","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"],"cycle":"<cycle>"}
+  FTH_HEAD_PROMPT={"harness":"claude","config":"<home>/head-prompt/claude-head-7eb3dd9569d4ceda8d63dcd9376e22a8f53221e8147f91b9781e90f068307bb4.md","sha256":"7eb3dd9569d4ceda8d63dcd9376e22a8f53221e8147f91b9781e90f068307bb4","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"],"cycle":"<cycle>"}
   FTH_HOME=<home>
   FTH_ROLE_SKILLS=full
   FTH_ROOT=<root>
@@ -409,8 +409,8 @@ prompt (sha256 598f2185464b321a16c44b0126fbf2ac5fee85d01763efe3d92bd8a31656bb1e,
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 the run's prompt is the runner's: true
 the cycle log's prompt is the runner's: true
-argv: ["claude","-p","<prompt>","--plugin-dir","<root>","--append-system-prompt-file","<home>/head-prompt/claude-head-99c4a4d4afde3825c0b2011fb0c897009d34e62d2395e26a637540c16d4574e3.md","--output-format","stream-json","--verbose","--permission-mode","dontAsk","--allowedTools","mcp__broker,mcp__harness,Skill,Agent,WebSearch,WebFetch(domain:bls.gov),WebFetch(domain:bea.gov),WebFetch(domain:federalreserve.gov),WebFetch(domain:eia.gov),WebFetch(domain:treasurydirect.gov),WebFetch(domain:cmegroup.com),WebFetch(domain:census.gov),WebFetch(domain:dol.gov),Read(/<root>/**),Read(/<home>/bars/**),Read(/<home>/logs/**),Read(/<home>/bars-scratch/**),Bash(node <root>/scripts/strategies.js:*),Bash(node <root>/scripts/market-snapshot.js:*),Bash(node <root>/scripts/mtf.js:*),Bash(node <root>/scripts/blackouts.js:*),Bash(node <root>/scripts/bars.js:*),Bash(node <root>/scripts/reconcile.js:*),Bash(node <root>/scripts/lessons.js:*),Bash(node <root>/scripts/combine.js status:*)","--disallowedTools","SendMessage,ListAgents,Edit(/<home>/**),Write(/<home>/**),Read(//proc/**),Read(/<user-home>/.claude/**),Read(/<user-home>/.claude.json),Read(/<user-home>/.qwen/**),Read(/<user-home>/.codex/**),Read(/<user-home>/.ssh/**),Read(/<root>/**/.env),Read(/<user-home>/.futures-trading-harness/.env),Read(/<home>/.env),Edit(/<root>/**),Write(/<root>/**),Edit(/<user-home>/.futures-trading-harness/**),Write(/<user-home>/.futures-trading-harness/**),Edit(/<user-home>/.<name-ad45f8>-mcp/journal.jsonl),Write(/<user-home>/.<name-ad45f8>-mcp/journal.jsonl),Edit(/<user-home>/.claude/**),Write(/<user-home>/.claude/**)"]
-head file sha256: 99c4a4d4afde3825c0b2011fb0c897009d34e62d2395e26a637540c16d4574e3
+argv: ["claude","-p","<prompt>","--plugin-dir","<root>","--append-system-prompt-file","<home>/head-prompt/claude-head-7eb3dd9569d4ceda8d63dcd9376e22a8f53221e8147f91b9781e90f068307bb4.md","--output-format","stream-json","--verbose","--permission-mode","dontAsk","--allowedTools","mcp__broker,mcp__harness,Skill,Agent,WebSearch,WebFetch(domain:bls.gov),WebFetch(domain:bea.gov),WebFetch(domain:federalreserve.gov),WebFetch(domain:eia.gov),WebFetch(domain:treasurydirect.gov),WebFetch(domain:cmegroup.com),WebFetch(domain:census.gov),WebFetch(domain:dol.gov),Read(/<root>/**),Read(/<home>/bars/**),Read(/<home>/logs/**),Read(/<home>/bars-scratch/**),Bash(node <root>/scripts/strategies.js:*),Bash(node <root>/scripts/market-snapshot.js:*),Bash(node <root>/scripts/mtf.js:*),Bash(node <root>/scripts/blackouts.js:*),Bash(node <root>/scripts/bars.js:*),Bash(node <root>/scripts/reconcile.js:*),Bash(node <root>/scripts/lessons.js:*),Bash(node <root>/scripts/combine.js status:*)","--disallowedTools","SendMessage,ListAgents,Edit(/<home>/**),Write(/<home>/**),Read(//proc/**),Read(/<user-home>/.claude/**),Read(/<user-home>/.claude.json),Read(/<user-home>/.qwen/**),Read(/<user-home>/.codex/**),Read(/<user-home>/.ssh/**),Read(/<root>/**/.env),Read(/<user-home>/.futures-trading-harness/.env),Read(/<home>/.env),Edit(/<root>/**),Write(/<root>/**),Edit(/<user-home>/.futures-trading-harness/**),Write(/<user-home>/.futures-trading-harness/**),Edit(/<user-home>/.<name-ad45f8>-mcp/journal.jsonl),Write(/<user-home>/.<name-ad45f8>-mcp/journal.jsonl),Edit(/<user-home>/.claude/**),Write(/<user-home>/.claude/**)"]
+head file sha256: 7eb3dd9569d4ceda8d63dcd9376e22a8f53221e8147f91b9781e90f068307bb4
 env:
   CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
   CLAUDE_CODE_PROMPT_CACHE_TTL=5m
@@ -424,7 +424,7 @@ env:
   FTH_CYCLE_LANE_BARS={"MNQ":{"1":"2026-10-07T14:29:00.000Z","3":"2026-10-07T14:27:00.000Z"}}
   FTH_CYCLE_TRANSCRIPT=<home>/logs/cycle-transcript-<pid>-<rand>.jsonl
   FTH_EARLY_CLOSE_DATES=2026-11-27,2026-12-24,2027-11-26
-  FTH_HEAD_PROMPT={"harness":"claude","config":"<home>/head-prompt/claude-head-99c4a4d4afde3825c0b2011fb0c897009d34e62d2395e26a637540c16d4574e3.md","sha256":"99c4a4d4afde3825c0b2011fb0c897009d34e62d2395e26a637540c16d4574e3","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"],"cycle":"<cycle>"}
+  FTH_HEAD_PROMPT={"harness":"claude","config":"<home>/head-prompt/claude-head-7eb3dd9569d4ceda8d63dcd9376e22a8f53221e8147f91b9781e90f068307bb4.md","sha256":"7eb3dd9569d4ceda8d63dcd9376e22a8f53221e8147f91b9781e90f068307bb4","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"],"cycle":"<cycle>"}
   FTH_HOME=<home>
   FTH_ROLE_SKILLS=full
   FTH_ROOT=<root>
@@ -433,7 +433,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","lanes":["3m","1m"],"cycleBars":{"MNQ":"2026-10-07T14:27:00.000Z"},"symbols":[{"symbol":"MNQ","lane":"3m","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}},{"symbol":"MNQ","lane":"1m","bar":{"t":"2026-10-07T14:29:00.000Z","contractId":"MNQ","file":"/bars/MNQ-1m.json"}}],"cachedRoles":[]}
 === opencode: trade ===
-prompt (sha256 ad367081fa4f231e80baf4e430b2fed397c7fe83d5bb0abcd9bf54286f5e2824, 1937 chars, of its neutral text):
+prompt (sha256 044f0e50dc98bcbc97b5ee655e8a9c9e9d0e1c421a382e984d64f4f87eec91b7, 1954 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -447,7 +447,7 @@ prompt (sha256 ad367081fa4f231e80baf4e430b2fed397c7fe83d5bb0abcd9bf54286f5e2824,
   End of day: the runner flattens every position at 15:50 ET (in 320 min); a trade must have room to work before then.
   Account 7 at 10:30 ET: balance $50,000; flat; 0 working orders.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
-  Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
+  With your skill tool, load trade-session, multi-timeframe-analysis, and trade-lifecycle (the order gate refuses an entry without them); also load htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context before deciding, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
   End with the cycle result as plain text in your final message, never as a tool call.
@@ -466,7 +466,7 @@ env:
   FTH_CYCLE_TRANSCRIPT=<home>/logs/cycle-transcript-<pid>-<rand>.jsonl
   FTH_DENIED_ROLES=strategy-researcher
   FTH_EARLY_CLOSE_DATES=2026-11-27,2026-12-24,2027-11-26
-  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"eb5f35c5a14eb25b473fed97cfa6a815684c5d69ba9fcc6758d3000644f23ab5","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
+  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"a412d979e8cd24babe854caf522149546631e217fe996192a61f34d47dc64db5","skills":["trade-session","multi-timeframe-analysis","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
   FTH_HOME=<home>
   FTH_ROLE_SKILLS=index
   FTH_ROOT=<root>
@@ -482,7 +482,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[]}
 === opencode: managed ===
-prompt (sha256 b01e4e414e8b415929d361e9c9d34b1c0bd23fb27515e5f374b903b82c06c8f2, 3397 chars, of its neutral text):
+prompt (sha256 896789d9d0a90e2d2f1aa90fd76d24c04848afe30806fd97caacfaa0a6938f09, 3414 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -496,7 +496,7 @@ prompt (sha256 b01e4e414e8b415929d361e9c9d34b1c0bd23fb27515e5f374b903b82c06c8f2,
   End of day: the runner flattens every position at 15:50 ET (in 320 min); a trade must have room to work before then.
   Account 7 at 10:30 ET: balance $50,000; open: MNQ long 1 @ 27410; 1 working order.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
-  Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
+  With your skill tool, load trade-session, multi-timeframe-analysis, and trade-lifecycle (the order gate refuses an entry without them); also load htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context before deciding, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   This cycle started with a position or working order open: it manages them, and the desk's reports for this bar are below (the runner ran the desk, or its report cache served it).
   Don't launch the analysts or the risk-manager this cycle, and send no new entry, added size or reversal (the order gate refuses an entry this cycle); a new entry waits for a cycle that starts flat.
@@ -536,7 +536,7 @@ env:
   FTH_CYCLE_TRANSCRIPT=<home>/logs/cycle-transcript-<pid>-<rand>.jsonl
   FTH_DENIED_ROLES=strategy-researcher,market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst
   FTH_EARLY_CLOSE_DATES=2026-11-27,2026-12-24,2027-11-26
-  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"eb5f35c5a14eb25b473fed97cfa6a815684c5d69ba9fcc6758d3000644f23ab5","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
+  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"a412d979e8cd24babe854caf522149546631e217fe996192a61f34d47dc64db5","skills":["trade-session","multi-timeframe-analysis","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
   FTH_HOME=<home>
   FTH_ROLE_SKILLS=index
   FTH_ROOT=<root>
@@ -552,7 +552,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","manage":true,"symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[],"runnerRoles":["market-structure-analyst","trend-momentum-analyst","volume-liquidity-analyst","risk-manager"],"rolesFile":"/roles/r.json"}
 === opencode: entry ===
-prompt (sha256 839daf031cf2848b8435c195726df2ae2be211ffc60d3bae99f256fe6ef48d57, 3440 chars, of its neutral text):
+prompt (sha256 130a1dd1f4f333d6c6498f6defab0f7971dd34f4000583865fc9f27598640b55, 3457 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -566,7 +566,7 @@ prompt (sha256 839daf031cf2848b8435c195726df2ae2be211ffc60d3bae99f256fe6ef48d57,
   End of day: the runner flattens every position at 15:50 ET (in 320 min); a trade must have room to work before then.
   Account 7 at 10:30 ET: balance $50,000; flat; 0 working orders.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
-  Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
+  With your skill tool, load trade-session, multi-timeframe-analysis, and trade-lifecycle (the order gate refuses an entry without them); also load htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context before deciding, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   The runner runs this cycle's entry (the desk's reports are below): to trade, call compose_check with your reads and size; when it says OK, end with CYCLE RESULT: planned - <setup> <side> <size> (the trade-lifecycle skill).
   The runner then runs risk-manager phase 2 on your compose record and, on its APPROVE, the trade-executor with the order built from it, and writes the journal plan: don't launch risk-manager or the trade-executor, and don't write the plan (the harness refuses those launches this cycle).
@@ -606,7 +606,7 @@ env:
   FTH_CYCLE_TRANSCRIPT=<home>/logs/cycle-transcript-<pid>-<rand>.jsonl
   FTH_DENIED_ROLES=strategy-researcher,market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst
   FTH_EARLY_CLOSE_DATES=2026-11-27,2026-12-24,2027-11-26
-  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"eb5f35c5a14eb25b473fed97cfa6a815684c5d69ba9fcc6758d3000644f23ab5","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
+  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"a412d979e8cd24babe854caf522149546631e217fe996192a61f34d47dc64db5","skills":["trade-session","multi-timeframe-analysis","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
   FTH_HOME=<home>
   FTH_ROLE_SKILLS=index
   FTH_ROOT=<root>
@@ -622,7 +622,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","entry":true,"symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[],"runnerRoles":["market-structure-analyst","trend-momentum-analyst","volume-liquidity-analyst","risk-manager"],"rolesFile":"/roles/r.json"}
 === opencode: multi-lane ===
-prompt (sha256 373f3de07e4f897bc0ed8b958243c5cf0b831774ac09147a5b664b728b91bce7, 2394 chars, of its neutral text):
+prompt (sha256 15d463ef82da2f835adb6ff6f7f3ab246534cb1a521f3020e5425aaca9ef211a, 2411 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -639,7 +639,7 @@ prompt (sha256 373f3de07e4f897bc0ed8b958243c5cf0b831774ac09147a5b664b728b91bce7,
   End of day: the runner flattens every position at 15:50 ET (in 320 min); a trade must have room to work before then.
   Account 7 at 10:30 ET: balance $50,000; flat; 0 working orders.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
-  Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
+  With your skill tool, load trade-session, multi-timeframe-analysis, and trade-lifecycle (the order gate refuses an entry without them); also load htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context before deciding, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
   End with the cycle result as plain text in your final message, never as a tool call.
@@ -660,7 +660,7 @@ env:
   FTH_CYCLE_TRANSCRIPT=<home>/logs/cycle-transcript-<pid>-<rand>.jsonl
   FTH_DENIED_ROLES=strategy-researcher
   FTH_EARLY_CLOSE_DATES=2026-11-27,2026-12-24,2027-11-26
-  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"eb5f35c5a14eb25b473fed97cfa6a815684c5d69ba9fcc6758d3000644f23ab5","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
+  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"a412d979e8cd24babe854caf522149546631e217fe996192a61f34d47dc64db5","skills":["trade-session","multi-timeframe-analysis","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
   FTH_HOME=<home>
   FTH_ROLE_SKILLS=index
   FTH_ROOT=<root>

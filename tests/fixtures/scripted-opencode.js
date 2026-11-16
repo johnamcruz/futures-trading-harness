@@ -52,7 +52,8 @@ function stepsFor(script, bar, w) {
       { executor: [{ broker: 'place_order', args: ctx => ({ accountId: 7, contractId: 'MNQ', side, type: 'market', size: step.size === 'position' ? held(ctx) : step.size || 1, rationale: '[exit] the composed trade out' }) }] },
       // `review`: the trade's review journaled after it (its result and setup tags), as the head trader writes one.
       ...(step.review ? [{ broker: 'journal_add', args: { kind: 'review', contractId: 'MNQ', tags: [`result:${step.review.result}`, `setup:${step.review.setup}`, ...(step.review.r !== undefined ? [`r:${step.review.r}`] : [])], text: `${step.side} out: ${step.review.result}` } }] : []),
-      { result: 'CYCLE RESULT: managed - out' },
+      // The managed cycle's STOP line (manage-position: every managed cycle states one, here before the exit).
+      { result: 'CYCLE RESULT: managed - out\nSTOP hold: hold (out at market this cycle)' },
     ];
   }
   return [...D.roundSteps(w, { lookups: C.roleLookups(w) }), ...D.entryLoads(w).map(x => ({ load: x })), { result: `CYCLE RESULT: no-trade - ${step.why || 'pass'}` }];
