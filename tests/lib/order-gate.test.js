@@ -3322,6 +3322,22 @@ test('trade_lifecycle: scenario 1 goes (an active strategy); a paper copy of it 
   assert.match(r.violations[0].message, /status "paper"; only active strategies may place live entries/);
 });
 
+test('trade_lifecycle with a trigger stop (stop 3m bos): the gate takes the BOS\'s protected swing on the decision bar; a stale or broken trigger\'s record is refused; no trigger read needed for the other stop forms', () => {
+  const brk = over => ({ lastBreak: { last: { kind: 'BOS', direction: 'up', level: 21535, swingAt: '2026-10-07T13:30:00.000Z', at: LC.BAR, barsAgo: 0, protected: { side: 'low', level: 21529, at: '2026-10-07T13:45:00.000Z', brokenAt: null }, ...over }, previous: null } });
+  const reads = LC.READS.map(r => (r.step === 'stop' ? { ...r, read: 'stop 3m bos 21529', why: 'the 3m BOS up\'s protected low' } : r));
+  // The stop a tick beyond 21529 (21528.75): 11.50 points = 46 ticks from 21540.25.
+  const ord = LC.order({ stopLossBracket: { ticks: 46, type: 'stop' }, rationale: 'setup:trade_lifecycle long, the 15m rejection with the 1h trend, stop 21528.75, target 21598.00' });
+  const ok = lcEval(lcHome({ reads, b: LC.briefing({ m3: brk() }) }), ord);
+  assert.deepStrictEqual(ok.violations, [], JSON.stringify(ok.violations));
+  assert.strictEqual(ok.composed.stop, 21528.75);
+  for (const over of [{ barsAgo: 1 }, { protected: { side: 'low', level: 21529, brokenAt: LC.CLOSE } }, { kind: 'CHoCH' }]) {
+    const r = lcEval(lcHome({ reads, b: LC.briefing({ m3: brk(over) }) }), ord);
+    assert.ok(r.violations.some(v => v.check === 'composed-reads' || v.check === 'composed-record'), `${JSON.stringify(over)}: ${JSON.stringify(checks(r))}`);
+  }
+  // The shipped forms stand without any trigger read (no entry gate): scenario 1's `stop 15m low` goes.
+  assert.deepStrictEqual(lcEval(lcHome()).violations, []);
+});
+
 test('trade_lifecycle: phase 2\'s cut ([composed-reads], owner-approved 2026-10-22): record 8, phase 2 at 1, only 1 goes; phase 2 at or over the record\'s, only the record\'s; no phase 2, equality; exits unaffected', () => {
   // Record 8 at $55.50 a contract ($444): the registry's trade_lifecycle under a $1000 cap.
   const wide = LC_REGISTRY.map(x => (x.name === 'trade_lifecycle' ? { ...x, risk: { ...x.risk, max_risk_usd: 1000 } } : x));
