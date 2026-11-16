@@ -169,6 +169,11 @@ const CLASS_MAP = [
   // "qualifies as", "i.e.", "should be written as"), and "class <word>" after a colon.
   /\b(?:writes?|written as|sets?|puts?|turns?|treat(?:s|ed)? as|yields?|qualif(?:y|ies) as|i\.e\.,?)\s+(?:the\s+class\s+)?(?:to\s+|at\s+|as\s+)?`?(?:chop|unclear|trend-up|trend-down)`?(?![\w-])/i,
   /:\s*(?:no trend class;\s*write\s+|class\s+)`?(?:chop|unclear|trend-up|trend-down)`?(?![\w-])/i,
+  // Round 20c (the final review, item 8): "write class <word>" (no article), "is a chop market / day / session", and
+  // "sit out / skip / pass as <word>".
+  /\bwrites?\s+class\s+`?(?:chop|unclear|trend-up|trend-down)`?(?![\w-])/i,
+  /\b(?:is|are)\s+(?:a|an|the)\s+`?(?:chop|unclear)`?\s+(?:market|day|session|read|tape)\b/i,
+  /\b(?:sit(?:s|ting)?\s+out|skip(?:s|ped)?|pass(?:es)?|stand(?:s)?\s+aside)\s+as\s+(?:a\s+)?`?(?:chop|unclear)`?(?![\w-])/i,
 ];
 const ALLOWED = [
   // The table: the one authority (trade-session step 3). Round 19: the table alone, and each kept bullet sentence exactly
@@ -254,6 +259,12 @@ test('market state authority: the scan catches a competing row or sentence (it f
     'A 15m range qualifies as unclear.', 'A 15m transition, i.e. `unclear`.', 'A 15m range should be written as `unclear`.', 'A 15m transition: no trend class; write `unclear`.'])
     assert.ok(scanText(s).length > 0, s);
   for (const s of ['Mark the level on the chart.', 'The marked swing holds.', 'It labels the leg by its origin.', 'A 15m transition is a frame read; it feeds the setup.', 'The range, so far, holds.'])
+    assert.deepStrictEqual(scanText(s), [], s);
+  // Round 20c (the final review, item 8): the four phrasings it found the scan missed, and kin.
+  for (const s of ['When the frames disagree: write class unclear.', 'A 3m CHoCH pair is a chop market.', 'Two failed breaks and it is a chop day.', 'Overlap and failed breaks: sit out as chop.',
+    'The 15m range: write class `unclear`.', 'A CHoCH pair is the chop session.', 'Overlap: skip as `unclear`.'])
+    assert.ok(scanText(s).length > 0, s);
+  for (const s of ['Chop ends on displacement.', 'A range day is a trend day for the side.', 'Sit out.', 'Write the class the line prints.'])
     assert.deepStrictEqual(scanText(s), [], s);
   for (const row of ['| 15m range | `unclear`: no trade |', '| 15m range | class `unclear` |', '| 3m CHoCH pair | chop, sit out |']) assert.strictEqual(scanText(row).length, 1, row);
   // The restored #338 sentence is allowed exactly: a near-variant is not blanked, and the scan still catches it.

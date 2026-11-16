@@ -116,9 +116,9 @@ test('the line: one exact string per state, structure then momentum then behavio
   const tr = lay({ transition: true, structure: leg({ side: 'down', status: 'broken', legOK: false, level: 21437.5, flip: { barsAgo: 3, strong: true, disp: true, held: true, oldSide: 'up', oldLevel: 21380.5, byRule: 'close' } }), behavior: { ...lay().behavior, word: 'mixed', word15: 'overlapping' } });
   assert.strictEqual(line({ layers: tr }), 'Market state (3m): transition down: HL 21380.5 broken by a displaced close 9 min ago, the new leg unconfirmed; behavior mixed (overlap 0.52, efficiency 0.41), 15m overlapping; 4h+1h up; class unclear');
   const ch = lay({ chop: CHOP, structure: leg({ legOK: false }), behavior: { ...lay().behavior, word: 'failing', word15: 'overlapping', overlap: 0.74, eff: 0.09 } });
-  assert.strictEqual(line({ layers: ch, h4: 'range', soFar: { status: 'read', read: 'rotational', vwapCrosses: 7 } }), 'Market state (3m): chop: no leg holds (breaks both ways, a failed break); overlap 0.74, efficiency 0.09, failed continuation; 15m overlapping; Day so far rotational, RTH VWAP crosses 7; 4h range, 1h up (not aligned); class chop');
+  assert.strictEqual(line({ layers: ch, h4: 'range', soFar: { status: 'read', read: 'rotational', vwapCrosses: 7 } }), 'Market state (3m): chop: the up leg\'s last break failed, HL 21380.5 holds (breaks both ways, a failed break); overlap 0.74, efficiency 0.09, failed continuation; 15m overlapping; Day so far rotational, RTH VWAP crosses 7; 4h range, 1h up (not aligned); class chop');
   const rg = lay({ structure: leg({ legOK: false }), behavior: { ...lay().behavior, word: 'rotating' } });
-  assert.strictEqual(line({ layers: rg }), 'Market state (3m): range: no leg holds, edges 21402-21431.25 (travel edge to edge); overlap 0.52, efficiency 0.41, 15m trending up; 4h+1h up; class trend-up');
+  assert.strictEqual(line({ layers: rg }), 'Market state (3m): range: the up leg\'s last break failed, HL 21380.5 holds, edges 21402-21431.25 (travel edge to edge); overlap 0.52, efficiency 0.41, 15m trending up; 4h+1h up; class trend-up');
   assert.strictEqual(line({ layers: lay({ structure: null }) }), 'Market state (3m): forming (no RTH structure yet); 4h+1h up; class trend-up');
   assert.strictEqual(line({ layers: lay(), pullback: pb() }), 'Market state (3m): pullback (long leg 21361.25 -> 21437.5, depth 28%): 3m up leg, HL 21380.5 holds; overlap 0.52, efficiency 0.41, 15m trending up; 4h+1h up; class trend-up');
   assert.strictEqual(line({ layers: lay({ stale: true, structure: leg({ sinceProgress: 22 }) }) }), 'Market state (3m): rotation up: HL 21380.5 holds, no new high for 66 min; behavior trending (overlap 0.52, efficiency 0.41), 15m trending up; 4h+1h up; class unclear');
@@ -237,4 +237,70 @@ test('stateThresholds: the briefing\'s and the quiz\'s one set of thresholds fro
 test('the briefing\'s crosses threshold equals the recognition key\'s', () => {
   const { analysis } = require('../../scripts/lib/tunables');
   assert.strictEqual(analysis().regime.rangeCrosses, require('../../config/recognition.json').signals.crossesChop);
+});
+
+// Round 20c (the final review): the chop and range wording is true of the protected level (finding 2); a CHoCH then BOS
+// with the old level unbroken is a transition confirmed, never a reversal (finding 4); one 15m word per line (minor 7).
+test('round 20c: chop and range print "no leg holds" only when no protected level holds; else the leg\'s failed break and its level', () => {
+  const ch = lay({ chop: CHOP, structure: leg({ legOK: false }), behavior: { ...lay().behavior, word: 'failing', word15: 'overlapping', overlap: 0.74, eff: 0.09 } });
+  assert.match(line({ layers: ch }), /^Market state \(3m\): chop: the up leg's last break failed, HL 21380\.5 holds \(breaks both ways, a failed break\); overlap 0\.74, /);
+  const dn = lay({ chop: CHOP, structure: leg({ side: 'down', level: 21440.25, legOK: false }) });
+  assert.match(line({ layers: dn }), /: chop: the down leg's last break failed, LH 21440\.25 holds \(/);
+  const flip = { barsAgo: 2, strong: false, disp: false, held: true, oldSide: 'up', oldLevel: 21380.5, byRule: 'close' };
+  const gone = lay({ chop: CHOP, structure: leg({ status: 'broken', legOK: false, side: 'down', level: 21437.5, flip }) });
+  assert.match(line({ layers: gone }), /: chop: no leg holds \(breaks both ways, a failed break\); /, 'the protected level broken: no leg holds is true');
+  const rg = lay({ structure: leg({ legOK: false }), behavior: { ...lay().behavior, word: 'rotating' } });
+  assert.match(line({ layers: rg }), /^Market state \(3m\): range: the up leg's last break failed, HL 21380\.5 holds, edges 21402-21431\.25 /);
+  const brokenRange = lay({ structure: leg({ status: 'broken', legOK: false, side: 'down', level: 21437.5, flip }), behavior: { ...lay().behavior, word: 'mixed' } });
+  assert.match(line({ layers: brokenRange }), /: range: no leg holds, HL 21380\.5 broken 6 min ago, edges/);
+  for (const L of [ch, dn, rg]) assert.doesNotMatch(line({ layers: L }), /no leg holds/, 'an intact protected level: never "no leg holds"');
+  // A protected break the leg took back (a close back through within followBars: the leg resumed, its level holds) is
+  // named as failed beside "holds"; a held one stays "a protected break".
+  const back = { barsAgo: 4, strong: false, disp: false, held: false, oldSide: 'up', oldLevel: 21380.5, byRule: 'close' };
+  const tb = line({ layers: lay({ chop: { ...CHOP, evidence: { bothWays: false, flip: true, failed: true } }, structure: leg({ legOK: false, resumed: true, flip: back }) }) });
+  assert.match(tb, /: chop: the up leg's last break failed, HL 21380\.5 holds \(a failed protected break, a failed break\); /, tb);
+  const kept = line({ layers: lay({ chop: { ...CHOP, evidence: { bothWays: false, flip: true, failed: false } }, structure: leg({ status: 'broken', legOK: false, side: 'down', level: 21437.5, flip: { ...back, held: true } }) }) });
+  assert.match(kept, /: chop: no leg holds \(a protected break\); /, kept);
+  const cbFlip = line({ layers: lay({ chop: { ...CHOP, evidence: { bothWays: true, flip: true, failed: true } }, structure: leg({ legOK: false, flip: { ...back, held: true, byRule: 'choch-bos', oldSide: 'down', oldLevel: 21450 } }) }) });
+  assert.match(cbFlip, /holds \(breaks both ways, CHoCH then BOS, a failed break\); /, `a CHoCH then BOS breaks no protected level: ${cbFlip}`);
+  // The chop memory on a re-established leg that has not made a new extreme yet (item 1 ends it only at a fresh extreme):
+  // its last break held, so "failed" would be false too.
+  const held = lay({ chop: { ...CHOP, now: false, S: false }, structure: leg({ side: 'down', level: 21440.25, legOK: true, sinceProgress: 2 }) });
+  const t = line({ layers: held });
+  assert.match(t, /: chop: the down leg's last break held, no new low since, LH 21440\.25 holds \(/, t);
+  assert.doesNotMatch(t, /no leg holds|break failed/, t);
+});
+
+test('round 20c: a CHoCH then BOS with the old protected level unbroken prints "CHoCH then BOS: transition confirmed", never "reversal confirmed"; the class unchanged', () => {
+  const way = { kind: 'BOS', direction: 'up', level: 21412.25, barsAgo: 2, strong: true, failed: false };
+  const cb = o => lay({ reversal: true, structure: leg({ lastWay: way, flip: { barsAgo: 2, strong: false, disp: false, held: true, oldSide: 'down', oldLevel: 21450, byRule: 'choch-bos', ...o } }) });
+  const t = line({ layers: cb({ oldBroken: false }) });
+  assert.match(t, /HL 21380\.5 holds, BOS up 6 min ago \(displaced\), CHoCH then BOS: transition confirmed;/, t);
+  assert.doesNotMatch(t, /reversal confirmed/);
+  assert.strictEqual(word({ layers: cb({ oldBroken: false }) }), 'trend-up', 'the class unchanged');
+  const later = lay({ reversal: true, structure: leg({ lastWay: { ...way, barsAgo: 1 }, flip: { barsAgo: 5, strong: false, disp: false, held: true, oldSide: 'down', oldLevel: 21450, byRule: 'choch-bos', oldBroken: false } }) });
+  assert.match(line({ layers: later }), /, CHoCH then BOS: transition confirmed;/, 'after the BOS bar, the level still unbroken: still a transition');
+  assert.doesNotMatch(line({ layers: later }), /reversal confirmed/);
+  const thru = line({ layers: cb({ oldBroken: true }) });
+  assert.match(thru, /, CHoCH then BOS, reversal confirmed;/, 'the old level closed through since: a reversal');
+  const noRev = lay({ reversal: false, structure: leg({ lastWay: way, flip: { barsAgo: 2, strong: false, disp: false, held: true, oldSide: 'down', oldLevel: 21450, byRule: 'choch-bos', oldBroken: false } }) });
+  assert.match(line({ layers: noRev }), /, CHoCH then BOS: transition confirmed;/);
+  const byClose = lay({ reversal: true, structure: leg({ flip: { barsAgo: 6, strong: true, disp: true, held: true, oldSide: 'down', oldLevel: 21420, byRule: 'close' } }) });
+  assert.match(line({ layers: byClose }), /, reversal confirmed;/, 'a close through the level: a reversal');
+});
+
+test('round 20c: one 15m word per line: under the early read the behavior\'s 15m word drops (the early clause names the 15m)', () => {
+  const m = { ...lay().momentum };
+  const early = { layers: lay({ momentum: m, structure: leg({ side: 'down', level: 21440.25, lastWay: { kind: 'BOS', direction: 'down', level: 21400, barsAgo: 2, strong: false, failed: false } }), behavior: { ...lay().behavior, word: 'overlapping', word15: 'trending down' } }), m15: 'up' };
+  const s = S(early);
+  assert.strictEqual(s.early, true);
+  const l = M.marketStateLine(s);
+  assert.match(l, /; 15m up: a pullback in the 15m trend; /, l);
+  assert.strictEqual(l.split('15m ').length, 3, `${l}: the 15m named once, in the early clause ("15m up" and "the 15m trend")`);
+  assert.doesNotMatch(l, /15m trending down/);
+  assert.match(line({ layers: lay() }), /, 15m trending up; /, 'no early read: the behavior\'s 15m word prints');
+  // Over the budget the behavior numbers still drop when no 15m word follows them (the cut keys on the clause, not the word).
+  const cut = M.marketStateLine(M.stateOf(b(early), { ...TH, lineBytes: 50 }));
+  assert.doesNotMatch(cut, /overlap|efficiency/, cut);
+  assert.match(cut, /: a pullback in the 15m trend; 4h\+1h up; class trend-up$/, cut);
 });

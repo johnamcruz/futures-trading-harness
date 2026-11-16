@@ -86,6 +86,20 @@ test('the machine: inside an intact leg a CHoCH against then a BOS the same way 
   assert.ok(failed.slice(FROM).every(s => !s || s.side === 'up'), 'a failed CHoCH confirms nothing');
 });
 
+test('the machine (round 20c, item 4): a CHoCH-then-BOS flip keeps the old protected level unbroken (oldBroken false) until a close goes through it', () => {
+  const f = setup(CHOCH_BOS).series[39];
+  assert.deepStrictEqual([f.flip.byRule, f.flip.oldLevel, f.flip.oldBroken], ['choch-bos', 103, false], 'the BOS down at 109: the HL 103 unbroken');
+  const later = setup([...CHOCH_BOS, 105, 101, 99]).series;
+  assert.strictEqual(later[41].flip.oldBroken, false, 'a close at 105: still above 103');
+  assert.strictEqual(later[42].flip.oldBroken, true, 'a close at 101 through 103');
+  assert.strictEqual(later[43].flip.oldBroken, true, 'once broken, broken');
+  const tie = setup([...CHOCH_BOS, 105, 102.9]);
+  assert.ok(0.1 < P.equalAtr * tie.atr[42], `the tie tolerance ${P.equalAtr * tie.atr[42]} covers a 0.1 close under 103`);
+  assert.strictEqual(tie.series[42].flip.oldBroken, false, 'a close 0.1 under 103, within the tie (decision 8): not broken');
+  const close = setup(BREAK).series[31];
+  assert.deepStrictEqual([close.flip.byRule, close.flip.oldBroken], ['close', true], 'a close-through flip: broken by definition');
+});
+
 test('the machine is causal: the snapshot at bar k from bars[0..k] equals the one inside the longer run', () => {
   for (const cs of [UP, BREAK, CHOCH_BOS]) {
     const full = setup(cs);

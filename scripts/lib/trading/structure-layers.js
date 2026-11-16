@@ -14,16 +14,18 @@
  *   structureSeries(bars, breaks, from, atr, p)   the protected machine, one snapshot per bar index from `from` (an array
  *                     indexed by bar; null before the first RTH break). The leg's protected level is the origin of the
  *                     move that made its last break its way (protectedOf, decision 2); a close through it by more than
- *                     equalAtr x ATR(14) is the ONLY invalidation (a tie is not a break, decision 8). Inside an intact leg
- *                     a k=2 break against followed by a second break the same way, the first not failed by the second's
- *                     bar (the owner's CHoCH then BOS) is the transition confirmed: a flip at the BOS bar, the new leg
- *                     intact from it (`byRule` 'choch-bos'). After a close-through the new side is `broken`
+ *                     equalAtr x ATR(14) is the only invalidation of the leg (a tie is not a break, decision 8). Inside
+ *                     an intact leg a k=2 break against followed by a second break the same way, the first not failed by
+ *                     the second's bar (the owner's CHoCH then BOS), confirms a transition without invalidating the level:
+ *                     the read moves to the new leg at the BOS bar (a flip, `byRule` 'choch-bos', the new leg intact from
+ *                     it), the old level kept as `flip.oldLevel`, `flip.oldBroken` false until a close goes through it
+ *                     (the owner's table: CHoCH then BOS, a confirmed transition). After a close-through the new side is `broken`
  *                     (unconfirmed) until a break its way confirms it; a break the old way, or a close back through the
  *                     old level within followBars, hands the leg back. Snapshot: { side, level, origin, status, legOK
  *                     (intact and a break its way not failed), sinceProgress (bars since a new extreme by close),
  *                     internal, lastInternal (the last break against: { direction, level, barsAgo }), lastWay (the last
  *                     break its way: { kind, direction, level, barsAgo, strong }), resumed, flip { barsAgo, strong,
- *                     disp (its candle or one within dispBars strong the new way), held, oldSide, oldLevel, byRule }, flipsIn }
+ *                     disp (its candle or one within dispBars strong the new way), held, oldSide, oldLevel, byRule, oldBroken }, flipsIn }
  *   momentumAt(bars, breaks, snap, z, from, atr, p)   the momentum condition around an intact leg (the owner: "Displacement
  *                     detects emerging pressure. Failed continuation detects loss of directional control."):
  *                     dispAgainst (a strong candle against the leg in the last pressBars RTH bars), breakAgainst (a k=2
@@ -95,7 +97,7 @@ function structureSeries(bars, breaks, from, atr, p) {
         if (flips.length) flips[flips.length - 1].failed = true;
         lastAgainst = null;
       } else if (lastAgainst && lastAgainst.direction === b.direction && !failedAt(bars, lastAgainst, i, p)) {
-        // The owner's CHoCH then BOS the same way against the leg: the transition confirmed at the BOS bar.
+        // The owner's CHoCH then BOS the same way against the leg: a transition confirmed at the BOS bar (the level unbroken).
         const flip = { i, oldSide: P.side, oldLevel: P.level, oldOrigin: P.origin, strong: strongCandle(bars[i], bars[i - 1], sgn(b.direction), atr[i - 1]).strong, failed: false, old: P, byRule: 'choch-bos' };
         flips.push(flip);
         P = { ...leg(b, i), origin: extremeOf(P.side, P.legStart, i), legStart: lastAgainst.i, flipAt: i, flip };
@@ -128,6 +130,10 @@ function snapshot(bars, P, flips, lastWay, z, atr, p) {
   const f = flips[flips.length - 1] || null;
   let disp = false;
   if (f) for (let j = f.i; j <= Math.min(z, f.i + p.dispBars); j += 1) if (strongCandle(bars[j], bars[j - 1], -sgn(f.oldSide), atr[j - 1]).strong) disp = true;
+  // The old protected level after a flip: broken once a close went through it past the tie (a close-through flip by
+  // definition); a CHoCH-then-BOS flip leaves it unbroken until then (round 20c: a transition confirmed, not a reversal).
+  let oldBroken = Boolean(f && f.byRule === 'close');
+  if (f && !oldBroken) for (let j = f.i; j <= z && !oldBroken; j += 1) if (sgn(f.oldSide) * (f.oldLevel - bars[j].c) > p.equalAtr * (Number.isFinite(atr[j]) ? atr[j] : 0)) oldBroken = true;
   const way = lastWay && lastWay.direction === P.side ? lastWay : null;
   return {
     side: P.side, level: P.level, origin: P.origin, status: P.status,
@@ -136,7 +142,7 @@ function snapshot(bars, P, flips, lastWay, z, atr, p) {
     internal: P.internal, resumed: Boolean(P.resumed),
     lastInternal: P.lastInternal ? { direction: P.lastInternal.direction, level: P.lastInternal.level, barsAgo: z - P.lastInternal.i } : null,
     lastWay: way ? { kind: way.kind, direction: way.direction, level: way.level, barsAgo: z - way.i, strong: way.strong, failed: failedAt(bars, way, z, p) } : null,
-    flip: f ? { barsAgo: z - f.i, strong: f.strong, disp, held: !f.failed, oldSide: f.oldSide, oldLevel: f.oldLevel, byRule: f.byRule } : null,
+    flip: f ? { barsAgo: z - f.i, strong: f.strong, disp, held: !f.failed, oldSide: f.oldSide, oldLevel: f.oldLevel, byRule: f.byRule, oldBroken } : null,
     flipsIn: flips.filter(x => z - x.i < p.structBars).length,
   };
 }

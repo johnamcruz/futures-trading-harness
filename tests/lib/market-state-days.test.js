@@ -51,10 +51,13 @@ test('fixture days (real): the printed Market state per bar, 09:30-12:00 ET, pin
 
 test('fixture days (real): every state word the precedence makes is reached from the bars; the guard never prints chop; the line stays short', () => {
   const all = DAYS.flatMap(d => RUNS[d]);
-  for (const re of [/: transition (up|down): /, /: weakening (up|down): /, /: rotation: pullback \(/, /: rotation (up|down): /, /reversal confirmed/, /potential failed opening drive/, /: chop: no leg holds/, /: pullback \((long|short) leg/, /: in the (up|down) leg: /, /: trend (up|down): /, /: range: no leg holds/, /: forming /, /, CHoCH then BOS/]) {
+  for (const re of [/: transition (up|down): /, /: weakening (up|down): /, /: rotation: pullback \(/, /: rotation (up|down): /, /reversal confirmed/, /potential failed opening drive/, /: chop: the (up|down) leg's last break failed, (HL|LH) [\d.]+ holds/, /: pullback \((long|short) leg/, /: in the (up|down) leg: /, /: trend (up|down): /, /: range: no leg holds/, /: range: the (up|down) leg's last break failed, (HL|LH) [\d.]+ holds/, /: forming /, /, CHoCH then BOS/]) {
     assert.ok(all.some(r => re.test(r.line)), `${re} reached`);
   }
   for (const r of all) if (r.s.pullback) assert.notStrictEqual(r.s.state, 'chop', r.line);
+  // Round 20c: "no leg holds" only when no protected level holds; one 15m word per line under the early read.
+  for (const r of all) if (/no leg holds/.test(r.line)) assert.ok(!r.s.layers || !r.s.layers.structure || r.s.layers.structure.status !== 'intact', r.line);
+  for (const r of all) if (r.s.early) assert.doesNotMatch(r.line, /\b15m (trending|overlapping|rotating|mixed|early)\b/, r.line);
   const max = Math.max(...all.map(r => Buffer.byteLength(r.line)));
   assert.ok(max <= TH.lineBytes, `the longest line ${max} bytes`);
 });

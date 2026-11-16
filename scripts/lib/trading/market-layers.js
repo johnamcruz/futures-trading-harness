@@ -20,7 +20,8 @@
  * break, or a failed break; B = no clean displaced break AND >= chopMinFacts of overlap, low efficiency, failed
  * continuation (a failed break within edgeBars or rejectMin rejections at one edge), no displacement, on at least `floor`
  * RTH bars. It persists until an end event: a displaced break at the bar, a strong 3m CISD confirmed at the bar, a
- * displaced close beyond the IB, or a transition (the protected level broken with displacement and follow-through).
+ * displaced close beyond the IB, or a transition (the protected level broken with displacement and follow-through); or
+ * until the leg re-establishes (legOK) and makes a fresh extreme its way by close (round 20c, the owner's HH/HL override).
  * The opening-drive failure (the owner's A failed continuation, B rejection or overlap, C opposing displacement, on the
  * day's first leg while bar < odBars) is a printed fact; it changes no class on its own (decision 6).
  */
@@ -108,8 +109,14 @@ function endedAt({ breakNow, breakStrong, cisd, transition, ib, barStrong, close
   return Boolean((breakNow && breakStrong) || cisd || transition || (ib && barStrong && (close > ib.high || close < ib.low)));
 }
 
-/** The chop memory: chop now, or chop before with no end event since; an end event at this bar ends it, fresh evidence or not. */
-const chopNext = ({ structure, now, ended, prev }) => Boolean(structure) && !ended && Boolean(now || prev);
+/** The owner's HH/HL override (round 20c): an established leg (legOK) making a fresh extreme its way by close at this bar. */
+const renewedAt = snap => Boolean(snap && snap.status === 'intact' && snap.legOK && snap.sinceProgress === 0);
+
+/**
+ * The chop memory: chop now, or chop before with no end event since; an end event at this bar ends it, fresh evidence or
+ * not; so does a re-established leg making a fresh extreme its way (renewed: chop never outlives its evidence).
+ */
+const chopNext = ({ structure, now, ended, prev, renewed = false }) => Boolean(structure) && !ended && !renewed && Boolean(now || prev);
 
 function marketLayers({ bars, minutes, setupMinutes, closedAt, pullback = null, p, floor, ibBars, trace = false }) {
   for (const k of KEYS) if (!Number.isFinite((p || {})[k])) throw new Error(`market-layers: ${k} is required (config/analysis.json marketState)`);
@@ -142,7 +149,8 @@ function marketLayers({ bars, minutes, setupMinutes, closedAt, pullback = null, 
     const ib = ri >= ibBars - 1 ? { high: Math.max(...rth.slice(0, ibBars).map(x => x.h)), low: Math.min(...rth.slice(0, ibBars).map(x => x.l)) } : null;
     const strongBar = L.barStrong(bars, k, atr);
     const ended = endedAt({ breakNow: Boolean(lb && lb.i === k), breakStrong: Boolean(lb && lb.strong), cisd: ends.has(k), transition: trans, ib, barStrong: strongBar, close: bars[k].c });
-    inChop = chopNext({ structure: Boolean(snap), now, ended, prev: inChop });
+    const renewed = renewedAt(snap);
+    inChop = chopNext({ structure: Boolean(snap), now, ended, prev: inChop, renewed });
     if (ended) lastEnd = ri;
     if (trace) rows.push({ k, inChop, now, ended });
     if (k === n - 1) cur = { ri, snap, lb, beh, edges, facts: c.facts, bCount: c.count, S, B, now, ended, evidence: c.evidence, failed, trans };
@@ -192,4 +200,4 @@ function marketLayers({ bars, minutes, setupMinutes, closedAt, pullback = null, 
   };
 }
 
-module.exports = { marketLayers, chopAt, endedAt, chopNext, rthFrom, cisdEnds, crossings, KEYS };
+module.exports = { marketLayers, chopAt, endedAt, chopNext, renewedAt, rthFrom, cisdEnds, crossings, KEYS };

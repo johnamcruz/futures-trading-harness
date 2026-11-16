@@ -823,7 +823,7 @@ test('marketStateOfText with an item\'s layer facts: the layered line, the same 
   const text = head('10:39', [BL, DAY, PAIR]);
   const chop = { rthBars: 23, structure: { side: 'down', level: 21526.5, legOK: false }, behavior: { word: 'overlapping', word15: 'overlapping', overlap: 0.74, eff: 0.05 }, chop: { inChop: true, now: true, S: true, B: true, facts: { ov: true, ef: true, fl: true }, evidence: { bothWays: true } } };
   assert.strictEqual(Q.marketStateOfText(text), 'Market state (3m): range: 3m CHoCH up then CHoCH down (unconfirmed); 4h+1h up; class trend-up', 'no layer facts: the printed breaks alone');
-  assert.strictEqual(Q.marketStateOfText(text, chop), 'Market state (3m): chop: no leg holds (breaks both ways); overlap 0.74, efficiency 0.05, failed continuation; 15m overlapping; Day so far rotational, RTH VWAP crosses 8; 4h+1h up; class chop');
+  assert.strictEqual(Q.marketStateOfText(text, chop), 'Market state (3m): chop: the down leg\'s last break failed, LH 21526.5 holds (breaks both ways); overlap 0.74, efficiency 0.05, failed continuation; 15m overlapping; Day so far rotational, RTH VWAP crosses 8; 4h+1h up; class chop');
   const L = Q.layersOf(chop);
   assert.deepStrictEqual([L.transition, L.stale, L.pbRotation, L.momentum.trigger, L.chop.facts.nd, L.chop.evidence.flip, L.structure.status, L.structure.origin], [false, false, false, false, false, false, 'intact', 21526.5], 'the facts not stated: absent');
   const brk = { rthBars: 24, structure: { side: 'down', level: 21495, status: 'broken', flip: { barsAgo: 1, disp: false, oldSide: 'up', oldLevel: 21480.25 } } };

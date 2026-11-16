@@ -242,3 +242,43 @@ test('five cases (real): a normal deep pullback flips nothing (2022-08-16, the d
     assert.ok(m3.layers.structure.side === 'down' && m3.layers.structure.status === 'intact', `${hm} ${line}`);
   }
 });
+
+// Round 20c (the final review, findings 1, 2 and 4), pinned on real bars.
+test('round 20c (real, item 1): the chop memory ends when the leg re-establishes and makes a fresh extreme its way (2021-10-04: chop 10:09-10:15, the BOS down 10:18 and its new lows end it)', () => {
+  const c = stateAt('2021-10-04', '10:09');
+  assert.deepStrictEqual([c.s.state, c.cls], ['chop', 'chop'], c.line);
+  for (const hm of ['10:18', '10:21', '10:24', '10:27']) {
+    const r = stateAt('2021-10-04', hm);
+    assert.notStrictEqual(r.s.state, 'chop', `${hm} ${r.line}`);
+    assert.strictEqual(r.cls, 'trend-down', `${hm} ${r.line}`);
+    assert.ok(r.m3.layers.structure.legOK && r.m3.layers.chop.inChop === false, hm);
+  }
+});
+
+test('round 20c (real, item 2): chop never prints "no leg holds" while the protected level holds; it names the leg\'s failed break and the level (2021-10-04 10:09)', () => {
+  const c = stateAt('2021-10-04', '10:09');
+  assert.match(c.line, /^Market state \(3m\): chop: the down leg's last break failed, LH 17965 holds \(a failed break\); /, c.line);
+  assert.doesNotMatch(c.line, /no leg holds/);
+});
+
+test('round 20c (real, item 4): a CHoCH then BOS with the old protected level unbroken prints "transition confirmed", never "reversal confirmed" (2023-04-28 11:45)', () => {
+  const r = stateAt('2023-04-28', '11:45');
+  const P = r.m3.layers.structure;
+  assert.deepStrictEqual([P.flip.byRule, P.flip.oldBroken], ['choch-bos', false], r.line);
+  assert.match(r.line, /CHoCH then BOS: transition confirmed/, r.line);
+  assert.doesNotMatch(r.line, /reversal confirmed/);
+});
+
+test('round 20c (real, item 6): the layers are computed on the chain\'s entry frame of the runner\'s briefing only: not on another lane, not on a lane\'s own briefing', () => {
+  const w = window('2021-10-04', '10:09');
+  const now = new Date(Date.parse(w[w.length - 1].t) + 180000);
+  assert.ok(B.buildBriefing({ symbol: 'NQ', bars: w, minutes: 3, now }).sections.m3.data.layers, 'the 3m (entry) briefing: layers');
+  assert.strictEqual(B.buildBriefing({ symbol: 'NQ', bars: w, minutes: 3, own: true, now }).sections.m3.data.layers, undefined, 'a lane\'s own briefing: none');
+  const m15 = [];
+  for (let i = w.length % 5; i + 5 <= w.length; i += 5) {
+    const g = w.slice(i, i + 5);
+    m15.push({ t: g[0].t, o: g[0].o, h: Math.max(...g.map(x => x.h)), l: Math.min(...g.map(x => x.l)), c: g[4].c, v: g.reduce((a, x) => a + x.v, 0) });
+  }
+  const b15 = B.buildBriefing({ symbol: 'NQ', bars: m15, minutes: 15, now: new Date(Date.parse(m15[m15.length - 1].t) + 900000) });
+  assert.strictEqual(b15.sections.m3.data.layers, undefined, 'a 15m lane: none (the state prints on the entry frame)');
+});

@@ -22,7 +22,8 @@
  *   weakening      an intact leg with the momentum trigger (a strong countertrend displacement breaking internal
  *                  structure); the protected level holds (Weakening: reduce confidence; wait)
  *   trend          an intact, established leg with the behavior word `trending` (Trend; "reversal confirmed" printed when
- *                  the leg's flip is recent and held: Reversal)
+ *                  the leg's flip is recent and held and its old level was closed through: Reversal; a CHoCH then BOS
+ *                  with that level unbroken prints "CHoCH then BOS: transition confirmed" instead, round 20c)
  *   leg            an intact, established leg otherwise ("in the up leg": a pullback or a range inside the trend)
  *   range          no established leg (no chop evidence)
  * The early read (the 15m trending the 4h + 1h way, the 3m in an established leg against them; without layers its last
@@ -189,8 +190,15 @@ function structureText(P, s, { brief = false } = {}) {
   const w = P.lastWay;
   if (w && (!P.lastInternal || w.barsAgo <= P.lastInternal.barsAgo)) parts.push(`${w.kind} ${w.direction} ${minsAgo(w.barsAgo, s.minutes)}${w.strong ? ' (displaced)' : ''}`);
   else if (P.lastInternal && !(s.layers.momentum && s.layers.momentum.trigger)) parts.push(P.lastInternal.level === P.level ? atLevelText(P, P.lastInternal.barsAgo) : `internal ${P.lastInternal.direction === 'up' ? 'high' : 'low'} ${P.lastInternal.level} broken`);
-  if (P.flip && P.flip.byRule === 'choch-bos' && P.flip.barsAgo === (w ? w.barsAgo : -1)) parts.push('CHoCH then BOS');
-  if (s.layers.reversal) parts.push('reversal confirmed');
+  const cb = Boolean(P.flip && P.flip.byRule === 'choch-bos' && P.flip.barsAgo === (w ? w.barsAgo : -1));
+  // The owner's table (round 20c): CHoCH then BOS with the old protected level unbroken is a confirmed transition, never a
+  // reversal; only a close through that level makes it one.
+  const unbroken = Boolean(P.flip && P.flip.byRule === 'choch-bos' && P.flip.oldBroken === false);
+  if (unbroken && (cb || s.layers.reversal)) parts.push('CHoCH then BOS: transition confirmed');
+  else {
+    if (cb) parts.push('CHoCH then BOS');
+    if (s.layers.reversal) parts.push('reversal confirmed');
+  }
   return parts.join(', ');
 }
 
@@ -214,23 +222,39 @@ function momentumText(L, P, s) {
 // The behavior word is printed only where it is the state's evidence (round 20b: it reads `trending` on a minority of a
 // running leg's bars, so beside a trend, a leg, a pullback or a range it misleads); there the numbers and the 15m word stay.
 const WORD_STATES = new Set(['rotation', 'weakening', 'transition']);
-function behaviorText(L, state) {
+// One 15m word per line (round 20c): under the early read its clause names the 15m, so the behavior's 15m word drops.
+function behaviorText(L, state, early = false) {
   const b = L.behavior;
   if (!isObj(b)) return '';
   const nums = [Number.isFinite(b.overlap) ? `overlap ${b.overlap}` : null, Number.isFinite(b.eff) ? `efficiency ${b.eff}` : null].filter(Boolean);
-  if (!WORD_STATES.has(state)) return `${nums.length ? `${nums.join(', ')}, ` : ''}15m ${b.word15}`;
-  return `behavior ${b.word}${nums.length ? ` (${nums.join(', ')})` : ''}, 15m ${b.word15}`;
+  const w15 = early ? [] : [`15m ${b.word15}`];
+  if (!WORD_STATES.has(state)) return [...nums, ...w15].join(', ');
+  return [`behavior ${b.word}${nums.length ? ` (${nums.join(', ')})` : ''}`, ...w15].join(', ');
+}
+
+// The leg clause of a chop or a range (round 20c, finding 2): "no leg holds" only when no protected level holds (none, or
+// broken); an intact level whose leg's breaks all failed prints that, and the level, as it is. A chop remembered on a leg
+// whose last break held (legOK) has made no new extreme by close since that break (a fresh one ends the chop).
+function legText(P) {
+  if (!(P && P.status === 'intact' && Number.isFinite(P.level))) return 'no leg holds';
+  const lvl = `${swingName(P.side)} ${P.level} holds`;
+  return P.legOK ? `the ${P.side} leg's last break held, no new ${P.side === 'up' ? 'high' : 'low'} since, ${lvl}` : `the ${P.side} leg's last break failed, ${lvl}`;
 }
 
 /** The chop's evidence, structural then behavioral (the owner's checklist answered by what was yes). */
 function chopText(L) {
   const c = L.chop || {};
   const ev = c.evidence || {};
-  const st = [ev.bothWays ? 'breaks both ways' : null, ev.flip ? 'a protected break' : null, ev.failed ? 'a failed break' : null].filter(Boolean);
+  // A protected break the leg took back (round 20c: its level printed as holding) is named as failed; a CHoCH-then-BOS
+  // flip broke no protected level and is named as itself.
+  const P = isObj(L.structure) ? L.structure : null;
+  const taken = Boolean(P && P.status === 'intact' && isObj(P.flip) && P.flip.held === false);
+  const flipWord = P && isObj(P.flip) && P.flip.byRule === 'choch-bos' ? 'CHoCH then BOS' : taken ? 'a failed protected break' : 'a protected break';
+  const st = [ev.bothWays ? 'breaks both ways' : null, ev.flip ? flipWord : null, ev.failed ? 'a failed break' : null].filter(Boolean);
   const f = c.facts || {};
   const b = L.behavior || {};
   const be = [f.ov ? `overlap ${b.overlap}` : null, f.ef ? `efficiency ${b.eff}` : null, f.fl ? 'failed continuation' : null, f.nd ? 'no displacement' : null].filter(Boolean);
-  return `no leg holds${st.length ? ` (${st.join(', ')})` : ''}; ${be.join(', ')}; 15m ${b.word15 || 'early'}`;
+  return `${legText(P)}${st.length ? ` (${st.join(', ')})` : ''}; ${be.join(', ')}; 15m ${b.word15 || 'early'}`;
 }
 
 function layeredLine(s) {
@@ -246,14 +270,14 @@ function layeredLine(s) {
   else if (s.state === 'range') {
     const e = L.edges;
     const broken = P && P.status === 'broken' ? `, ${swingName(P.flip.oldSide)} ${P.flip.oldLevel} broken ${minsAgo(P.flip.barsAgo, s.minutes)}` : '';
-    parts.push(`range: no leg holds${broken}${e ? `, edges ${e.bot}-${e.top} (${e.interior === 0 ? 'travel edge to edge' : 'fails mid-range'})` : ''}`);
+    parts.push(`range: ${legText(P)}${broken}${e ? `, edges ${e.bot}-${e.top} (${e.interior === 0 ? 'travel edge to edge' : 'fails mid-range'})` : ''}`);
   } else {
     const word = { transition: `transition ${s.way}`, weakening: `weakening ${s.way}`, rotation: `rotation ${s.way}`, trend: `trend ${s.way}`, leg: `in the ${s.way} leg` }[s.state];
     parts.push(`${word}: ${structureText(P, s, { brief: s.state === 'rotation' })}${s.state === 'rotation' ? `, no new ${s.way === 'up' ? 'high' : 'low'} for ${mins(P.sinceProgress, s.minutes)} min` : ''}`);
     const mo = s.state === 'rotation' ? '' : momentumText(L, P, s);
     if (mo) parts.push(mo);
   }
-  if (s.state !== 'forming' && s.state !== 'chop') { const bt = behaviorText(L, s.state); if (bt) parts.push(bt); }
+  if (s.state !== 'forming' && s.state !== 'chop') { const bt = behaviorText(L, s.state, s.early === true); if (bt) parts.push(bt); }
   return parts;
 }
 
@@ -289,7 +313,9 @@ function marketStateLine(s) {
 // Over the budget, in order: the behavior clause's numbers drop; the chop's "Day so far rotational" drops (the chop line
 // says it; its numbers are its evidence and stay).
 const CUTS = [
-  l => l.replace(/ \((?:overlap [\d.]+(?:, efficiency [\d.]+)?|efficiency [\d.]+)\)/, '').replace(/; (?:overlap [\d.]+, )?(?:efficiency [\d.]+, )?(?=15m )/, '; '),
+  // The numbers alone (round 20c: under the early read no 15m word follows them) drop as a clause.
+  l => l.replace(/ \((?:overlap [\d.]+(?:, efficiency [\d.]+)?|efficiency [\d.]+)\)/, '').replace(/; (?:overlap [\d.]+, )?(?:efficiency [\d.]+, )?(?=15m )/, '; ')
+    .replace(/; (?:overlap [\d.]+(?:, efficiency [\d.]+)?|efficiency [\d.]+)(?=; 15m (?:up|down): )/, ''),
   l => l.replace('; Day so far rotational, ', '; ').replace('; Day so far rotational;', ';'),
 ];
 function fitLine(full, budget) {

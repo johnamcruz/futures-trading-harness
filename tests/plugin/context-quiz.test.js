@@ -280,7 +280,7 @@ test('context quiz: the chop-read questions (q114-q133, less q115, q116, q117, q
     ['q130', 'lookup', ['bos-vs-choch'], 'the trend holds: no close below the protected HL 21480.25', /a BOS holds until the leg's higher low \(lower high\) breaks/g],
     ['q131', 'lookup', ['bos-vs-choch'], 'invalidated: the close below the protected HL ended the up trend (a potential reversal, unconfirmed)', /a BOS holds until the leg's higher low \(lower high\) breaks/g],
     ['q132', 'lookup', ['bos-vs-choch'], 'failed: the potential reversal up is invalidated', /a CHoCH holds until the low \(high\) that started the shift breaks/g],
-    ['q133', 'lookup', ['bos-vs-choch'], 'a confirmed transition up: the CHoCH up was followed by a BOS up', /A potential reversal: CHoCH then BOS: confirmed/g],
+    ['q133', 'lookup', ['bos-vs-choch'], 'a confirmed transition up: the CHoCH up was followed by a BOS up', /CHoCH then BOS the same way: a confirmed transition, not yet a reversal/g],
     // Top-down: the 3m CHoCH pair the 15m BOS confirms is the 15m continuation (owner, 2026-11-15).
     ['q128', 'head', undefined, "trend-up: the 3m CHoCH pair is the 15m BOS up (continuation); long setups the side's way", /`trend`, their way: setups the side's way\./g],
     // The 15m CHoCH back the side's way is a 15m turn (owner-approved 2026-11-15).
@@ -305,9 +305,10 @@ test('context quiz: the chop-read questions (q114-q133, less q115, q116, q117, q
   const tq = id => QUIZ.questions.find(x => x.id === id).text;
   assert.match(tq('q130'), /Market state \(3m\): in the up leg: [^\n]*, HL 21480\.25 holds; 4h\+1h up/);
   assert.match(tq('q131'), /Market state \(3m\): range: [^\n]*, HL 21480\.25 broken by a close; 4h\+1h up/);
-  // Round 20b: q119 states the layer facts its text describes (no leg holds, overlap high, efficiency low, a failed
-  // continuation): its line prints chop, its key.
-  assert.match(tq('q119'), /\n- Market state \(3m\): chop: no leg holds \(breaks both ways\); overlap 0\.\d+, efficiency 0\.05, failed continuation; [^\n]*; class chop\.\n/);
+  // Round 20b: q119 states the layer facts its text describes (the leg's breaks failed, overlap high, efficiency low, a
+  // failed continuation): its line prints chop, its key. Round 20c: its protected LH holds, so the line names the failed
+  // break and the level, never "no leg holds".
+  assert.match(tq('q119'), /\n- Market state \(3m\): chop: the down leg's last break failed, LH 21526\.5 holds \(breaks both ways\); overlap 0\.\d+, efficiency 0\.05, failed continuation; [^\n]*; class chop\.\n/);
   assert.ok(QUIZ.questions.find(x => x.id === 'q119').layers, 'q119: its layer facts');
   assert.match(tq('q132'), /Market state \(3m\): range: 3m BOS down then CHoCH up \(failed: a close below its origin 21462\.5\); 4h\+1h up/);
   assert.match(tq('q127'), /Market state \(3m\): range: 3m BOS down then CHoCH up \(unconfirmed, holds above 21462\.5 \(origin\)\); 4h\+1h up/);

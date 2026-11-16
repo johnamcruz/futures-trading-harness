@@ -54,12 +54,12 @@
 09:33 Market state (3m): pullback (long leg 16728.5 -> 16834.5, depth 40%): 3m down leg, HL 16802.25 broken by a displaced close this bar, the new leg unconfirmed; overlap 0.42, efficiency 0.32, 15m early; 4h+1h up; class trend-up
 09:36 Market state (3m): rotation: pullback (long leg 16728.5 -> 16834.5, depth 29%), 13 bars, 2 midpoint crosses, the up leg weakening; behavior failing (overlap 0.71, efficiency 0.11), 15m early; 4h+1h up; class unclear
 09:39 Market state (3m): rotation: pullback (long leg 16728.5 -> 16834.5, depth 19%), 14 bars, 3 midpoint crosses, the up leg weakening; behavior failing (overlap 0.61, efficiency 0), 15m early; 4h+1h up; class unclear
-09:42 Market state (3m): range: no leg holds, edges 16779.75-16837.25 (travel edge to edge); overlap 0.6, efficiency 0.05, 15m early; 4h+1h up; class trend-up
-09:45 Market state (3m): range: no leg holds, edges 16779.75-16837.25 (travel edge to edge); overlap 0.61, efficiency 0.04, 15m early; 4h+1h up; class trend-up
-09:48 Market state (3m): range: no leg holds, edges 16779.75-16837.25 (travel edge to edge); overlap 0.63, efficiency 0.02, 15m early; 4h+1h up; class trend-up
-09:51 Market state (3m): range: no leg holds, edges 16779.75-16837.25 (travel edge to edge); overlap 0.68, efficiency 0.02, 15m early; 4h+1h up; class trend-up
-09:54 Market state (3m): range: no leg holds, edges 16779.75-16837.25 (travel edge to edge); overlap 0.68, efficiency 0.01, 15m early; 4h+1h up; class trend-up
-09:57 Market state (3m): chop: no leg holds (breaks both ways, a protected break, a failed break); overlap 0.71, efficiency 0.02, failed continuation; 15m overlapping; Day so far rotational; 4h+1h up; class chop
+09:42 Market state (3m): range: the up leg's last break failed, HL 16802.25 holds, edges 16779.75-16837.25 (travel edge to edge); overlap 0.6, efficiency 0.05, 15m early; 4h+1h up; class trend-up
+09:45 Market state (3m): range: the up leg's last break failed, HL 16802.25 holds, edges 16779.75-16837.25 (travel edge to edge); overlap 0.61, efficiency 0.04, 15m early; 4h+1h up; class trend-up
+09:48 Market state (3m): range: the up leg's last break failed, HL 16802.25 holds, edges 16779.75-16837.25 (travel edge to edge); overlap 0.63, efficiency 0.02, 15m early; 4h+1h up; class trend-up
+09:51 Market state (3m): range: the up leg's last break failed, HL 16802.25 holds, edges 16779.75-16837.25 (travel edge to edge); overlap 0.68, efficiency 0.02, 15m early; 4h+1h up; class trend-up
+09:54 Market state (3m): range: the up leg's last break failed, HL 16802.25 holds, edges 16779.75-16837.25 (travel edge to edge); overlap 0.68, efficiency 0.01, 15m early; 4h+1h up; class trend-up
+09:57 Market state (3m): chop: the up leg's last break failed, HL 16802.25 holds (breaks both ways, a failed protected break, a failed break); overlap 0.71, efficiency 0.02, failed continuation; 15m overlapping; Day so far rotational; 4h+1h up; class chop
 10:00 Market state (3m): in the up leg: HL 16790.25 holds, CHoCH up this bar (displaced); overlap 0.68, efficiency 0.06, 15m overlapping; 4h+1h up; class trend-up
 10:03 Market state (3m): trend up: HL 16790.25 holds, CHoCH up 3 min ago (displaced); overlap 0.6, efficiency 0.3, 15m overlapping; 4h+1h up; class trend-up
 10:06 Market state (3m): trend up: HL 16790.25 holds, CHoCH up 6 min ago (displaced); overlap 0.65, efficiency 0.21, 15m overlapping; 4h+1h up; class trend-up
@@ -81,9 +81,9 @@
 10:54 Market state (3m): weakening up: HL 16790.25 holds; displacement down 5 bars ago broke internal low 16847.25, no new high for 39 min; behavior failing (overlap 0.51, efficiency 0.25), 15m rotating; 4h+1h up; class unclear
 10:57 Market state (3m): in the up leg: HL 16790.25 holds, internal low 16847.25 broken; displacement down 4 bars ago, no new high for 42 min; overlap 0.53, efficiency 0.2, 15m rotating; 4h+1h up; class trend-up
 11:00 Market state (3m): in the up leg: HL 16790.25 holds, internal low 16847.25 broken; displacement down 5 bars ago, no new high for 45 min; overlap 0.51, efficiency 0.33, 15m rotating; 4h+1h up; class trend-up
-11:03 Market state (3m): trend down: LH 16819.25 holds, BOS down this bar (displaced), CHoCH then BOS, reversal confirmed; overlap 0.43, efficiency 0.46, 15m rotating; 15m up: a pullback in the 15m trend; 4h+1h up; class trend-up
-11:06 Market state (3m): trend down: LH 16819.25 holds, BOS down 3 min ago (displaced), CHoCH then BOS, reversal confirmed; overlap 0.43, efficiency 0.54, 15m rotating; 15m up: a pullback in the 15m trend; 4h+1h up; class trend-up
-11:09 Market state (3m): trend down: LH 16819.25 holds, BOS down 6 min ago (displaced), CHoCH then BOS, reversal confirmed; overlap 0.42, efficiency 0.45, 15m rotating; 15m up: a pullback in the 15m trend; 4h+1h up; class trend-up
+11:03 Market state (3m): trend down: LH 16819.25 holds, BOS down this bar (displaced), CHoCH then BOS, reversal confirmed; overlap 0.43, efficiency 0.46; 15m up: a pullback in the 15m trend; 4h+1h up; class trend-up
+11:06 Market state (3m): trend down: LH 16819.25 holds, BOS down 3 min ago (displaced), CHoCH then BOS, reversal confirmed; overlap 0.43, efficiency 0.54; 15m up: a pullback in the 15m trend; 4h+1h up; class trend-up
+11:09 Market state (3m): trend down: LH 16819.25 holds, BOS down 6 min ago (displaced), CHoCH then BOS, reversal confirmed; overlap 0.42, efficiency 0.45; 15m up: a pullback in the 15m trend; 4h+1h up; class trend-up
 11:12 Market state (3m): trend down: LH 16819.25 holds, BOS down 9 min ago (displaced), CHoCH then BOS, reversal confirmed; overlap 0.45, efficiency 0.38, 15m trending down; 4h+1h up; class unclear
 11:15 Market state (3m): trend down: LH 16819.25 holds, BOS down 12 min ago (displaced), CHoCH then BOS, reversal confirmed; overlap 0.5, efficiency 0.32, 15m trending down; 4h+1h up; class unclear
 11:18 Market state (3m): trend down: LH 16756.75 holds, BOS down this bar, reversal confirmed; overlap 0.51, efficiency 0.39, 15m trending down; 4h+1h up; class unclear
@@ -154,37 +154,37 @@
 == 2023-09-25
 09:30 Market state (3m): transition down: HL 17441 broken by a displaced close this bar, the new leg unconfirmed; behavior early, 15m early; 4h+1h down; class trend-down
 09:33 Market state (3m): transition down: HL 17441 broken by a displaced close 3 min ago, the new leg unconfirmed; behavior early (overlap 0.86, efficiency 0.16), 15m early; 4h+1h down; class trend-down
-09:36 Market state (3m): range: no leg holds, edges 17411.5-17467.25 (travel edge to edge); overlap 0.65, efficiency 0, 15m early; 4h+1h down; class trend-down
-09:39 Market state (3m): range: no leg holds, edges 17411.5-17489.5 (travel edge to edge); overlap 0.58, efficiency 0.19, 15m early; 4h+1h down; class trend-down
-09:42 Market state (3m): range: no leg holds, edges 17411.5-17496.5 (travel edge to edge); overlap 0.61, efficiency 0.16, 15m early; 4h+1h down; class trend-down
-09:45 Market state (3m): range: no leg holds, edges 17411.5-17507 (travel edge to edge); overlap 0.63, efficiency 0.18, 15m early; 4h+1h down; class trend-down
-09:48 Market state (3m): range: no leg holds, edges 17411.5-17507 (travel edge to edge); overlap 0.69, efficiency 0.19, 15m early; 4h+1h down; class trend-down
-09:51 Market state (3m): range: no leg holds, edges 17411.5-17508 (travel edge to edge); overlap 0.72, efficiency 0.14, 15m early; 4h+1h down; class trend-down
-09:54 Market state (3m): range: no leg holds, edges 17411.5-17522 (travel edge to edge); overlap 0.71, efficiency 0.22, 15m early; 4h+1h down; class trend-down
-09:57 Market state (3m): chop: no leg holds (a protected break, a failed break); overlap 0.73, efficiency 0.16, failed continuation; 15m trending up; 4h+1h down; class chop
-10:00 Market state (3m): chop: no leg holds (a protected break, a failed break); efficiency 0.21, failed continuation; 15m trending up; Day so far rotational; 4h+1h down; class chop
-10:03 Market state (3m): chop: no leg holds (a protected break, a failed break); overlap 0.72, efficiency 0.19, failed continuation; 15m trending up; 4h+1h down; class chop
-10:06 Market state (3m): chop: no leg holds (a protected break, a failed break); overlap 0.72, efficiency 0.07, failed continuation; 15m trending up; Day so far rotational; 4h+1h down; class chop
-10:09 Market state (3m): chop: no leg holds (a protected break, a failed break); overlap 0.75, efficiency 0.03, failed continuation; 15m trending up; Day so far rotational; 4h+1h down; class chop
-10:12 Market state (3m): chop: no leg holds (a protected break, a failed break); overlap 0.75, efficiency 0.03, failed continuation; 15m trending up; Day so far rotational; 4h+1h down; class chop
-10:15 Market state (3m): chop: no leg holds (a protected break, a failed break); overlap 0.71, efficiency 0.01, failed continuation; 15m trending up; 4h+1h down; class chop
-10:18 Market state (3m): chop: no leg holds (a protected break, a failed break); efficiency 0.07, failed continuation; 15m trending up; Day so far rotational; 4h+1h down; class chop
-10:21 Market state (3m): chop: no leg holds (a protected break, a failed break); efficiency 0.07, failed continuation; 15m trending up; Day so far rotational; 4h+1h down; class chop
-10:24 Market state (3m): range: no leg holds, edges 17411.5-17525.5 (fails mid-range); overlap 0.62, efficiency 0.28, 15m trending up; 4h+1h down; class trend-down
-10:27 Market state (3m): range: no leg holds, edges 17411.5-17525.5 (fails mid-range); overlap 0.67, efficiency 0.19, 15m rotating; 4h+1h down; class trend-down
-10:30 Market state (3m): range: no leg holds, edges 17411.5-17525.5 (fails mid-range); overlap 0.68, efficiency 0.08, 15m rotating; 4h+1h down; class trend-down
-10:33 Market state (3m): range: no leg holds, edges 17432.5-17525.5 (fails mid-range); overlap 0.66, efficiency 0.08, 15m rotating; 4h+1h down; class trend-down
-10:36 Market state (3m): range: no leg holds, edges 17444.25-17525.5 (fails mid-range); overlap 0.66, efficiency 0.03, 15m rotating; 4h+1h down; class trend-down
-10:39 Market state (3m): range: no leg holds, edges 17444.25-17525.5 (fails mid-range); overlap 0.68, efficiency 0.06, 15m rotating; 4h+1h down; class trend-down
-10:42 Market state (3m): chop: no leg holds (a failed break); overlap 0.7, efficiency 0.08, failed continuation; 15m overlapping; Day so far rotational, RTH VWAP crosses 6; 4h+1h down; class chop
-10:45 Market state (3m): chop: no leg holds (a failed break); efficiency 0.03, failed continuation; 15m overlapping; Day so far rotational, RTH VWAP crosses 7; 4h+1h down; class chop
-10:48 Market state (3m): chop: no leg holds (a failed break); overlap 0.71, efficiency 0.06, failed continuation; 15m overlapping; Day so far rotational, RTH VWAP crosses 8; 4h+1h down; class chop
-10:51 Market state (3m): chop: no leg holds (a failed break); overlap 0.7, efficiency 0.04, failed continuation; 15m overlapping; Day so far rotational, RTH VWAP crosses 8; 4h+1h down; class chop
-10:54 Market state (3m): chop: no leg holds (a failed break); efficiency 0.06, failed continuation; 15m overlapping; Day so far rotational, RTH VWAP crosses 8; 4h+1h down; class chop
-10:57 Market state (3m): chop: no leg holds (a failed break); efficiency 0.05, failed continuation; 15m trending down; Day so far rotational, RTH VWAP crosses 8; 4h+1h down; class chop
-11:00 Market state (3m): chop: no leg holds (a failed break); overlap 0.74, efficiency 0.07, failed continuation; 15m trending down; Day so far rotational, RTH VWAP crosses 8; 4h+1h down; class chop
-11:03 Market state (3m): chop: no leg holds (a failed break); efficiency 0.05, failed continuation; 15m trending down; Day so far rotational, RTH VWAP crosses 8; 4h+1h down; class chop
-11:06 Market state (3m): chop: no leg holds (a failed break); efficiency 0.06, failed continuation; 15m trending down; Day so far rotational, RTH VWAP crosses 9; 4h+1h down; class chop
+09:36 Market state (3m): range: the up leg's last break failed, HL 17441 holds, edges 17411.5-17467.25 (travel edge to edge); overlap 0.65, efficiency 0, 15m early; 4h+1h down; class trend-down
+09:39 Market state (3m): range: the up leg's last break failed, HL 17441 holds, edges 17411.5-17489.5 (travel edge to edge); overlap 0.58, efficiency 0.19, 15m early; 4h+1h down; class trend-down
+09:42 Market state (3m): range: the up leg's last break failed, HL 17441 holds, edges 17411.5-17496.5 (travel edge to edge); overlap 0.61, efficiency 0.16, 15m early; 4h+1h down; class trend-down
+09:45 Market state (3m): range: the up leg's last break failed, HL 17441 holds, edges 17411.5-17507 (travel edge to edge); overlap 0.63, efficiency 0.18, 15m early; 4h+1h down; class trend-down
+09:48 Market state (3m): range: the up leg's last break failed, HL 17441 holds, edges 17411.5-17507 (travel edge to edge); overlap 0.69, efficiency 0.19, 15m early; 4h+1h down; class trend-down
+09:51 Market state (3m): range: the up leg's last break failed, HL 17441 holds, edges 17411.5-17508 (travel edge to edge); overlap 0.72, efficiency 0.14, 15m early; 4h+1h down; class trend-down
+09:54 Market state (3m): range: the up leg's last break failed, HL 17441 holds, edges 17411.5-17522 (travel edge to edge); overlap 0.71, efficiency 0.22, 15m early; 4h+1h down; class trend-down
+09:57 Market state (3m): chop: the up leg's last break failed, HL 17441 holds (a failed protected break, a failed break); overlap 0.73, efficiency 0.16, failed continuation; 15m trending up; 4h+1h down; class chop
+10:00 Market state (3m): chop: the up leg's last break failed, HL 17441 holds (a failed protected break, a failed break); efficiency 0.21, failed continuation; 15m trending up; Day so far rotational; 4h+1h down; class chop
+10:03 Market state (3m): chop: the up leg's last break failed, HL 17441 holds (a failed protected break, a failed break); overlap 0.72, efficiency 0.19, failed continuation; 15m trending up; 4h+1h down; class chop
+10:06 Market state (3m): chop: the up leg's last break failed, HL 17441 holds (a failed protected break, a failed break); overlap 0.72, efficiency 0.07, failed continuation; 15m trending up; Day so far rotational; 4h+1h down; class chop
+10:09 Market state (3m): chop: the up leg's last break failed, HL 17441 holds (a failed protected break, a failed break); overlap 0.75, efficiency 0.03, failed continuation; 15m trending up; Day so far rotational; 4h+1h down; class chop
+10:12 Market state (3m): chop: the up leg's last break failed, HL 17441 holds (a failed protected break, a failed break); overlap 0.75, efficiency 0.03, failed continuation; 15m trending up; Day so far rotational; 4h+1h down; class chop
+10:15 Market state (3m): chop: the up leg's last break failed, HL 17441 holds (a failed protected break, a failed break); overlap 0.71, efficiency 0.01, failed continuation; 15m trending up; 4h+1h down; class chop
+10:18 Market state (3m): chop: the up leg's last break failed, HL 17441 holds (a failed protected break, a failed break); efficiency 0.07, failed continuation; 15m trending up; Day so far rotational; 4h+1h down; class chop
+10:21 Market state (3m): chop: the up leg's last break failed, HL 17441 holds (a failed protected break, a failed break); efficiency 0.07, failed continuation; 15m trending up; Day so far rotational; 4h+1h down; class chop
+10:24 Market state (3m): range: the up leg's last break failed, HL 17441 holds, edges 17411.5-17525.5 (fails mid-range); overlap 0.62, efficiency 0.28, 15m trending up; 4h+1h down; class trend-down
+10:27 Market state (3m): range: the up leg's last break failed, HL 17441 holds, edges 17411.5-17525.5 (fails mid-range); overlap 0.67, efficiency 0.19, 15m rotating; 4h+1h down; class trend-down
+10:30 Market state (3m): range: the up leg's last break failed, HL 17441 holds, edges 17411.5-17525.5 (fails mid-range); overlap 0.68, efficiency 0.08, 15m rotating; 4h+1h down; class trend-down
+10:33 Market state (3m): range: the up leg's last break failed, HL 17441 holds, edges 17432.5-17525.5 (fails mid-range); overlap 0.66, efficiency 0.08, 15m rotating; 4h+1h down; class trend-down
+10:36 Market state (3m): range: the up leg's last break failed, HL 17441 holds, edges 17444.25-17525.5 (fails mid-range); overlap 0.66, efficiency 0.03, 15m rotating; 4h+1h down; class trend-down
+10:39 Market state (3m): range: the up leg's last break failed, HL 17441 holds, edges 17444.25-17525.5 (fails mid-range); overlap 0.68, efficiency 0.06, 15m rotating; 4h+1h down; class trend-down
+10:42 Market state (3m): chop: the up leg's last break failed, HL 17441 holds (a failed break); overlap 0.7, efficiency 0.08, failed continuation; 15m overlapping; Day so far rotational, RTH VWAP crosses 6; 4h+1h down; class chop
+10:45 Market state (3m): chop: the up leg's last break failed, HL 17441 holds (a failed break); efficiency 0.03, failed continuation; 15m overlapping; Day so far rotational, RTH VWAP crosses 7; 4h+1h down; class chop
+10:48 Market state (3m): chop: the up leg's last break failed, HL 17441 holds (a failed break); overlap 0.71, efficiency 0.06, failed continuation; 15m overlapping; Day so far rotational, RTH VWAP crosses 8; 4h+1h down; class chop
+10:51 Market state (3m): chop: the up leg's last break failed, HL 17441 holds (a failed break); overlap 0.7, efficiency 0.04, failed continuation; 15m overlapping; Day so far rotational, RTH VWAP crosses 8; 4h+1h down; class chop
+10:54 Market state (3m): chop: the up leg's last break failed, HL 17441 holds (a failed break); efficiency 0.06, failed continuation; 15m overlapping; Day so far rotational, RTH VWAP crosses 8; 4h+1h down; class chop
+10:57 Market state (3m): chop: the up leg's last break failed, HL 17441 holds (a failed break); efficiency 0.05, failed continuation; 15m trending down; Day so far rotational, RTH VWAP crosses 8; 4h+1h down; class chop
+11:00 Market state (3m): chop: the up leg's last break failed, HL 17441 holds (a failed break); overlap 0.74, efficiency 0.07, failed continuation; 15m trending down; Day so far rotational, RTH VWAP crosses 8; 4h+1h down; class chop
+11:03 Market state (3m): chop: the up leg's last break failed, HL 17441 holds (a failed break); efficiency 0.05, failed continuation; 15m trending down; Day so far rotational, RTH VWAP crosses 8; 4h+1h down; class chop
+11:06 Market state (3m): chop: the up leg's last break failed, HL 17441 holds (a failed break); efficiency 0.06, failed continuation; 15m trending down; Day so far rotational, RTH VWAP crosses 9; 4h+1h down; class chop
 11:09 Market state (3m): rotation up: HL 17446 holds, no new high for 75 min; behavior failing (overlap 0.56, efficiency 0.15), 15m trending down; 4h+1h down; class unclear
 11:12 Market state (3m): rotation up: HL 17446 holds, no new high for 78 min; behavior failing (overlap 0.59, efficiency 0.19), 15m overlapping; 4h+1h down; class unclear
 11:15 Market state (3m): trend up: HL 17446 holds, CHoCH up 6 min ago (displaced); overlap 0.52, efficiency 0.23, 15m overlapping; 4h+1h down; class unclear

@@ -260,7 +260,7 @@ const PINS = {
     // Round 17: whether a CHoCH pair is chop now is the Market state line's (one authority).
     // Round 20 (the owner: a CHoCH pair is neither sufficient nor necessary for chop): the pair's reading leaves; the three
     // layers (internal, protected, behavior) are taught below it.
-    'A potential reversal: CHoCH then BOS: confirmed.',
+    'CHoCH then BOS the same way: a confirmed transition, not yet a reversal.',
     'An internal CHoCH against the leg while its protected level holds is pullback or consolidation evidence, never a trend change.',
     // Round 17 (q131): the printed BOS keeps its label; the line's status decides what it means now.
     'A BOS stays labelled BOS after its protected swing breaks; the Market state line\'s status (`holds` or `broken by a close`) decides what it means now: a broken protected swing ends that BOS\'s trend read.',
@@ -344,8 +344,10 @@ test('basics skills: frontmatter, the sections in order, and small', () => {
     // (one authority for the class word): bos-vs-choch 702 (the BOS keeps its label after its protected swing breaks; the
     // CHoCH pair's chop is the line's), pullback-vs-reversal 1778 (the pause's class rule replaced by the pointer), both at
     // the measured need. Round 20 (the owner's three layers, chop checklist, behavioral list and classes quoted, one home
-    // each): bos-vs-choch 871, trend-vs-range 834, at the measured need.
-    assert.ok(words >= 250 && words <= (s === 'candle-reading' ? 1280 : s === 'pullback-vs-reversal' ? 1778 : s === 'bos-vs-choch' ? 871 : s === 'trend-vs-range' ? 834 : 650), `${s}: ${words} words`);
+    // each): bos-vs-choch 871, trend-vs-range 834, at the measured need. The follow-up to #340 (round 20c, items 2 and 4:
+    // a CHoCH then BOS confirms a transition, a reversal only through the protected level; the chop example's true leg
+    // clause): bos-vs-choch 884, trend-vs-range 857, at the measured need.
+    assert.ok(words >= 250 && words <= (s === 'candle-reading' ? 1280 : s === 'pullback-vs-reversal' ? 1778 : s === 'bos-vs-choch' ? 884 : s === 'trend-vs-range' ? 857 : 650), `${s}: ${words} words`);
     // The two setups also carry a timeframe table (what the setup means on 3m/5m, 15m and 1h/4h): a little more room
     // (scripts/lib/skill-caps.js, the one source the training loop's probe edits read too).
     const max = skillByteCap(s);

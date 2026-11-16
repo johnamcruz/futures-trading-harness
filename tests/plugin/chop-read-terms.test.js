@@ -46,3 +46,32 @@ test('chop read terms: htf-to-ltf\'s side rule decides the side only; the class 
   assert.ok(t.includes("**The side rule** (side only; the class is the Market state line's; in an attempt): each trending 4h or 1h your way, neither against; both ranging: the 15m and `Trend declared?` your way; else no trade."));
   assert.ok(t.includes('Then the class is the one the Market state line prints after `class`'));
 });
+
+// Round 20c (the final review, items 4 and 5): one rule in every home. A leg is invalidated only by a close through its
+// protected level; a CHoCH then BOS against it confirms a transition (the owner's table: "confirmed transition"), a
+// reversal only once that level is closed through. Chop is structural AND behavioral evidence, never a CHoCH pair.
+const read = f => flat(fs.readFileSync(path.join(ROOT, f), 'utf8'));
+test('round 20c: CHoCH then BOS confirms a transition; only a close through the protected level invalidates the leg (bos-vs-choch, trend-vs-range, structure-layers.js agree)', () => {
+  const bc = read('skills/bos-vs-choch/SKILL.md');
+  const tv = read('skills/trend-vs-range/SKILL.md');
+  const sl = read('scripts/lib/trading/structure-layers.js');
+  for (const [f, t] of [['bos-vs-choch', bc], ['structure-layers.js', sl]]) {
+    assert.match(t, /the only invalidation of the leg/, `${f}: the close through the protected level is the only invalidation`);
+    assert.match(t, /CHoCH then BOS[^.]*confirms a transition/i, `${f}: CHoCH then BOS confirms a transition`);
+  }
+  assert.ok(bc.includes('`CHoCH then BOS: transition confirmed`') && tv.includes('`CHoCH then BOS: transition confirmed`'), 'the printed words named');
+  for (const [f, t] of [['bos-vs-choch', bc], ['trend-vs-range', tv]]) {
+    assert.doesNotMatch(t, /CHoCH then BOS: confirmed|confirms the transition too|CHoCH then BOS[^.]{0,40}reversal confirmed/, `${f}: no CHoCH then BOS reversal`);
+  }
+  assert.match(tv, /`CHoCH then BOS: transition confirmed`: the new leg, its old protected level unbroken; a reversal once a close goes through that level\./, 'a reversal only through the old level');
+});
+
+test('round 20c: TRAINING.md and README state the round-20 Market state (three layers, chop = structural AND behavioral evidence, the classes, the pullback guard); no CHoCH-pair chop', () => {
+  for (const f of ['docs/TRAINING.md', 'README.md']) {
+    const t = read(f);
+    for (const old of [/a 3m CHoCH then a CHoCH back/, /the last two breaks both CHoCH/, /bare CHoCH pair[^.]*reads `chop`/, /`ranging`/, /chop = (?:a )?CHoCH pair/i])
+      assert.doesNotMatch(t, old, `${f}: ${old}`);
+    for (const now of [/three layers/i, /structural AND behavioral/, /protected (?:level|swing)/, /`chop`/, /`unclear`/, /pullback guard/])
+      assert.match(t, now, `${f}: ${now}`);
+  }
+});
