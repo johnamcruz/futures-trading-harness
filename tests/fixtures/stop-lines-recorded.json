@@ -1,0 +1,85 @@
+{
+ "about": "The 16 managed cycles of the six recorded mt343 mornings with no parsed STOP line (of 157): each cycle's STOP-bearing lines of the head trader's own text, verbatim (duplicates dropped). 11 carry the line inline at the end of the PLAN's 9 Manage: line (recovered, inline); 5 stay missing by design.",
+ "cycles": [
+  {
+   "cycle": "2021-09-01T13:51Z",
+   "text": "9 Manage: invalidation is a 15m close below 15620.5 (protected swing); exit by trail. STOP hold: hold\nCYCLE RESULT: managed - MNQ long 1 from 15659.5, now 15692 (+3.42R), best +4.16R; working stop 15662.75 held (protected swing 15620.25 is looser), STOP hold",
+   "recovered": "inline"
+  },
+  {
+   "cycle": "2021-09-01T13:54Z",
+   "text": "9 Manage: invalidation 15620.5 (15m protected swing, close below it); STOP hold: hold.",
+   "recovered": "inline"
+  },
+  {
+   "cycle": "2021-09-01T14:12Z",
+   "text": "",
+   "missing": "absent"
+  },
+  {
+   "cycle": "2021-09-01T15:12Z",
+   "text": "9 Manage: invalidation 15m close below protected low 15620.5; weakening 0 of 5, no 15m CHoCH or BOS against since entry; STOP hold: hold",
+   "recovered": "inline"
+  },
+  {
+   "cycle": "2021-09-01T15:15Z",
+   "text": "9 Manage: invalidation 15m close below 15620.50 (protected low) or 1h close below 15586; exit trail; the working stop holds. STOP hold: hold (warning giveback 15680.25 sits above price, nothing to rest there).\nCYCLE RESULT: managed - MNQ long 1 from 15674.50, now 15678.50 (+0.23R), best +0.84R at 15689; stop 15657.25 (-1R) working, no change; STOP hold: hold\nCYCLE RESULT: managed - MNQ long 1 from 15674.50, now 15678.50 (+0.23R), best +0.84R at 15689; stop 15657.25 (-1R) confirmed working with list_open_orders, no change; STOP hold: hold",
+   "recovered": "inline"
+  },
+  {
+   "cycle": "2021-09-01T15:18Z",
+   "text": "",
+   "missing": "absent"
+  },
+  {
+   "cycle": "2021-09-01T15:45Z",
+   "text": "- **STOP:** hold. There is no 15m BOS the trade's way since entry and no 15m CHoCH against. The 15m swing low at 15660.25 is the runner's floor, not yet applied, so I didn't tighten the stop to it.\nCYCLE RESULT: managed - MNQ long 1 from 15674.50, now 15677.50 (+0.17R, best +0.84R at 15689); working stop 15657.25 (-1R) confirmed on list_open_orders; STOP hold: no 15m BOS the trade's way since entry, no 15m CHoCH against.",
+   "missing": "bold STOP: with no price or hold before the colon"
+  },
+  {
+   "cycle": "2022-03-07T15:03Z",
+   "text": "9 Manage: invalidation a 15m close above 13703.75 or a 15m close above the protected high; STOP hold, working stop 13756.25 unchanged\nCYCLE RESULT: managed - MNQ short 1 from 13674, working stop 13756.25 (-1R) holds, price 13670.5 (+0.04R), no target (trail); STOP hold\n9 Manage: invalidation a 15m close above 13703.75; STOP hold, working stop 13756.25 unchanged\nCYCLE RESULT: managed - MNQ short 1 from 13674, working stop 13756.25 (-1R) confirmed working, price 13670.5 (+0.04R), no target (trail); STOP hold",
+   "missing": "a comma after STOP hold"
+  },
+  {
+   "cycle": "2022-03-07T15:21Z",
+   "text": "9 Manage: invalidation 15m close above 13879.75 (protected high) or 3m close above 13694 (BOS protected high); exit by trail; STOP hold: hold\nCYCLE RESULT: managed - MNQ short 1 from 13674, working stop 13756.25 (-1R) confirmed in list_open_orders, price 13624.5 (+0.6R), best 13606.5 (+0.82R); no 15m CHoCH or BOS against since entry, weakening 0 of 5; STOP hold: hold",
+   "recovered": "inline"
+  },
+  {
+   "cycle": "2022-03-07T16:24Z",
+   "text": "9 Manage: invalidation 15m close above the 13879.75 protected swing or a 15m BOS up; STOP hold: hold\nCYCLE RESULT: managed - MNQ short 1 from 13674 (1R 82.25 pts), working stop 13756.25 (-1R) confirmed working, price 13618.75 (+0.67R, best +1.62R); STOP hold: no 15m BOS or CHoCH against since entry, trend rule short allowed",
+   "recovered": "inline"
+  },
+  {
+   "cycle": "2022-04-11T14:09Z",
+   "text": "9 Manage: invalidation 15m close above protected high 14239 or a 15m CHoCH up; STOP hold: hold\nCYCLE RESULT: managed - MNQ short 1 from 14131 held, working stop 14176.5 (STOP hold), no new entry while the position is open\nCYCLE RESULT: managed - MNQ short 1 from 14131 held, working stop 14176.5 confirmed open (STOP hold), no new entry while the position is open",
+   "recovered": "inline"
+  },
+  {
+   "cycle": "2022-04-11T14:33Z",
+   "text": "9 Manage: invalidation 15m close above 14197 or 3m close above 14181.25; exit trail; STOP hold: hold (3m CHoCH protected high 14181 unbroken, 15m BOS protected high 14197 unbroken; one 3m candle against, no 15m break against)\nCYCLE RESULT: managed - MNQ short 1 from 14082.25, working stop 14188 held (price 14094.5, -0.12R, initial risk $211.50); STOP hold: 3m CHoCH protected high 14181 and 15m protected high 14197 unbroken, no new entry while open\nCYCLE RESULT: managed - MNQ short 1 from 14082.25 still open, working stop 14188 confirmed open (order 5, reduce-only); STOP hold, no new entry while the position is open",
+   "recovered": "inline"
+  },
+  {
+   "cycle": "2022-04-11T15:03Z",
+   "text": "9 Manage: invalidation is a 15m close above the protected high 14197 (the 15m BOS down at 14099 would be void). STOP hold: hold.\nCYCLE RESULT: managed - MNQ short 1 from 14082.25 open, working stop 14188 (-1R) confirmed in list_open_orders, now +0.2R at 14061.5, best +0.46R; no warning sign, STOP hold: hold; no new entry while the position is open.",
+   "recovered": "inline"
+  },
+  {
+   "cycle": "2022-07-07T13:57Z",
+   "text": "STOP hold. The open long is working as planned, so there is nothing to change this cycle.\nCYCLE RESULT: managed - MNQ long 1 from 11990 (1R 77.5 pts), price 12046.75 (+0.73R), best +0.76R; working stop 11912.5 held, 15m BOS up protected swing 11912.75 holds, no 15m CHoCH against, so STOP hold: hold",
+   "missing": "prose after STOP hold"
+  },
+  {
+   "cycle": "2022-07-07T14:39Z",
+   "text": "9 Manage: invalidation 15m close below the protected swing 11912.75, or a 15m CHoCH against; STOP hold: the 15m protected swing holds and the working stop 11912.5 is already a tick beyond it, so there is nothing to tighten; the 0.5R warning giveback (12013) applies only after a 15m CHoCH against, and there is none",
+   "recovered": "inline"
+  },
+  {
+   "cycle": "2022-07-07T15:42Z",
+   "text": "9 Manage: invalidation 15m close below 11912.75 or 1h CHoCH down; exit trail. STOP hold: the working stop already sits one tick beyond the protected swing, so no tighter level is justified.\nCYCLE RESULT: managed - MNQ long 1 from 11990, working stop 11912.50 (-1R) unchanged, price 12052 (+0.8R), best +1.07R; STOP hold: 15m protected swing 11912.75 holds, no 15m CHoCH against, weakening 1 of 5\nCYCLE RESULT: managed - MNQ long 1 from 11990, working stop 11912.50 (-1R) confirmed by list_open_orders, unchanged; price 12052 (+0.8R), best +1.07R; STOP hold: 15m protected swing 11912.75 holds, no 15m CHoCH against, weakening 1 of 5",
+   "recovered": "inline"
+  }
+ ]
+}

@@ -25,6 +25,7 @@
  * A continuous combine run (replay/combine-run.js): each attempt's start, sessions, outcome, profit, lowest cushion, worst
  * day and trades, the totals and the promotion gate's numbers, labelled practice (combineReport, from the run's folder).
  *
+ * The run's STOP lines (stop-lines.js): managed cycles, stated, missing, and the alarm above the config's share.
  * Phase 2's restatements (runner-entry.js, trading/phase2-restate.js: an approving VERDICT line the reading refused,
  * restated once): each row's `restated` by outcome (approved, vetoed, unreadable, failed), shown when there were any.
  *
@@ -145,7 +146,10 @@ function summarize(days, { runDir = null, barsFiles = {} } = {}) {
   const combine = runDir ? combineOf(runDir, days) : null;
   const late = runDir ? lateOf(runDir, barsFiles) : null;
   const capture = runDir ? captureOf(runDir, days) : null;
-  return { months: [...months.values()].map(finish), total: finish(total), timing: timingReport(ran), ...(practice ? { practice } : {}), ...(combine ? { combine } : {}), ...(late && late.total ? { late } : {}), ...(capture ? { capture } : {}) };
+  // The run's STOP lines (stop-lines.js): managed cycles, stated, missing, the alarm; from the run home's events.
+  let stopLines = null;
+  if (runDir) { try { stopLines = require('./stop-lines').stopLinesOf(require('path').resolve(runDir, '..', '..')); } catch (_err) { stopLines = null; } }
+  return { months: [...months.values()].map(finish), total: finish(total), timing: timingReport(ran), ...(practice ? { practice } : {}), ...(combine ? { combine } : {}), ...(late && late.total ? { late } : {}), ...(capture ? { capture } : {}), ...(stopLines ? { stopLines } : {}) };
 }
 
 /**
@@ -269,6 +273,7 @@ function toMarkdown(summary, manifest = {}) {
     ...(restatedLine(summary.total) ? [restatedLine(summary.total), ''] : []),
     ...(cutRestoredLine(summary.total) ? [cutRestoredLine(summary.total), ''] : []),
     ...(setupsLine(summary.total) ? [setupsLine(summary.total), ''] : []),
+    ...(summary.stopLines ? [require('./stop-lines').stopLinesLine(summary.stopLines), ''] : []),
     ...timingMarkdown(summary),
     ...practiceMarkdown(summary.practice || null),
     ...(summary.combine ? ['## Continuous combine', '', ...require('./combine-run').reportLines(summary.combine).map(l => `- ${l.trim()}`), ''] : []),
@@ -281,7 +286,7 @@ function toText(summary) {
   const combine = summary.combine ? `${require('./combine-run').reportLines(summary.combine).join('\n')}\n` : '';
   const late = summary.late ? `${require('./late-skips').reportLines(summary.late).join('\n')}\n` : '';
   const capture = summary.capture ? `trend capture: ${require('./trend-capture').reportLines(summary.capture).join('\n')}\n` : '';
-  const restated = `${restatedLine(summary.total) ? `${restatedLine(summary.total)}\n` : ''}${cutRestoredLine(summary.total) ? `${cutRestoredLine(summary.total)}\n` : ''}`;
+  const restated = `${restatedLine(summary.total) ? `${restatedLine(summary.total)}\n` : ''}${cutRestoredLine(summary.total) ? `${cutRestoredLine(summary.total)}\n` : ''}${summary.stopLines ? `${require('./stop-lines').stopLinesLine(summary.stopLines)}\n` : ''}`;
   const main = table(HEAD, [...summary.months, summary.total].map(r => cells(r).map(String))) + restated + practiceText(summary.practice || null) + combine + late + capture;
   if (!hasTiming(summary)) return main;
   const kind = clockKind(summary.timing.all);

@@ -560,10 +560,11 @@ test('summary: correct on all K, answered both ways, the totals, the bar; compar
   // 88 since q87-q112 less q100 (feat/pullback-concept, closed choices); 100 since q113-q126 less q120 and q122 (feat/chop-read): 100 x 5
   // runs, one missed = 499. 107 with q134-q140 (the displacement read: the two traps, closed back, BOS, CHoCH, CISD, a weak
   // invalidating close).
-  assert.deepStrictEqual([all.partA.allCorrect, all.partA.bothWays, all.partB.allCorrect, all.meetsBar], [107, 0, 8, true]);
+  // 113 with q141-q146 (the Position line: three fields, three managed-cycle holds).
+  assert.deepStrictEqual([all.partA.allCorrect, all.partA.bothWays, all.partB.allCorrect, all.meetsBar], [113, 0, 8, true]);
   const one = rows.map(r => (r.id === 'q6' && r.k === 2 ? { ...r, pass: false } : r));
   const s = Q.summarize(QUIZ, one, 5);
-  assert.deepStrictEqual([s.partA.allCorrect, s.partA.bothWays, s.partA.total, s.meetsBar], [106, 1, 534, false]);
+  assert.deepStrictEqual([s.partA.allCorrect, s.partA.bothWays, s.partA.total, s.meetsBar], [112, 1, 564, false]);
   // Too few runs is never correct on all K.
   assert.strictEqual(Q.summarize(QUIZ, rows.filter(r => r.k <= 3), 5).partA.allCorrect, 0);
   const d = Q.compare(all, s).find(x => x.id === 'q6');

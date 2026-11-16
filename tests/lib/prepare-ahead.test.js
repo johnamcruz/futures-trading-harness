@@ -805,3 +805,12 @@ test('prepare-ahead: its tunables are config (config/runner.json prepare): the d
   for (const effort of ['low', 'high', null]) assert.strictEqual(loadWith(effort).prepare.effort, effort);
   for (const effort of ['turbo', 3, '']) assert.throws(() => loadWith(effort), /prepare\.effort/, String(effort));
 });
+
+test('with a position open neither the prepare nor the confirm runs: the full head-trader prompt (which carries the Position line) always does', () => {
+  const { flatOf } = require('../../scripts/lib/prepare-shadow');
+  const acct = { positions: [{ contractId: 'MNQ', type: 1, size: 1, averagePrice: 21500 }], orders: [{ id: 9, contractId: 'MNQ', type: 4 }] };
+  assert.strictEqual(flatOf(acct), false);
+  assert.deepStrictEqual(PA.shouldPrepare({ killSwitch: false, flat: flatOf(acct), section: { lines: ['x'] }, inSession: true, budgetMs: 60000 }), { ok: false, why: 'not-flat' });
+  assert.strictEqual(PA.confirmPath({ plan: { id: 'p' }, at: '2026-10-07T14:03:00.000Z', fired: [], killSwitch: false, flat: flatOf(acct) }).path, 'not-flat');
+  assert.strictEqual(PA.sectionFor({ symbol: 'MNQ', bars: [], minutes: 3, briefing: null, flat: flatOf(acct) }), null);
+});

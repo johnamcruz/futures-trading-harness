@@ -107,8 +107,14 @@ test('context e2e: the cycle prompt carries the day, the fired strategy\'s track
   // The open position is described once, as a trade, not listed again in the account line.
   assert.match(p, /balance \$50,000; 1 open position \(below\); 1 working order\./);
   // 3. The open NQ trade, on the MNQ bars: entered on fx_orb with a 20.50-point risk (the "27,390.00" stop read
-  // as a price), stop trailed to 27399, six bars since the fill, its worst against fx_orb's winners.
-  assert.match(p, new RegExp(`Open trade ${NQ.replace(/\./g, '\\.')} long 1 @ 27410\\.5 since 12:58 ET, 6 bars closed since \\(setup:fx_orb\\): initial stop 27390: risk 20\\.5 points = 82 ticks; working stop 27399 \\(-0\\.56R\\), no target order; now -0\\.79R at 27394\\.25, best \\+0\\.38R, worst -0\\.95R\\. fx_orb winners in its backtest: median best \\+2\\.4R, 80% never went below -0\\.6R; this trade's worst -0\\.95R is deeper than 80% of its winners went\\.`));
+  // as a price), stop trailed to 27399, six bars since the fill, its worst against fx_orb's winners. Its Position line
+  // first: the runner holds no exit plan for it, so the line is folded from the bars (the runner's bar rule) with the
+  // journal's 1R and says so; now -0.79R, best 27418.25 (+0.38R), worst -0.95R, giveback 0.38 + 0.79 = 1.17R (308% of
+  // the best), the working stop -0.56R, 0.38 + 0.56 = 0.94R off the best. The sentence after it no longer repeats now,
+  // best and worst.
+  const nq = NQ.replace(/\./g, '\\.');
+  assert.match(p, new RegExp(`1 working order\\. Position \\(code facts\\): ${nq} long 1 @ 27410\\.5, 1R 20\\.5 pts; now -0\\.79R at 27394\\.25; MFE \\+0\\.38R at 27418\\.25 \\(13:15 ET bar\\); MAE -0\\.95R; giveback 1\\.17R \\(308% of MFE\\); working stop 27399 \\(-0\\.56R; a fill there is 0\\.94R off the best\\); no target order \\(not runner-managed: not managed by the runner \\(no exit plan it manages\\); risk from the journal stop\\)\\. `));
+  assert.match(p, new RegExp(`Open trade ${nq} long 1 @ 27410\\.5 since 12:58 ET, 6 bars closed since \\(setup:fx_orb\\): initial stop 27390: risk 20\\.5 points = 82 ticks; working stop 27399 \\(-0\\.56R\\), no target order\\. fx_orb winners in its backtest: median best \\+2\\.4R, 80% never went below -0\\.6R; this trade's worst -0\\.95R is deeper than 80% of its winners went\\.`));
   // 4. New York time throughout, UTC once in the header (for tools); the bar line in ET.
   assert.match(p, /^Autonomous cycle\. Follow the autonomous-trading skill\.[^]*? The cycle's time: 2026-04-27 13:18:\d\d ET \(2026-04-27T17:18:\d\d\.\d+Z\)\./);
   assert.match(p, /MNQ: a 3-minute bar just closed \(opened 13:15 ET\)/);

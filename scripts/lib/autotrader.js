@@ -523,8 +523,9 @@ function accountText(state) {
     // The Size and Min lines (prop/size-line.js): an active attempt only.
     + (a.status === 'active' && Array.isArray(a.sizing) ? a.sizing.map(l => ` ${l}.`).join('') : '')));
   const trades = (state.openTrades || []).map(t => ` ${t}`).join('');
-  // Positions whose trade details couldn't be built: the model reads them itself.
-  const unbuilt = state.openTradesError && positions.length ? ` Open positions: ${positions.join(', ')} (trade details unavailable this cycle: ${state.openTradesError}; read list_open_positions and list_open_orders).` : '';
+  // Positions whose trade details couldn't be built: one Position line each says so (never dropped), and the model reads
+  // them itself.
+  const unbuilt = state.openTradesError && positions.length ? `${positions.map(() => ` Position: unavailable (${state.openTradesError}).`).join('')} Open positions: ${positions.join(', ')} (trade details unavailable this cycle: ${state.openTradesError}; read list_open_positions and list_open_orders).` : '';
   const entryFacts = (state.entryLines || []).map(l => ` Working ${l}.`).join('');
   return head + entryFacts + trades + unbuilt + attempts.join('');
 }

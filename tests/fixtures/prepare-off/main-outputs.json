@@ -1,5 +1,5 @@
 {
- "commit": "2ee8e7e22",
+ "commit": "43092c3c1",
  "days": {
   "no-fill": {
    "passes": [
@@ -286,6 +286,7 @@
       "cycleAt": "2026-04-28T04:09:02.000Z",
       "action": "trade",
       "harness": "claude",
+      "promptFormat": "v2",
       "ok": true,
       "timedOut": false,
       "result": "CYCLE RESULT: no-trade - nothing to take",
@@ -593,6 +594,7 @@
       "cycleAt": "2026-04-28T04:12:02.000Z",
       "action": "trade",
       "harness": "claude",
+      "promptFormat": "v2",
       "ok": true,
       "timedOut": false,
       "result": "CYCLE RESULT: no-trade - nothing to take",
@@ -968,6 +970,7 @@
       "cycleAt": "2026-04-28T04:15:02.000Z",
       "action": "trade",
       "harness": "claude",
+      "promptFormat": "v2",
       "ok": true,
       "timedOut": false,
       "result": "CYCLE RESULT: no-trade - nothing to take",
@@ -1334,6 +1337,7 @@
      "cycleAt": "2026-04-28T04:09:02.000Z",
      "action": "trade",
      "harness": "claude",
+     "promptFormat": "v2",
      "ok": true,
      "timedOut": false,
      "result": "CYCLE RESULT: no-trade - nothing to take",
@@ -1429,6 +1433,7 @@
      "cycleAt": "2026-04-28T04:12:02.000Z",
      "action": "trade",
      "harness": "claude",
+     "promptFormat": "v2",
      "ok": true,
      "timedOut": false,
      "result": "CYCLE RESULT: no-trade - nothing to take",
@@ -1520,6 +1525,7 @@
      "cycleAt": "2026-04-28T04:15:02.000Z",
      "action": "trade",
      "harness": "claude",
+     "promptFormat": "v2",
      "ok": true,
      "timedOut": false,
      "result": "CYCLE RESULT: no-trade - nothing to take",
@@ -2009,7 +2015,7 @@
      "ran": [
       {
        "action": "trade",
-       "prompt": "sha256:cbd86d2980fa23d67f02e00c325587d2d25c6e29fe1f2917c71d7e60e11d8956 (33015 chars)",
+       "prompt": "sha256:ccde217c60efc724343a5dd160d3b132d0e70e0e60f20edc871cc2b32a85b50a (35129 chars)",
        "result": "CYCLE RESULT: managed - the open long",
        "ok": true,
        "timedOut": false
@@ -2026,7 +2032,7 @@
       "FTH_CYCLE": "full",
       "FTH_CYCLE_BARS": "{\"MNQ\":\"2026-04-28T04:12:00.000Z\"}",
       "FTH_CYCLE_DESK": "market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager",
-      "FTH_CYCLE_SKILLS": "sha256:434441a08e3d9ce2aeae727901955acf0e1c416649a4cf1bdf2dfa1ce50c7245 (323 chars)",
+      "FTH_CYCLE_SKILLS": "sha256:6f90c93afa33bf095b2e42d6658a275f4d2e3b7e7b5ce0719733dbb4ca679d55 (323 chars)",
       "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript5>.jsonl",
       "FTH_EARLY_CLOSE_DATES": "2026-11-27,2026-12-24,2027-11-26",
       "FTH_ENTRY_HOURS": "",
@@ -2112,7 +2118,9 @@
        "hold": true,
        "reason": "hold",
        "text": "hold (the open long)",
-       "tighter": null
+       "tighter": null,
+       "inline": false,
+       "modifyOrders": 0
       }
      ]
     }
@@ -2124,6 +2132,7 @@
       "cycleAt": "2026-04-28T04:09:02.000Z",
       "action": "trade",
       "harness": "claude",
+      "promptFormat": "v2",
       "ok": true,
       "timedOut": false,
       "result": "CYCLE RESULT: no-trade - nothing to take",
@@ -2431,6 +2440,7 @@
       "cycleAt": "2026-04-28T04:12:02.000Z",
       "action": "trade",
       "harness": "claude",
+      "promptFormat": "v2",
       "ok": true,
       "timedOut": false,
       "result": "CYCLE RESULT: no-trade - nothing to take",
@@ -2806,6 +2816,7 @@
       "cycleAt": "2026-04-28T04:15:02.000Z",
       "action": "trade",
       "harness": "claude",
+      "promptFormat": "v2",
       "ok": true,
       "timedOut": false,
       "result": "CYCLE RESULT: managed - the open long",
@@ -2835,7 +2846,7 @@
          "bos-vs-choch"
         ],
         "sections": [],
-        "bytes": 29005,
+        "bytes": 30260,
         "over": []
        },
        "skillLookups": {
@@ -2881,7 +2892,7 @@
        "complete": false,
        "decided": true
       },
-      "prompt": "sha256:cbd86d2980fa23d67f02e00c325587d2d25c6e29fe1f2917c71d7e60e11d8956 (33015 chars)",
+      "prompt": "sha256:ccde217c60efc724343a5dd160d3b132d0e70e0e60f20edc871cc2b32a85b50a (35129 chars)",
       "context": {
        "symbols": [
         {
@@ -2920,26 +2931,69 @@
          "sign": 1,
          "size": 1,
          "entry": 27427.5,
+         "averagePrice": 27427.5,
          "openedAt": "2026-04-28T04:12:02.000Z",
          "setup": null,
          "initialStop": 27417.5,
          "risk": 10,
+         "riskFrom": "working",
          "stop": 27417.5,
+         "stops": [
+          27417.5
+         ],
          "target": null,
-         "last": null,
-         "rNow": null,
-         "mfeR": null,
-         "maeR": null,
-         "barsHeld": 0,
+         "last": 27424.25,
+         "rNow": -0.32,
+         "mfeR": 0.05,
+         "maeR": -0.4,
+         "barsHeld": 1,
          "noBars": false,
          "stepMs": 180000,
+         "from": "2026-04-28T04:11:32.000Z",
+         "held": false,
          "notes": [
           "initial stop unknown: risk from the working stop"
-         ]
+         ],
+         "position": {
+          "basis": "fold",
+          "why": "not managed by the runner (no exit plan it manages)",
+          "contractId": "MNQ",
+          "side": "long",
+          "sign": 1,
+          "size": 1,
+          "entry": 27427.5,
+          "risk": 10,
+          "riskFrom": "working",
+          "averagePrice": 27427.5,
+          "tick": 0.25,
+          "last": 27424.25,
+          "lastBarT": "2026-04-28T04:12:00.000Z",
+          "nowR": -0.32,
+          "mfeR": 0.05,
+          "best": 27428,
+          "bestAt": "2026-04-28T04:12:00.000Z",
+          "maeR": -0.4,
+          "give": 0.37,
+          "giveShare": 740,
+          "stops": 1,
+          "work": 27417.5,
+          "workR": -1,
+          "atStopGive": 1.05,
+          "mode": null,
+          "armed": false,
+          "target": null,
+          "lock": null,
+          "lockR": null,
+          "targetOrder": null,
+          "trail": null,
+          "swingClass": null,
+          "tf": null,
+          "trailR": null
+         }
         }
        ],
        "openTradeLines": [
-        "sha256:443cdf910cf2f635e2532d2cbe222f1b1d2d0ec32fc07b3e5c068bfadea6b785 (411 chars)"
+        "sha256:ba6541e07edfdf53dee93cd9ff0ee55b1f5cef77f7e212b3a4130c49a8b5d99c (1276 chars)"
        ],
        "manageAlso": [],
        "recent": [
@@ -3104,7 +3158,7 @@
          "management",
          "bias"
         ],
-        "bytes": 29005
+        "bytes": 30260
        },
        "cachedLookups": {}
       },
@@ -3136,6 +3190,7 @@
      "cycleAt": "2026-04-28T04:09:02.000Z",
      "action": "trade",
      "harness": "claude",
+     "promptFormat": "v2",
      "ok": true,
      "timedOut": false,
      "result": "CYCLE RESULT: no-trade - nothing to take",
@@ -3231,6 +3286,7 @@
      "cycleAt": "2026-04-28T04:12:02.000Z",
      "action": "trade",
      "harness": "claude",
+     "promptFormat": "v2",
      "ok": true,
      "timedOut": false,
      "result": "CYCLE RESULT: no-trade - nothing to take",
@@ -3322,6 +3378,7 @@
      "cycleAt": "2026-04-28T04:15:02.000Z",
      "action": "trade",
      "harness": "claude",
+     "promptFormat": "v2",
      "ok": true,
      "timedOut": false,
      "result": "CYCLE RESULT: managed - the open long",
@@ -3351,7 +3408,7 @@
        "bos-vs-choch"
       ],
       "sections": [],
-      "bytes": 29005,
+      "bytes": 30260,
       "over": []
      },
      "skillLookups": {
@@ -3459,8 +3516,8 @@
      "sha256:7b5628d6ec8c5889c25c9c47da8b20e0bdefce85c37e283ac04f0add937643db (56685 chars)"
     ],
     [
-     "head-prompt/cycle-skills-f13d766551da53ad86add5dc57e565d22d13c5dc11cffdab9ee97972b52bd844.md",
-     "sha256:f13d766551da53ad86add5dc57e565d22d13c5dc11cffdab9ee97972b52bd844 (29253 chars)"
+     "head-prompt/cycle-skills-f2e0b212a4623aff799e81acc22ac668a864b5aa3a4d2ec9828ad477fb0e2ac4.md",
+     "sha256:f2e0b212a4623aff799e81acc22ac668a864b5aa3a4d2ec9828ad477fb0e2ac4 (30502 chars)"
     ],
     [
      "journal.jsonl",
@@ -3707,7 +3764,7 @@
      "ran": [
       {
        "action": "manage",
-       "prompt": "sha256:94c7b96509e15b8e6400aa0201debcdfa9ae56e670cb1bbb5388f1ca4793c91d (32602 chars)",
+       "prompt": "sha256:23be4e83d8da0db2cf31ed808e94909d42d59fc0d01391ac896a7f2d306d911e (34716 chars)",
        "result": "CYCLE RESULT: managed - the open long",
        "ok": true,
        "timedOut": false
@@ -3723,7 +3780,7 @@
       "FTH_CLOSED_DATES": "2026-01-01,2026-01-19,2026-02-16,2026-04-03,2026-05-25,2026-06-19,2026-07-03,2026-09-07,2026-11-26,2026-12-25,2027-01-01,2027-01-18,2027-02-15,2027-03-26,2027-05-31,2027-06-18,2027-07-05,2027-09-06,2027-11-25,2027-12-24",
       "FTH_CYCLE": "full",
       "FTH_CYCLE_BARS": "{\"MNQ\":\"2026-04-28T04:12:00.000Z\"}",
-      "FTH_CYCLE_SKILLS": "sha256:59271cdb4f6fb6edcd3979970b0a825457cee84b484be05f3805aa351f61e305 (323 chars)",
+      "FTH_CYCLE_SKILLS": "sha256:126310127d4ab99ee629403770bde6c7159fa198b05b9ead626b1679d0d4458c (323 chars)",
       "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript3>.jsonl",
       "FTH_EARLY_CLOSE_DATES": "2026-11-27,2026-12-24,2027-11-26",
       "FTH_ENTRY_HOURS": "",
@@ -3807,7 +3864,9 @@
        "hold": true,
        "reason": "hold",
        "text": "hold (the open long)",
-       "tighter": null
+       "tighter": null,
+       "inline": false,
+       "modifyOrders": 0
       }
      ]
     }
@@ -3819,6 +3878,7 @@
       "cycleAt": "2026-04-28T04:09:02.000Z",
       "action": "trade",
       "harness": "claude",
+      "promptFormat": "v2",
       "ok": true,
       "timedOut": false,
       "result": "CYCLE RESULT: no-trade - nothing to take",
@@ -4126,6 +4186,7 @@
       "cycleAt": "2026-04-28T04:15:02.000Z",
       "action": "manage",
       "harness": "claude",
+      "promptFormat": "v2",
       "ok": true,
       "timedOut": false,
       "result": "CYCLE RESULT: managed - the open long",
@@ -4155,7 +4216,7 @@
          "bos-vs-choch"
         ],
         "sections": [],
-        "bytes": 29005,
+        "bytes": 30260,
         "over": []
        },
        "skillLookups": {
@@ -4184,7 +4245,7 @@
        "complete": true,
        "decided": true
       },
-      "prompt": "sha256:94c7b96509e15b8e6400aa0201debcdfa9ae56e670cb1bbb5388f1ca4793c91d (32602 chars)",
+      "prompt": "sha256:23be4e83d8da0db2cf31ed808e94909d42d59fc0d01391ac896a7f2d306d911e (34716 chars)",
       "context": {
        "symbols": [
         {
@@ -4223,26 +4284,69 @@
          "sign": 1,
          "size": 1,
          "entry": 27427.5,
+         "averagePrice": 27427.5,
          "openedAt": "2026-04-28T04:12:02.000Z",
          "setup": null,
          "initialStop": 27417.5,
          "risk": 10,
+         "riskFrom": "working",
          "stop": 27417.5,
+         "stops": [
+          27417.5
+         ],
          "target": null,
-         "last": null,
-         "rNow": null,
-         "mfeR": null,
-         "maeR": null,
-         "barsHeld": 0,
+         "last": 27424.25,
+         "rNow": -0.32,
+         "mfeR": 0.05,
+         "maeR": -0.4,
+         "barsHeld": 1,
          "noBars": false,
          "stepMs": 180000,
+         "from": "2026-04-28T04:11:32.000Z",
+         "held": false,
          "notes": [
           "initial stop unknown: risk from the working stop"
-         ]
+         ],
+         "position": {
+          "basis": "fold",
+          "why": "not managed by the runner (no exit plan it manages)",
+          "contractId": "MNQ",
+          "side": "long",
+          "sign": 1,
+          "size": 1,
+          "entry": 27427.5,
+          "risk": 10,
+          "riskFrom": "working",
+          "averagePrice": 27427.5,
+          "tick": 0.25,
+          "last": 27424.25,
+          "lastBarT": "2026-04-28T04:12:00.000Z",
+          "nowR": -0.32,
+          "mfeR": 0.05,
+          "best": 27428,
+          "bestAt": "2026-04-28T04:12:00.000Z",
+          "maeR": -0.4,
+          "give": 0.37,
+          "giveShare": 740,
+          "stops": 1,
+          "work": 27417.5,
+          "workR": -1,
+          "atStopGive": 1.05,
+          "mode": null,
+          "armed": false,
+          "target": null,
+          "lock": null,
+          "lockR": null,
+          "targetOrder": null,
+          "trail": null,
+          "swingClass": null,
+          "tf": null,
+          "trailR": null
+         }
         }
        ],
        "openTradeLines": [
-        "sha256:443cdf910cf2f635e2532d2cbe222f1b1d2d0ec32fc07b3e5c068bfadea6b785 (411 chars)"
+        "sha256:ba6541e07edfdf53dee93cd9ff0ee55b1f5cef77f7e212b3a4130c49a8b5d99c (1276 chars)"
        ],
        "manageAlso": [],
        "recent": [
@@ -4389,7 +4493,7 @@
          "management",
          "bias"
         ],
-        "bytes": 29005
+        "bytes": 30260
        },
        "cachedLookups": {}
       },
@@ -4421,6 +4525,7 @@
      "cycleAt": "2026-04-28T04:09:02.000Z",
      "action": "trade",
      "harness": "claude",
+     "promptFormat": "v2",
      "ok": true,
      "timedOut": false,
      "result": "CYCLE RESULT: no-trade - nothing to take",
@@ -4516,6 +4621,7 @@
      "cycleAt": "2026-04-28T04:15:02.000Z",
      "action": "manage",
      "harness": "claude",
+     "promptFormat": "v2",
      "ok": true,
      "timedOut": false,
      "result": "CYCLE RESULT: managed - the open long",
@@ -4545,7 +4651,7 @@
        "bos-vs-choch"
       ],
       "sections": [],
-      "bytes": 29005,
+      "bytes": 30260,
       "over": []
      },
      "skillLookups": {
@@ -4633,8 +4739,8 @@
      "sha256:e3ab5a67301fdda228c8d0ba28f80f542ea241870e0a5e4ae540145df161deb7 (60131 chars)"
     ],
     [
-     "head-prompt/cycle-skills-f13d766551da53ad86add5dc57e565d22d13c5dc11cffdab9ee97972b52bd844.md",
-     "sha256:f13d766551da53ad86add5dc57e565d22d13c5dc11cffdab9ee97972b52bd844 (29253 chars)"
+     "head-prompt/cycle-skills-f2e0b212a4623aff799e81acc22ac668a864b5aa3a4d2ec9828ad477fb0e2ac4.md",
+     "sha256:f2e0b212a4623aff799e81acc22ac668a864b5aa3a4d2ec9828ad477fb0e2ac4 (30502 chars)"
     ],
     [
      "journal.jsonl",
@@ -4949,7 +5055,7 @@
      "ran": [
       {
        "action": "trade",
-       "prompt": "sha256:d2ad247e14da2177a7a3d56d03cffcdd2822b1fcd98bcdf2c08a4c70f0a2be5d (33023 chars)",
+       "prompt": "sha256:5d9af82267b0b902962c1cc9740770fd771ca16b1e91449367418886cd4d3c06 (35137 chars)",
        "result": "CYCLE RESULT: managed - the open long",
        "ok": true,
        "timedOut": false
@@ -4966,7 +5072,7 @@
       "FTH_CYCLE": "full",
       "FTH_CYCLE_BARS": "{\"MNQ\":\"2026-04-28T04:12:00.000Z\"}",
       "FTH_CYCLE_DESK": "market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager",
-      "FTH_CYCLE_SKILLS": "sha256:434441a08e3d9ce2aeae727901955acf0e1c416649a4cf1bdf2dfa1ce50c7245 (323 chars)",
+      "FTH_CYCLE_SKILLS": "sha256:6f90c93afa33bf095b2e42d6658a275f4d2e3b7e7b5ce0719733dbb4ca679d55 (323 chars)",
       "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript5>.jsonl",
       "FTH_EARLY_CLOSE_DATES": "2026-11-27,2026-12-24,2027-11-26",
       "FTH_ENTRY_HOURS": "",
@@ -5052,7 +5158,9 @@
        "hold": true,
        "reason": "hold",
        "text": "hold (the open long)",
-       "tighter": null
+       "tighter": null,
+       "inline": false,
+       "modifyOrders": 0
       }
      ]
     }
@@ -5064,6 +5172,7 @@
       "cycleAt": "2026-04-28T04:09:02.000Z",
       "action": "trade",
       "harness": "claude",
+      "promptFormat": "v2",
       "ok": true,
       "timedOut": false,
       "result": "CYCLE RESULT: no-trade - nothing to take",
@@ -5371,6 +5480,7 @@
       "cycleAt": "2026-04-28T04:12:02.000Z",
       "action": "trade",
       "harness": "claude",
+      "promptFormat": "v2",
       "ok": true,
       "timedOut": false,
       "result": "CYCLE RESULT: executed - fx_break long MNQ 1",
@@ -5803,6 +5913,7 @@
       "cycleAt": "2026-04-28T04:15:02.000Z",
       "action": "trade",
       "harness": "claude",
+      "promptFormat": "v2",
       "ok": true,
       "timedOut": false,
       "result": "CYCLE RESULT: managed - the open long",
@@ -5832,7 +5943,7 @@
          "bos-vs-choch"
         ],
         "sections": [],
-        "bytes": 29005,
+        "bytes": 30260,
         "over": []
        },
        "skillLookups": {
@@ -5878,7 +5989,7 @@
        "complete": false,
        "decided": true
       },
-      "prompt": "sha256:d2ad247e14da2177a7a3d56d03cffcdd2822b1fcd98bcdf2c08a4c70f0a2be5d (33023 chars)",
+      "prompt": "sha256:5d9af82267b0b902962c1cc9740770fd771ca16b1e91449367418886cd4d3c06 (35137 chars)",
       "context": {
        "symbols": [
         {
@@ -5917,26 +6028,69 @@
          "sign": 1,
          "size": 1,
          "entry": 27427.5,
+         "averagePrice": 27427.5,
          "openedAt": "2026-04-28T04:12:02.000Z",
          "setup": null,
          "initialStop": 27417.5,
          "risk": 10,
+         "riskFrom": "working",
          "stop": 27417.5,
+         "stops": [
+          27417.5
+         ],
          "target": null,
-         "last": null,
-         "rNow": null,
-         "mfeR": null,
-         "maeR": null,
-         "barsHeld": 0,
+         "last": 27424.25,
+         "rNow": -0.32,
+         "mfeR": 0.05,
+         "maeR": -0.4,
+         "barsHeld": 1,
          "noBars": false,
          "stepMs": 180000,
+         "from": "2026-04-28T04:11:32.000Z",
+         "held": false,
          "notes": [
           "initial stop unknown: risk from the working stop"
-         ]
+         ],
+         "position": {
+          "basis": "fold",
+          "why": "not managed by the runner (no exit plan it manages)",
+          "contractId": "MNQ",
+          "side": "long",
+          "sign": 1,
+          "size": 1,
+          "entry": 27427.5,
+          "risk": 10,
+          "riskFrom": "working",
+          "averagePrice": 27427.5,
+          "tick": 0.25,
+          "last": 27424.25,
+          "lastBarT": "2026-04-28T04:12:00.000Z",
+          "nowR": -0.32,
+          "mfeR": 0.05,
+          "best": 27428,
+          "bestAt": "2026-04-28T04:12:00.000Z",
+          "maeR": -0.4,
+          "give": 0.37,
+          "giveShare": 740,
+          "stops": 1,
+          "work": 27417.5,
+          "workR": -1,
+          "atStopGive": 1.05,
+          "mode": null,
+          "armed": false,
+          "target": null,
+          "lock": null,
+          "lockR": null,
+          "targetOrder": null,
+          "trail": null,
+          "swingClass": null,
+          "tf": null,
+          "trailR": null
+         }
         }
        ],
        "openTradeLines": [
-        "sha256:443cdf910cf2f635e2532d2cbe222f1b1d2d0ec32fc07b3e5c068bfadea6b785 (411 chars)"
+        "sha256:ba6541e07edfdf53dee93cd9ff0ee55b1f5cef77f7e212b3a4130c49a8b5d99c (1276 chars)"
        ],
        "manageAlso": [],
        "recent": [
@@ -6099,7 +6253,7 @@
          "management",
          "bias"
         ],
-        "bytes": 29005
+        "bytes": 30260
        },
        "cachedLookups": {}
       },
@@ -6131,6 +6285,7 @@
      "cycleAt": "2026-04-28T04:09:02.000Z",
      "action": "trade",
      "harness": "claude",
+     "promptFormat": "v2",
      "ok": true,
      "timedOut": false,
      "result": "CYCLE RESULT: no-trade - nothing to take",
@@ -6226,6 +6381,7 @@
      "cycleAt": "2026-04-28T04:12:02.000Z",
      "action": "trade",
      "harness": "claude",
+     "promptFormat": "v2",
      "ok": true,
      "timedOut": false,
      "result": "CYCLE RESULT: executed - fx_break long MNQ 1",
@@ -6346,6 +6502,7 @@
      "cycleAt": "2026-04-28T04:15:02.000Z",
      "action": "trade",
      "harness": "claude",
+     "promptFormat": "v2",
      "ok": true,
      "timedOut": false,
      "result": "CYCLE RESULT: managed - the open long",
@@ -6375,7 +6532,7 @@
        "bos-vs-choch"
       ],
       "sections": [],
-      "bytes": 29005,
+      "bytes": 30260,
       "over": []
      },
      "skillLookups": {
@@ -6496,8 +6653,8 @@
      "sha256:7b5628d6ec8c5889c25c9c47da8b20e0bdefce85c37e283ac04f0add937643db (56685 chars)"
     ],
     [
-     "head-prompt/cycle-skills-f13d766551da53ad86add5dc57e565d22d13c5dc11cffdab9ee97972b52bd844.md",
-     "sha256:f13d766551da53ad86add5dc57e565d22d13c5dc11cffdab9ee97972b52bd844 (29253 chars)"
+     "head-prompt/cycle-skills-f2e0b212a4623aff799e81acc22ac668a864b5aa3a4d2ec9828ad477fb0e2ac4.md",
+     "sha256:f2e0b212a4623aff799e81acc22ac668a864b5aa3a4d2ec9828ad477fb0e2ac4 (30502 chars)"
     ],
     [
      "journal.jsonl",

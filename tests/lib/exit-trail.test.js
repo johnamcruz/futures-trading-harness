@@ -340,3 +340,125 @@ test('afterTargetStep lock property: on random paths the stop never loosens; onc
     }
   }
 });
+
+// The Position line's reads of the same rule: the lock the step trails above (lockOf),
+// the code floor's class at the bar (swingClassOf), the trade's best and worst closed-bar extremes (extremeStep), and
+// the same step folded over closed bars for a trade the runner does not hold (tradeFold).
+const { lockOf, swingClassOf, extremeStep, tradeFold } = require('../../scripts/lib/trading/exit-trail');
+
+test('lockOf: the step\'s own lock: the target\'s R less the giveback (never under the entry); with the ratchet, from the best R', () => {
+  assert.strictEqual(lockOf(LONG({ peakR: 3 }), AFTER()), 115, 'target 2R less 0.5R');
+  assert.strictEqual(lockOf(LONG({ peakR: 3 }), AFTER({ ratchet: true })), 125, 'ratchet: the best 3R less 0.5R');
+  assert.strictEqual(lockOf(LONG({ peakR: 1 }), AFTER({ ratchet: true })), 115, 'ratchet: never under the target\'s');
+  assert.strictEqual(lockOf(LONG({ target: 105 }), AFTER()), 100, 'a target under the giveback: the entry');
+  assert.strictEqual(lockOf({ sign: -1, entry: 100, risk: 10, target: 80, peakR: 2.4 }, AFTER({ ratchet: true })), 81);
+  assert.strictEqual(lockOf(LONG({ target: null }), AFTER()), null, 'no target: no lock');
+  assert.strictEqual(lockOf(LONG(), { afterTarget: undefined }), null, 'no afterTarget: no lock');
+  // The step stands on it: an armed R trail far behind leaves the stop at the lock, snapped (ratchet on and off).
+  for (const plan of [AFTER({ trailR: 9 }), AFTER({ trailR: 9, ratchet: true })]) {
+    const t = LONG({ stop: 90, peakR: 2.3, armed: true });
+    const s = afterTargetStep(t, { h: 123.1, l: 121, c: 122 }, plan, 0.25, null);
+    assert.strictEqual(s.stop, Math.floor(lockOf({ ...t, peakR: s.peakR }, plan) * 4) / 4, JSON.stringify(plan));
+  }
+});
+
+test('swingClassOf: A before the target; B a usable swing beyond the lock; C a usable swing behind it; D none, or on the wrong side, with whichever of the lock and the R trail binds', () => {
+  const S = AFTER({ trailBy: 'structure', swingMinutes: 15 });
+  const armed = LONG({ peakR: 2.2, armed: true });
+  const at = (t, c, swing, plan = S) => swingClassOf({ trade: t, bar: { c }, plan, tick: 0.25, swing });
+  assert.strictEqual(at(LONG({ peakR: 1.5 }), 115, 110).cls, 'A');
+  assert.deepStrictEqual(at(armed, 128, 124), { cls: 'B', trailBy: 'structure', swing: 124, swingStop: 123.75, lock: 115, binds: 'swing', trailStop: null, wrongSide: false, earlyLock: null });
+  // A usable swing behind the lock is C (the review's R1: usable alone is not B).
+  assert.deepStrictEqual(at(armed, 128, 104), { cls: 'C', trailBy: 'structure', swing: 104, swingStop: 103.75, lock: 115, binds: 'lock', trailStop: null, wrongSide: false, earlyLock: null });
+  // The swing's stop exactly at the lock: the lock binds (C).
+  assert.strictEqual(at(armed, 128, 115.25).cls, 'C');
+  // No swing: D, the lock binding (R trail 2.2R - 1R = 112 is under it) ...
+  assert.deepStrictEqual(at(armed, 128, null), { cls: 'D', trailBy: 'structure', swing: null, swingStop: null, lock: 115, binds: 'lock', trailStop: 112, wrongSide: false, earlyLock: null });
+  // ... or the R trail binding (best 3R: 120 over the lock 115).
+  assert.deepStrictEqual([at(LONG({ peakR: 3, armed: true }), 128, null).binds, at(LONG({ peakR: 3, armed: true }), 128, null).trailStop], ['trail', 120]);
+  // A swing on the wrong side of the close is no swing for the step, but it is there: said so, never "no swing".
+  const wrong = at(armed, 117, 124);
+  assert.deepStrictEqual([wrong.cls, wrong.wrongSide, wrong.swing, wrong.binds], ['D', true, 124, 'lock']);
+  // A trail by R: no swing to stand on; the lock or the trail.
+  assert.deepStrictEqual([at(armed, 128, null, AFTER()).cls, at(armed, 128, null, AFTER()).trailBy], ['D', 'r']);
+  // The step agrees on every case: B's stop is the swing's, C's and D-lock's the lock, D-trail's the trail.
+  for (const [t, c, swing] of [[armed, 128, 124], [armed, 128, 104], [armed, 128, null], [LONG({ peakR: 3, armed: true }), 128, null], [armed, 117, 124]]) {
+    const k = at(t, c, swing);
+    const s = afterTargetStep({ ...t, stop: 90 }, { h: 100 + t.peakR * 10, l: c - 1, c }, S, 0.25, swing);
+    assert.strictEqual(s.stop, k.binds === 'swing' ? k.swingStop : k.binds === 'trail' ? k.trailStop : k.lock, `${k.cls} ${swing}`);
+  }
+  // A short mirrors it: entry 100, 1R 10, target 80 (lock 85); a swing high at 76 is beyond the lock (B), at 90 behind it (C).
+  const short = { sign: -1, entry: 100, risk: 10, peakR: 2.2, armed: true, target: 80 };
+  assert.deepStrictEqual([at(short, 72, 76).cls, at(short, 72, 76).swingStop], ['B', 76.25]);
+  assert.strictEqual(at(short, 72, 90).cls, 'C');
+  assert.deepStrictEqual([at(short, 83, 76).cls, at(short, 83, 76).wrongSide], ['D', true]);
+  assert.strictEqual(swingClassOf({ trade: armed, bar: { c: 128 }, plan: { afterTarget: undefined }, tick: 0.25, swing: 124 }), null, 'no afterTarget: no class');
+});
+
+test('extremeStep: the best and worst closed-bar extremes with their prices; MAE never above 0; the bar of the best; bars since it', () => {
+  const T = { sign: 1, entry: 100, risk: 10 };
+  let a = {};
+  a = extremeStep(a, { t: 'b1', h: 101, l: 99, c: 100.5 }, T);
+  assert.deepStrictEqual(a, { peakR: 0.1, bestPrice: 101, bestBarT: 'b1', troughR: -0.1, worstPrice: 99, stallBars: 0 });
+  a = extremeStep(a, { t: 'b2', h: 100.5, l: 100.25, c: 100.25 }, T);
+  assert.deepStrictEqual([a.bestBarT, a.stallBars, a.worstPrice], ['b1', 1, 99]);
+  // A trade that never went below its entry: MAE 0, no worst price.
+  const up = extremeStep({}, { t: 'x', h: 104, l: 100.5, c: 103 }, T);
+  assert.deepStrictEqual([up.troughR, up.worstPrice], [0, null]);
+  // A short: the best is the low, the worst the high.
+  const s = extremeStep({}, { t: 'x', h: 102, l: 95, c: 96 }, { sign: -1, entry: 100, risk: 10 });
+  assert.deepStrictEqual([s.peakR, s.bestPrice, s.troughR, s.worstPrice], [0.5, 95, -0.2, 102]);
+  // Never favourable: no best price, MFE 0.
+  const dn = extremeStep({}, { t: 'x', h: 99.5, l: 97, c: 98 }, T);
+  assert.deepStrictEqual([dn.peakR, dn.bestPrice], [0, null]);
+});
+
+test('tradeFold: the step folded over closed bars equals a hand fold; fed bar by bar it equals the batch (causal)', () => {
+  const bars = walk(60, 9).slice(10).map(b => ({ ...b }));
+  const entry = bars[0].o;
+  const trade = { sign: 1, entry, risk: 4, stop: entry - 4, target: entry + 8 };
+  const plan = AFTER({ trailBy: 'structure', swingMinutes: 15 });
+  const all = walk(60, 9);
+  const swingAt = bar => swingAtBar(all, all.find(x => x.t === bar.t), 15, 1);
+  const f = tradeFold(trade, bars, plan, 0.25, swingAt);
+  // The hand fold.
+  let t = { ...trade, peakR: 0, armed: false };
+  let trough = 0;
+  for (const b of bars) {
+    trough = Math.min(trough, (b.l - entry) / 4);
+    const s = afterTargetStep(t, b, plan, 0.25, swingAt(b));
+    t = { ...t, stop: s.stop, peakR: s.peakR, armed: s.armed };
+  }
+  assert.deepStrictEqual([f.peakR, f.troughR, f.armed, f.stop, f.lastClose, f.lastBarT], [t.peakR, trough, t.armed, t.stop, bars[bars.length - 1].c, bars[bars.length - 1].t]);
+  // Causal: the fold of the first k bars equals the batch's state after k bars, for every k.
+  for (let k = 1; k <= bars.length; k += 7) {
+    const part = tradeFold(trade, bars.slice(0, k), plan, 0.25, swingAt);
+    const again = tradeFold(trade, bars.slice(0, k), plan, 0.25, swingAt);
+    assert.deepStrictEqual(part, again);
+    assert.strictEqual(part.lastBarT, bars[k - 1].t);
+  }
+  // No plan (a trade the runner does not manage): the extremes only, no stop, no class.
+  const bare = tradeFold(trade, bars, null, 0.25, () => null);
+  assert.deepStrictEqual([bare.peakR, bare.troughR, bare.stop, bare.swingClass], [f.peakR, f.troughR, null, null]);
+});
+
+test('swingClassOf before the target with the early lock on: class A names the lock level the step holds the stop at', () => {
+  const plan = AFTER({ trailBy: 'structure', swingMinutes: 15, lockAtR: 1, lockToTicks: 2 });
+  const t = LONG({ peakR: 1.2, armed: false });
+  const k = swingClassOf({ trade: t, bar: { c: 110 }, plan, tick: 0.25, swing: null });
+  const s = afterTargetStep({ ...t, stop: 90 }, { h: 112, l: 108, c: 110 }, plan, 0.25, null);
+  assert.deepStrictEqual([k.cls, k.earlyLock, s.stop], ['A', 100.5, 100.5], 'the step and the class name the same level');
+  // Under lockAtR: no early lock yet.
+  assert.strictEqual(swingClassOf({ trade: LONG({ peakR: 0.9 }), bar: { c: 105 }, plan, tick: 0.25 }).earlyLock, null);
+  // A short mirrors it: entry 100, 2 ticks under it.
+  assert.strictEqual(swingClassOf({ trade: { sign: -1, entry: 100, risk: 10, peakR: 1.1, armed: false, target: 80 }, bar: { c: 90 }, plan, tick: 0.25 }).earlyLock, 99.5);
+});
+
+test('extremeStep on a tie: a later bar equal to the best keeps the first bar\'s time and counts as a stall bar', () => {
+  const T = { sign: 1, entry: 100, risk: 10 };
+  let a = extremeStep({}, { t: 'b1', h: 105, l: 100, c: 104 }, T);
+  a = extremeStep({ ...a }, { t: 'b2', h: 105, l: 101, c: 103 }, T);
+  assert.deepStrictEqual([a.bestBarT, a.bestPrice, a.stallBars], ['b1', 105, 1]);
+  const s = extremeStep(extremeStep({}, { t: 'b1', h: 101, l: 95, c: 96 }, { sign: -1, entry: 100, risk: 10 }), { t: 'b2', h: 99, l: 95, c: 97 }, { sign: -1, entry: 100, risk: 10 });
+  assert.deepStrictEqual([s.bestBarT, s.stallBars], ['b1', 1], 'a short\'s equal low too');
+});

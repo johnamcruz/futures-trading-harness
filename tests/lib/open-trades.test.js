@@ -41,7 +41,8 @@ test('a long: setup and initial stop from the entry\'s order, working stop and t
   assert.strictEqual(t.maeR, -0.38); // 21496
   assert.deepStrictEqual(t.notes, []);
   const line = describeOpenTrade(t, { tickSize: 0.25, et: () => '10:41 ET' });
-  assert.strictEqual(line, `Open trade ${C} long 2 @ 21500.25 since 10:41 ET, 2 bars closed since (setup:value_area): initial stop 21489: risk 11.25 points = 45 ticks; working stop 21494.75 (-0.49R), target 21560 (+5.31R); now +0.84R at 21509.75, best +1.22R, worst -0.38R.`);
+  // The Position line first (no held trade here: folded from the bars, said so); now, best and worst are its, not the sentence's.
+  assert.strictEqual(line, `Position (code facts): ${C} long 2 @ 21500.25, 1R 11.25 pts; now +0.84R at 21509.75; MFE +1.22R at 21514 (10:45 ET bar); MAE -0.38R; giveback 0.38R (31% of MFE); working stop 21494.75 (-0.49R; a fill there is 1.71R off the best); target order 21560 (+5.31R) (not runner-managed: no held trade; risk from the journal stop). Open trade ${C} long 2 @ 21500.25 since 10:41 ET, 2 bars closed since (setup:value_area): initial stop 21489: risk 11.25 points = 45 ticks; working stop 21494.75 (-0.49R), target 21560 (+5.31R).`);
 });
 
 test('a short with no working stop and no planned stop: flagged, risk unknown', () => {
@@ -56,7 +57,7 @@ test('a short with no working stop and no planned stop: flagged, risk unknown', 
   assert.strictEqual(t.risk, null);
   assert.strictEqual(t.rNow, null);
   assert.deepStrictEqual(t.notes, ['NO working stop']);
-  assert.match(describeOpenTrade(t), /\(setup:bos\): initial risk unknown; NO working stop, target 21450 \(\?\); last close 21509\.75 \(no R without an initial risk\)\.$/);
+  assert.match(describeOpenTrade(t), /^Position: unavailable \(no initial risk: no R to state\)\. Open trade .*\(setup:bos\): initial risk unknown; NO working stop, target 21450 \(\?\)\.$/);
 });
 
 test('the initial stop falls back to the working stop; a stop on the wrong side of the entry is not a risk', () => {
@@ -66,11 +67,11 @@ test('the initial stop falls back to the working stop; a stop on the wrong side 
   assert.deepStrictEqual(a.notes, ['initial stop unknown: risk from the working stop']);
   assert.strictEqual(a.setup, null);
   assert.strictEqual(a.barsHeld, null, 'no bars for its contract this cycle');
-  assert.match(describeOpenTrade(a), /setup unknown: no order_placed entry with a setup tag\): risk 10 points, measured to the working stop \(the initial stop is unknown\);.*no bars for this contract this cycle, so no R now, best, or worst/);
+  assert.match(describeOpenTrade(a), /^Position: unavailable \(no bars for this contract this cycle\)\. Open trade .*setup unknown: no order_placed entry with a setup tag\): risk 10 points, measured to the working stop \(the initial stop is unknown\);.*no bars for this contract this cycle \(read get_bars or the quote\)\.$/);
   // Bars, but none since the fill (it filled during the bar that just closed).
   const [c] = openTrades({ positions: [pos], orders: [{ contractId: C, type: 4, side: 1, stopPrice: 21490 }], entries: [], barsFor: () => [BARS[0]] });
   assert.strictEqual(c.barsHeld, 0);
-  assert.match(describeOpenTrade(c), /no closed bar since the fill yet\.$/);
+  assert.match(describeOpenTrade(c), /^Position: unavailable \(no closed bar since the fill yet\)\. Open trade /);
   // A breakeven-plus stop above a long's entry: no risk from it.
   const [b] = openTrades({ positions: [pos], orders: [{ contractId: C, type: 4, side: 1, stopPrice: 21505 }], entries: [placed('2026-10-08T14:41:00Z', 'setup:orb long, stop 21510.00')], barsFor: () => null });
   assert.strictEqual(b.initialStop, null);
@@ -113,4 +114,112 @@ test('the open trade\'s line ends with its read facts (trade-read.js); a read th
   // Broken bars: the failure is in the line, never a throw.
   assert.match(tradeReadText(t, { bars: [{ t: '2026-10-08T14:42:00.000Z' }], base: 3 }), /^Trade read: unavailable \(/);
   assert.match(tradeReadText(t, { bars: null, base: 3 }), /^Trade read: unavailable \(/);
+});
+
+// One R basis: the runner's held trade, when it is the position's and current.
+const { tradeFold } = require('../../scripts/lib/trading/exit-trail');
+const POS = { id: 7, contractId: C, type: 1, size: 2, averagePrice: 21500.25, creationTimestamp: '2026-10-08T14:41:10Z' };
+const ORDERS = [{ contractId: C, type: 4, side: 1, stopPrice: 21494.75 }];
+const JOURNAL = [placed('2026-10-08T14:41:05Z', 'setup:trade_lifecycle long, stop 21489.00')]; // the journal's 1R: 11.25
+const PLAN = { afterTarget: { lockGivebackR: 1.5, trailBy: 'r', trailR: 1, swingMinutes: null, warningGivebackR: 0.5 } };
+/** The runner's held trade over BARS by its own rule (the 14:39 bar opened 130 s before the fill: not counted), 1R 10. */
+function heldOver(bars, over = {}) {
+  const x = tradeFold({ sign: 1, entry: 21500.25, risk: 10, stop: 21490.25, target: 21520.25 }, bars.slice(1), PLAN, 0.25);
+  return { key: '7', setup: 'trade_lifecycle', sign: 1, entry: 21500.25, risk: 10, stop: 21490.25, plan: PLAN, target: 21520.25, since: Date.parse(POS.creationTimestamp), ...x, ...over };
+}
+
+test('one basis: every R and every "best" in the Position line, the Open trade sentence, the Trade read and the Manage read is the held trade\'s (its 1R differing from the journal\'s)', () => {
+  const held = heldOver(BARS);
+  const [t] = openTrades({ positions: [POS], orders: ORDERS, entries: JOURNAL, barsFor: () => BARS, heldFor: () => held, lastBarFor: () => BARS[2].t, tickFor: () => 0.25 });
+  assert.deepStrictEqual([t.held, t.risk, t.initialStop, t.riskFrom], [true, 10, 21490.25, 'runner'], 'the runner\'s 1R, not the journal\'s 11.25');
+  assert.deepStrictEqual([t.rNow, t.mfeR, t.maeR], [0.95, 1.38, -0.42]);
+  const read = tradeReadText(t, { bars: BARS, base: 3, tickSize: 0.25, exit: PLAN.afterTarget });
+  const text = describeOpenTrade(t, { tickSize: 0.25, read });
+  assert.match(text, /^Position \(code facts\): MNQ long 2 @ 21500\.25, 1R 10 pts; now \+0\.95R at 21509\.75; MFE \+1\.38R at 21514 \(10:45 ET bar\); MAE -0\.42R; giveback 0\.43R \(31% of MFE\); working stop 21494\.75 \(-0\.55R; a fill there is 1\.93R off the best\); target not reached; code floor: before the target: the initial stop holds\. /);
+  assert.match(text, /Open trade MNQ long 2 @ 21500\.25.*: initial stop 21490\.25: risk 10 points = 40 ticks; working stop 21494\.75 \(-0\.55R\)/);
+  assert.match(text, /Trade read \(closed bars since entry; pullback-vs-reversal\): best 21514; /);
+  // The Manage read's warning level from the same best and 1R: 21514 - 0.5 x 10 = 21509.
+  assert.match(text, /warning giveback \(0\.5R behind the best\): 21509 /);
+  // Every R stated anywhere: the working stop's is one number.
+  assert.deepStrictEqual([...new Set([...text.matchAll(/21494\.75 \(([-+\d.]+)R/g)].map(m => m[1]))], ['-0.55']);
+  assert.ok(!/11\.25|\b45 ticks/.test(text), 'the journal\'s 1R appears nowhere');
+});
+
+test('the held trade is used only for its own position, managed, and current; else the bars fold, said so (never another trade\'s numbers)', () => {
+  const held = heldOver(BARS);
+  const run = (h, lastBarT, pos = POS) => openTrades({ positions: [pos], orders: ORDERS, entries: JOURNAL, barsFor: () => BARS, heldFor: () => h, lastBarFor: () => lastBarT, tickFor: () => 0.25 })[0];
+  // Opened after this pass's housekeeping (no held trade yet).
+  const fresh = run(null, BARS[2].t);
+  assert.deepStrictEqual([fresh.held, fresh.risk, fresh.position.basis], [false, 11.25, 'fold']);
+  assert.match(describeOpenTrade(fresh, { tickSize: 0.25 }), /\(not runner-managed: no held trade; risk from the journal stop\)\./);
+  // A micro and its mini on one item: the held trade is the other position's (its key).
+  const other = run(held, BARS[2].t, { ...POS, id: 8 });
+  assert.deepStrictEqual([other.held, other.risk], [false, 11.25]);
+  assert.match(describeOpenTrade(other, { tickSize: 0.25 }), /not runner-managed: the held trade is another position's;/);
+  // Housekeeping failed this pass: the held trade's last bar is not the last closed bar.
+  const stale = run(heldOver(BARS.slice(0, 2)), BARS[2].t);
+  assert.deepStrictEqual([stale.held, stale.position.basis], [false, 'fold']);
+  assert.match(describeOpenTrade(stale, { tickSize: 0.25 }), /not runner-managed: the held trade was not updated to the last closed bar;/);
+  // Not managed by the runner ({ skip: true }).
+  assert.strictEqual(run({ key: '7', skip: true }, BARS[2].t).held, false);
+  // The fallback counts the bars the runner would: the 14:41 bar? none here; a bar opened 20 s before the fill would be.
+  const graced = openTrades({ positions: [POS], orders: ORDERS, entries: JOURNAL, barsFor: () => [{ t: '2026-10-08T14:40:50.000Z', o: 21500, h: 21530, l: 21499, c: 21501 }], tickFor: () => 0.25 })[0];
+  assert.deepStrictEqual([graced.barsHeld, graced.mfeR], [1, 2.64]);
+});
+
+test('every working stop is kept (`stops`); `stop` stays the working stop nearest the entry (replay/labels.js reads it)', () => {
+  const [t] = openTrades({ positions: [POS], orders: [...ORDERS, { contractId: C, type: 4, side: 1, stopPrice: 21480 }], entries: JOURNAL, barsFor: () => BARS, tickFor: () => 0.25 });
+  assert.deepStrictEqual([t.stop, t.stops], [21494.75, [21494.75, 21480]]);
+  assert.match(describeOpenTrade(t, { tickSize: 0.25 }), /; 2 stop orders, the loosest 21480 \(-1\.8R; /);
+});
+
+test('describeOpenTrade is total: a broken trade object still gives a Position line or "Position: unavailable (...)" first', () => {
+  for (const bad of [{}, { contractId: C, notes: null }, { contractId: C, position: { unavailable: 'x' } }]) {
+    const s = describeOpenTrade(bad);
+    assert.match(s, /^Position(: unavailable \(| \(code facts\): )/, s);
+  }
+});
+
+test('a re-averaged position through openTrades: every R stays on the held trade\'s entry, and the line says the average price now', () => {
+  const held = heldOver(BARS);
+  const [t] = openTrades({ positions: [{ ...POS, averagePrice: 21502.75 }], orders: ORDERS, entries: JOURNAL, barsFor: () => BARS, heldFor: () => held, lastBarFor: () => BARS[2].t, tickFor: () => 0.25 });
+  assert.deepStrictEqual([t.entry, t.averagePrice, t.risk], [21500.25, 21502.75, 10]);
+  const text = describeOpenTrade(t, { tickSize: 0.25 });
+  assert.match(text, /^Position \(code facts\): MNQ long 2 @ 21500\.25, 1R 10 pts \(average price now 21502\.75; R from the runner's entry 21500\.25\); now \+0\.95R at 21509\.75; /);
+  assert.match(text, /Open trade MNQ long 2 @ 21500\.25 /);
+  assert.match(text, /working stop 21494\.75 \(-0\.55R\)/, 'the sentence\'s R on the held entry too');
+});
+
+test('the record\'s MFE and MAE fields are clamped as the line is (MFE never under 0, MAE never above)', () => {
+  const up = [bar('2026-10-08T14:42:00.000Z', 21501, 21510, 21501, 21509)];
+  const [t] = openTrades({ positions: [POS], orders: ORDERS, entries: JOURNAL, barsFor: () => up, tickFor: () => 0.25 });
+  assert.deepStrictEqual([t.maeR, t.mfeR], [0, 0.87], 'the low 21501 is above the entry: MAE 0, not +0.07');
+  const down = [bar('2026-10-08T14:42:00.000Z', 21499, 21499.5, 21490, 21492)];
+  assert.strictEqual(openTrades({ positions: [POS], orders: ORDERS, entries: JOURNAL, barsFor: () => down, tickFor: () => 0.25 })[0].mfeR, 0);
+});
+
+test('one basis: the held best reaches the Trade read and the Manage read even when the bars in the window miss it', () => {
+  // The held trade saw 21530 (a bar the window no longer holds); the window's own best is 21514.
+  const held = heldOver(BARS, { bestPrice: 21530, peakR: 2.98 });
+  const [t] = openTrades({ positions: [POS], orders: ORDERS, entries: JOURNAL, barsFor: () => BARS, heldFor: () => held, lastBarFor: () => BARS[2].t, tickFor: () => 0.25 });
+  const read = tradeReadText(t, { bars: BARS, base: 3, tickSize: 0.25, exit: PLAN.afterTarget });
+  assert.match(read, /: best 21530; /);
+  assert.match(read, /warning giveback \(0\.5R behind the best\): 21525 /, '21530 - 0.5 x 10');
+  // The record's own numbers are the held trade's, not the window's (the bars alone give a lower best).
+  assert.strictEqual(t.mfeR, 2.98);
+});
+
+test('several working stops: the line and the sentence name the same one rule (the loosest is the exposure) and say how many', () => {
+  const [t] = openTrades({ positions: [POS], orders: [...ORDERS, { contractId: C, type: 4, side: 1, stopPrice: 21480 }], entries: JOURNAL, barsFor: () => BARS, tickFor: () => 0.25 });
+  const text = describeOpenTrade(t, { tickSize: 0.25 });
+  assert.match(text, /; 2 stop orders, the loosest 21480 \(/);
+  assert.match(text, /Open trade .*: initial stop 21489: risk 11\.25 points = 45 ticks; 2 stop orders, the loosest 21480 \(-1\.8R\)/);
+  assert.doesNotMatch(text.slice(text.indexOf('Open trade')), /working stop 21494\.75/);
+});
+
+test('describeOpenTrade never throws when its Position facts can\'t be read: the line says so first', () => {
+  const t = { contractId: C, side: 'long', sign: 1, size: 1, entry: 100, risk: 10, initialStop: 90, stop: 90, stops: [90], target: null, barsHeld: 1, noBars: false, notes: [] };
+  Object.defineProperty(t, 'position', { get() { throw new Error('unreadable facts'); } });
+  const s = describeOpenTrade(t);
+  assert.match(s, /^Position: unavailable \(unreadable facts\)\. Open trade MNQ long 1 @ 100/);
 });

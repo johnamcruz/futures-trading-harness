@@ -52,5 +52,5 @@
     "auditTop": 5,
     "walkForward": { "trainMonths": 6, "testMonths": 1, "minTrades": 20 }
   },
-  "scorecard": { "giveBackMinMfeR": 1, "giveBackShare": 0.5 }
+  "scorecard": { "giveBackMinMfeR": 1, "giveBackShare": 0.5, "maxMissingStopShare": 0.02 }
 }

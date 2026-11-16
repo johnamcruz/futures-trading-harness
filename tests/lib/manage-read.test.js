@@ -42,7 +42,12 @@ test('manageRead: a 15m BOS the trade\'s way since entry gives its protected swi
   // A level at or past the last close is no stop to rest: said so, never 'tighter' (the warning giveback after a deep pullback).
   const deep = manageRead({ side: 'long', entry: 106, risk: 2, stop: 96, openedAt: opened, bars: bars15(UP), base: 3, tick: 0.25, exit: EXIT });
   assert.deepStrictEqual([deep.warning.stop, deep.warning.past, deep.warning.tighter], [109, true, false], 'best 110 - 0.5 x 2 = 109, snapped 109; last close 109');
-  assert.match(manageReadLine(deep), /past the price: no stop to rest there, hold/);
+  // The fact only, no advice in it (the skill keeps "past the price -> hold").
+  assert.match(manageReadLine(deep), /past the price: a stop there would fill at once/);
+  const facts = x => x.slice(x.indexOf('only when tighter): ')); // the facts after the header's instruction (kept)
+  assert.doesNotMatch(facts(manageReadLine(deep)), /\bhold\b/, 'no "hold" in any Manage read fact');
+  // The working stop and the best are the Position line's: not repeated here.
+  assert.doesNotMatch(line, /working stop \d|; best \d/);
   // Filled after the break: no BOS since entry.
   const late = manageRead({ side: 'long', entry: 109, risk: 10, stop: 99, openedAt: new Date(T0 + 7 * 15 * 60000).toISOString(), bars: bars15([...UP, [109, 111, 108, 110]]), base: 3, tick: 0.25, exit: EXIT });
   assert.strictEqual(late.bos, null);
@@ -65,4 +70,14 @@ test('manageRead: the short mirror; a CHoCH against since entry is shown; unavai
   assert.match(manageReadLine(t), /protected swing 100 BROKEN by a close; 15m CHoCH against since entry: through/);
   assert.match(manageReadLine(manageRead({ side: 'long', entry: 106, risk: 0, stop: 96, openedAt: opened, bars: [], base: 3, tick: 0.25 })), /Manage read: unavailable \(no side, entry, risk/);
   assert.match(manageReadLine(manageRead({ side: 'long', entry: 106, risk: 10, stop: 96, openedAt: '2027-01-01T00:00:00Z', bars: bars15(UP), base: 3, tick: 0.25 })), /no closed bar since the fill/);
+});
+
+test('manageRead, one basis: the first bar counted is `from` (the runner\'s rule) and the best is the held trade\'s when given', () => {
+  // A bar that opened just before the fill (inside the runner's grace) is counted from `from`, not from the fill.
+  const before = manageRead({ side: 'long', entry: 106, risk: 10, stop: 96, openedAt: new Date(Date.parse(opened) + 20000).toISOString(), bars: bars15(UP), base: 3, tick: 0.25, exit: EXIT });
+  const graced = manageRead({ side: 'long', entry: 106, risk: 10, stop: 96, openedAt: new Date(Date.parse(opened) + 20000).toISOString(), from: opened, bars: bars15(UP), base: 3, tick: 0.25, exit: EXIT });
+  assert.ok(before.best <= graced.best);
+  // The held trade's best price decides the warning level (best 112 - 0.5 x 10 = 107).
+  const held = manageRead({ side: 'long', entry: 106, risk: 10, stop: 96, openedAt: opened, bars: bars15(UP), base: 3, tick: 0.25, exit: EXIT, best: 112 });
+  assert.deepStrictEqual([held.best, held.bestR, held.warning.stop], [112, 0.6, 107]);
 });

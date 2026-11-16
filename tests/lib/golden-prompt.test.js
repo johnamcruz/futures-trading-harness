@@ -53,13 +53,25 @@ function state({ ext = false } = {}) {
     id: '7', at: NOW.toISOString(), balance: 50412.5,
     positions: [{ contractId: 'MNQ', type: 1, size: 2, averagePrice: 27420.25 }], workingOrders: 2,
     orders: [{ id: 9, contractId: 'MNQ', type: 4, side: 1, size: 2, stopPrice: 27410.25 }, { id: 10, contractId: 'MNQ', type: 1, side: 1, size: 2, limitPrice: 27440.25 }],
-    openTrades: ['MNQ long 2 from 27420.25 (setup:orb, 14:21 ET), stop 27410.25 (1R = 10 pts), target 27440.25 (2R); now +0.4R, best +0.9R, worst -0.2R, 3 bars.'],
+    // The open trade as the runner describes it (open-trades.js describeOpenTrade): its Position line from a held trade
+    // (position-read.js; 1R 10 points, the 2R target not reached), then its sentence.
+    openTrades: [OPEN_TRADE],
     attempts: [{ account: 'mini', status: 'active', asOf: NOW.toISOString(), balance: 50412.5, floor: 48412.5, cushion: 2000, profit: 412.5, target: 3000, dayPnl: 112.5, sessionsLeft: 26, sessionsDone: 4, budgets: [{ strategy: 'prop_portfolio', budgetUsd: 400 }], entryBlock: null,
       // combine.attemptFacts: the attempt line's further facts (day, profit needed, room to the limits, today's counts, consistency).
       facts: { day: 5, sessions: 30, sessionsLeft: 26, needed: 2587.5, dailyRoom: 1112.5, softStop: 500, softRoom: 612.5, tradesToday: 2, lossesToday: 1, lossStreak: 0, consistencyCap: 300 } }],
   };
   return { items, account };
 }
+
+const OPEN_TRADE = (() => {
+  const { describeOpenTrade } = require('../../scripts/lib/trading/open-trades');
+  const { positionRead } = require('../../scripts/lib/trading/position-read');
+  const t = { contractId: 'MNQ', side: 'long', sign: 1, size: 2, entry: 27420.25, averagePrice: 27420.25, openedAt: '2026-04-27T14:21:00.000Z', setup: 'orb', initialStop: 27410.25, risk: 10, riskFrom: 'runner', stop: 27410.25, stops: [27410.25], target: 27440.25, barsHeld: 3, noBars: false, notes: [] };
+  const held = { key: '1', entry: 27420.25, risk: 10, plan: { afterTarget: { lockGivebackR: 1.5, trailBy: 'structure', trailR: 1, swingMinutes: 15 } }, target: 27440.25, armed: false, peakR: 0.9, troughR: -0.2,
+    bestPrice: 27429.25, bestBarT: '2026-04-27T14:27:00.000Z', worstPrice: 27418.25, lastClose: 27424.25, lastBarT: '2026-04-27T14:30:00.000Z',
+    swingClass: { cls: 'A', trailBy: 'structure', swing: null, swingStop: null, lock: 27425.25, binds: null, trailStop: null, wrongSide: false } };
+  return describeOpenTrade({ ...t, position: positionRead(t, { held, tick: 0.25 }) }, { tickSize: 0.25, et: () => '10:21 ET' });
+})();
 
 /** A history entry for the cycle on MNQ bar k (its close 5 s after the bar closed). */
 const decided = (k, result, facts) => ({

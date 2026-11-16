@@ -109,6 +109,11 @@ test('runDecisions: each scored decision with its record, risk, account call, ba
   assert.strictEqual(tk.turns[0].messages[1].content, PROMPT);
   // The pass: the MES record is another family's; MNQ's one record was refused.
   assert.deepStrictEqual([ps.attempts, ps.record.ok, ps.skill], [1, false, 'none']);
+  // The prompt format of its cycle record (none written: 1), and a risk decision's open trades with their Position facts.
+  assert.deepStrictEqual(ds.map(d => d.promptFormat), ['v1', 'v1', 'v1']);
+  assert.ok(Array.isArray(ds[2].positions) && !('positions' in tk), 'a risk decision only');
+  assert.deepStrictEqual(E.positionsOf({ context: { openTrades: [{ contractId: 'MNQ', side: 'long', position: { basis: 'held', mfeR: 4.16 } }] } }), [{ contractId: 'MNQ', side: 'long', position: { basis: 'held', mfeR: 4.16 } }]);
+  assert.deepStrictEqual([E.positionsOf(null), E.positionsOf({})], [null, []]);
   // Times: only a sample's decisions.
   assert.deepStrictEqual(E.runDecisions(runDir, { score, times: ['2022-03-07T14:36:00Z'] }).map(d => d.kind), ['pass']);
   assert.throws(() => E.runDecisions(runDir, {}), /score\(runDir\)/);

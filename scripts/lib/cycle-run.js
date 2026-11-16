@@ -247,7 +247,11 @@ async function runCycle(cfg, action, prompt, opts, limits = {}, deps = {}) {
   // The managed cycle's STOP line: only the STOP-led lines of the head's own text (cycle-log.js stopLineText), from its
   // stdout (a stderr chunk can tear a stream line in the mixed output), as the runner's entry reads it.
   const stopText = action === 'eod' ? null : stopLineText(typeof res.stdout === 'string' && res.stdout ? res.stdout : res.output || '');
-  return { ...cycleOutcome(res, { result, intact, action, lookups, reportedResult, resultNote }), ...(stopText === null ? {} : { stopText }), ...(phase1Refused ? { phase1Refused: true } : {}), ...confirmed };
+  // The cycle's modify_order calls, for the STOP line's record. Only the trade-executor holds order-writing tools, so the
+  // count needs the subagents' calls in the head's stream: Claude Code's stream carries them (parent_tool_use_id); the
+  // other harnesses' head streams are not known to, so their count is unknown (null), never a 0 after a real modify.
+  const modifyOrders = cfg.harness === 'claude' ? Object.entries(summary.tools || {}).filter(([name]) => /modify_order$/.test(name)).reduce((n, [, k]) => n + k, 0) : null;
+  return { ...cycleOutcome(res, { result, intact, action, lookups, reportedResult, resultNote }), ...(stopText === null ? {} : { stopText, modifyOrders }), ...(phase1Refused ? { phase1Refused: true } : {}), ...confirmed };
 }
 
 /** A confirm's own turn (cycle-timing.js confirmTurn) from its run's stream and line times; nulls when unreadable. */

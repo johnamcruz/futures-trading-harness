@@ -818,6 +818,10 @@
    "value": 0.5,
    "from": "replay/scorecard.js earlyClose give-back: closed at most mfeR / 2"
   },
+  "scorecard.maxMissingStopShare": {
+   "value": 0.02,
+   "from": "new in feat/position-line (the run report's STOP-line alarm: missing lines above this share of managed cycles; replay/stop-lines.js)"
+  },
   "trendCapture.minMoveAtr": {
    "value": 2.25,
    "from": "new in fix/trend-moves-compose (the trend-capture report's leg threshold: times the session's mean true range of its base bars)"

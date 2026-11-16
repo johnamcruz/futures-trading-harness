@@ -12,7 +12,9 @@
  * inside a trend. Every definition is an existing one (one home each), on completed candles (candle-facts.js
  * completedCandlesAt, the briefing's candle rule):
  *
- *   extreme       the best price since entry (a long's highest high on the base candles opened at or after the fill)
+ *   extreme       the best price since entry (a long's highest high on the base candles opened at or after `from`, the
+ *                 runner's bar rule, else the fill; `best`: the runner's held trade's best price, one basis with the
+ *                 Position line, position-read.js)
  *   pushes        the trade's way's confirmed swings on the structure frame since entry (structure-events.js pivots,
  *                 swingK): each push's swing price, its size from the lowest low (a short: highest high) since the push
  *                 before (or the first candle since entry) in the frame's ATR(14) now, and its momentum candles (momentum.js
@@ -46,8 +48,9 @@
  *                 runner snaps it, when the tick is known): the code floor's fractal swing (the manage read, manage-read.js,
  *                 names the 15m BOS protected swing a tighten stands behind)
  *
- *   tradeRead({ side, entry, openedAt, bars, base, tick, exit })   the facts above, or { unavailable } with why
- *   tradeReadLine(read, { level })                     one line for the managed cycle's prompt (level: a price as shown)
+ *   tradeRead({ side, entry, openedAt, bars, base, tick, exit, from, best })   the facts above, or { unavailable } with why
+ *   tradeReadLine(read, { level })                     one line for the managed cycle's prompt (level: a price as shown);
+ *                                                      the code floor's trail is the Position line's, not repeated here
  *   SIGNS                                              the weakening signs' names, in order
  */
 
@@ -144,13 +147,14 @@ function pushesOf(cs, s, from, way) {
   return out;
 }
 
-function tradeRead({ side, entry, openedAt, bars, base, tick = null, exit = null }) {
+function tradeRead({ side, entry, openedAt, bars, base, tick = null, exit = null, from = null, best: heldBest = null }) {
   const s = side === 'long' ? 1 : side === 'short' ? -1 : 0;
   const opened = Date.parse(openedAt);
+  const start = Number.isFinite(Date.parse(from)) ? Date.parse(from) : opened;
   if (!s || !Number.isFinite(entry) || !Number.isFinite(opened)) return { unavailable: 'no side, entry or fill time' };
   const list = (Array.isArray(bars) ? bars : []).filter(b => b && Number.isFinite(Date.parse(b.t)) && [b.o, b.h, b.l, b.c].every(Number.isFinite));
   const cs = candlesOf(list, base, base);
-  const i0 = cs.findIndex(c => Date.parse(c.t) >= opened);
+  const i0 = cs.findIndex(c => Date.parse(c.t) >= start);
   if (i0 < 0) return { unavailable: 'no closed bar since the fill yet' };
   const way = s > 0 ? 'up' : 'down';
   const hi = c => (s > 0 ? c.h : -c.l); // the trade's way's extreme, as a number that grows the trade's way
@@ -160,7 +164,7 @@ function tradeRead({ side, entry, openedAt, bars, base, tick = null, exit = null
 
   let iBest = i0;
   for (let i = i0; i < cs.length; i += 1) if (hi(cs[i]) > hi(cs[iBest])) iBest = i;
-  const extreme = { best: unsign(hi(cs[iBest])), at: cs[iBest].t, barsAgo: cs.length - 1 - iBest };
+  const extreme = { best: Number.isFinite(heldBest) ? heldBest : unsign(hi(cs[iBest])), at: cs[iBest].t, barsAgo: cs.length - 1 - iBest };
 
   // The structure frame's candles since entry (a candle that closed after the fill), its pushes and their swings.
   const hc = FRAME > base ? candlesOf(list, base, FRAME) : cs;
@@ -249,10 +253,7 @@ function tradeReadLine(t, { level = r2 } = {}) {
   const comp = Object.entries(t.compression).filter(([, x]) => x).map(([k, x]) => `${k} ${x.kind}`).join(', ') || 'none';
   const b = t.bias;
   const flip = b.flipAgainst ? 'FLIPPED against the trade' : b.flipAgainst === false ? 'no flip against' : 'flip unknown';
-  const trail = t.trailBy === 'structure' && t.trail
-    ? (t.trail.swing === null ? `no confirmed ${t.trail.minutes}m swing (the runner's trail has no level yet)` : `the last confirmed ${t.trail.minutes}m swing ${level(t.trail.swing)} (stop ${level(t.trail.stop)}, the runner's trail level)`)
-    : t.trailBy === 'r' ? 'no swing level: the runner trails this trade by R behind the best price' : 'no swing level: the runner holds no structure trail for this trade';
-  return `Trade read (closed bars since entry; pullback-vs-reversal): best ${level(t.extreme.best)}; ${failed}; ${pushes}; ${depth}; close vs RTH VWAP ${t.vwap.rth === null ? 'n/a' : sAtr(t.vwap.distAtr)}, vs EMA20 ${sAtr(t.ema20.distAtr)} (+ the trade's way); structure against since entry: ${brk}; ${tf} displacement against: ${disp}; compression against: ${comp}; HTF bias at entry ${biasText(b.entry)}, now ${biasText(b.now)} (${flip}). Weakening signs: ${t.signs.length} of ${SIGNS.length}${t.signs.length ? ` (${t.signs.join(', ')})` : ''}, ${TR.minSigns} needed; reversal: ${t.reversal || 'none'}; the code floor's trail: ${trail}.`;
+  return `Trade read (closed bars since entry; pullback-vs-reversal): best ${level(t.extreme.best)}; ${failed}; ${pushes}; ${depth}; close vs RTH VWAP ${t.vwap.rth === null ? 'n/a' : sAtr(t.vwap.distAtr)}, vs EMA20 ${sAtr(t.ema20.distAtr)} (+ the trade's way); structure against since entry: ${brk}; ${tf} displacement against: ${disp}; compression against: ${comp}; HTF bias at entry ${biasText(b.entry)}, now ${biasText(b.now)} (${flip}). Weakening signs: ${t.signs.length} of ${SIGNS.length}${t.signs.length ? ` (${t.signs.join(', ')})` : ''}, ${TR.minSigns} needed; reversal: ${t.reversal || 'none'}.`;
 }
 
 module.exports = { SIGNS, tradeRead, tradeReadLine, biasOf };

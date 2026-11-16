@@ -120,8 +120,14 @@ test('context quiz: every layer asked, ids unique, the bar the whole quiz at K 5
   // 24): q118a (q118's briefing, the action) added; at 101 the gate's Monte Carlo misses its caught-broken bound (seed 1,
   // 536 of 600), so q94 (not aligned: unclear, 6/6 on every k=6; q112 asks the same row on the same printed class) retired.
   // 107 with q134-q140 (feat/displacement: the owner's two traps, a close back through the level, a weak BOS, a displaced
-  // CHoCH, a weak CISD and a weak close through the protected swing; closed choices, the skill looked up).
-  assert.strictEqual(QUIZ.questions.length, 107);
+  // CHoCH, a weak CISD and a weak close through the protected swing; closed choices, the skill looked up). 113 with
+  // q141-q146 (feat/position-line, layer manage: the Position line's fields read (giveback, MAE, what the stop rests on)
+  // and three recorded holds (a 3m pullback, a 67% giveback at the lock, a warning past the price); the managed
+  // situation's prompt; closed choices). A drafted synthetic item (a 15m CHoCH against with a placeable level ->
+  // choch-against) failed 0/3 on main and on the branch and was deferred to the "what is a WARNING" study:
+  // the taught warning stop is not a validated right answer (it cost R in the exit study).
+  assert.strictEqual(QUIZ.questions.length, 113);
+  assert.deepStrictEqual(QUIZ.questions.filter(x => x.layer === 'manage').map(x => x.id), ['q141', 'q142', 'q143', 'q144', 'q145', 'q146']);
   assert.ok(!QUIZ.questions.some(x => ['q55', 'q59', 'q94', 'q108', 'q113'].includes(x.id)), 'q55, q59, q94, q108 and q113 retired');
   assert.ok(QUIZ.questions.some(x => x.id === 'q118a'), 'q118a added');
   assert.ok(['q91', 'q112', 'q121'].every(id => QUIZ.questions.some(x => x.id === id)), 'q91, q112 and q121 kept');

@@ -39,6 +39,12 @@ test('summarize: skills loaded, tool calls by name, shell commands, orders, and 
   const att = JSON.stringify({ config: '/w/opencode.json', sha256: '0'.repeat(64), skills: [...perCycle, 'setup-judgment', 'trade-plan'] });
   assert.deepStrictEqual(writeCycleLog(require('../helpers').tmpDir(), { action: 'trade', harness: 'opencode', prompt: 'p', output: claudeStream([]), headPrompt: att }).summary.missingSkills, []);
   assert.deepStrictEqual(writeCycleLog(require('../helpers').tmpDir(), { action: 'trade', harness: 'opencode', prompt: 'p', output: claudeStream([]), headPrompt: '{bad' }).summary.missingSkills.length, 7);
+  // Every cycle record says its prompt format ('v2': the Position line; a record without the key is 'v1', from before it).
+  const home2 = require('../helpers').tmpDir();
+  const w = writeCycleLog(home2, { action: 'trade', harness: 'claude', prompt: 'p', output: claudeStream([]) });
+  assert.strictEqual(JSON.parse(require('fs').readFileSync(w.file, 'utf8')).promptFormat, 'v2');
+  const idx = require('fs').readdirSync(require('path').join(home2, 'logs')).find(f => /^cycles-.*\.jsonl$/.test(f));
+  assert.strictEqual(JSON.parse(require('fs').readFileSync(require('path').join(home2, 'logs', idx), 'utf8').trim()).promptFormat, 'v2');
   // A cycle's situational skills as the runner attested them (FTH_CYCLE_SKILLS): recorded as embedded; none without it.
   const exitAtt = JSON.stringify({ kind: 'cycle-skills', config: '/h/head-prompt/cycle-skills-x.md', sha256: '0'.repeat(64), skills: ['manage-position', 'pullback-vs-reversal'], cycle: '0123456789abcdef' });
   assert.deepStrictEqual(writeCycleLog(require('../helpers').tmpDir(), { action: 'trade', harness: 'claude', prompt: 'p', output: claudeStream([]), env: { FTH_CYCLE_SKILLS: exitAtt } }).summary.embeddedSkills, ['manage-position', 'pullback-vs-reversal']);
@@ -443,4 +449,11 @@ test('stopLineText: only the STOP-led lines of the head trader\'s own text (an o
   assert.strictEqual(stopLineText(cc), 'STOP hold: hold (a pullback)');
   assert.strictEqual(stopLineText('STATE: x\nSTOP hold: hold\nCYCLE RESULT: managed - held'), 'STOP hold: hold');
   assert.strictEqual(stopLineText('no line here; the stop stays'), '');
+  // A line read from the end of the PLAN's 9 Manage: line: its STOP text under the bare label, never the line's prose.
+  const inl = stopLineText('STATE: x\n9 Manage: invalidation 15620.5 (my plan); STOP hold: hold\nCYCLE RESULT: managed - held; STOP hold');
+  assert.strictEqual(inl, '9 Manage: STOP hold: hold');
+  const P = require('../../scripts/lib/trading/stop-line').parseStopLine(inl);
+  assert.deepStrictEqual([P.stated, P.hold, P.inline], [true, true, true]);
+  // A line-start line still wins over it after the round trip.
+  assert.strictEqual(require('../../scripts/lib/trading/stop-line').parseStopLine(stopLineText('STOP 15690: protected-swing\n9 Manage: x; STOP hold: hold')).stop, 15690);
 });

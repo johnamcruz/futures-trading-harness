@@ -294,6 +294,17 @@ test('the code digest and the exit plan: a code change marks examples stale; two
   assert.ok(dropped.dataset.untaggedExit.train.decisions > 0);
 });
 
+test('the prompt format: decisions from before the Position line (no promptFormat: v1) and after (v2) are never pooled', () => {
+  const home = tmpDir();
+  const a = sourceOf(trainRun(path.join(home, 'a')));
+  const b = sourceOf(F.writeRun(path.join(home, 'b'), TRAIN_OPTS('train7', 'FORMAT-TWO')));
+  const two = { ...b, decisions: b.decisions.map(d => ({ ...d, promptFormat: 'v2' })) };
+  assert.throws(() => DS.buildDataset({ train: [a, two], spec: SPEC, rules: RULES, current: CURRENT }), /made under 2 prompt formats \(v1, v2\): build from runs under one/);
+  const one = DS.buildDataset({ train: [a, b], spec: SPEC, rules: RULES, current: CURRENT });
+  assert.strictEqual(one.dataset.promptFormat, 'v1', 'a record without the key is v1');
+  assert.strictEqual(DS.buildDataset({ train: [{ ...a, decisions: a.decisions.map(d => ({ ...d, promptFormat: 'v2' })) }, two], spec: SPEC, rules: RULES, current: CURRENT }).dataset.promptFormat, 'v2');
+});
+
 test('validSetups: correct takes against correct passes on valid setups are counted (the labeller\'s lean)', () => {
   const { dataset } = buildAll();
   assert.deepStrictEqual(dataset.validSetups.train, { correctTakes: 5, correctPasses: 1 }, 'stage 1 takes and stage 2 takes; the stand-down pass');
