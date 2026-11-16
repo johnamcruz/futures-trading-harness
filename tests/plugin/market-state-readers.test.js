@@ -71,8 +71,10 @@ const STATE_FIELDS = [
 // Comments name the fields freely (a reader is code): a block comment opening its line and a line comment opening its
 // line, or after code and a space, are dropped before the scan; a "//" or "/*" inside a string or regex never starts one.
 const code = t => t.replace(/^[ \t]*\/\*[^]*?\*\//gm, ' ').replace(/^[ \t]*\/\/[^\n]*/gm, '').replace(/([;,{}()]\s+)\/\/ [^\n]*/g, '$1');
+// displacement.js reads the last break's protected swing to print its invalidating close's strength (the Break quality
+// line, display only: tests/plugin/displacement-readers.test.js keeps it off every decision path).
 const FIELD_READERS = ['scripts/lib/trading/market-state.js', 'scripts/lib/trading/market-layers.js', 'scripts/lib/trading/structure-layers.js', 'scripts/lib/trading/briefing.js',
-  'scripts/lib/learning/recognition/key.js', 'scripts/lib/eval/context-quiz.js'];
+  'scripts/lib/learning/recognition/key.js', 'scripts/lib/eval/context-quiz.js', 'scripts/lib/trading/displacement.js'];
 const DECIDES = /(^hooks\/|^scripts\/hooks\/|gate|gateway|compose|entry-rule|order-plan|decision|verdict|phase2|autotrader|runner)/;
 const fieldsIn = text => STATE_FIELDS.filter(([, re]) => re.test(code(text))).map(([name]) => name);
 

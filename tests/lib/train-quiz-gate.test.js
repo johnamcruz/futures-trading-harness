@@ -233,7 +233,8 @@ test('Monte Carlo: an unchanged edit is rarely rejected, one that breaks a stabl
   // stable question caught 90.5-92.7%, a flaky one dropped to 0 97.3-98.7%, at every seed; feat/chop-read: at 106
   // questions 9 failed the flaky bound at 6.0-7.8%; at 10: 0.7-1.5% stable, 3.2-4.2% flaky, caught 91.5-93.0% and
   // 97.7-99.7%; the Market state redesign: at 108 questions 10 holds every bound: 0.7-1.5% stable, 2.5-5.0% flaky,
-  // caught 91.5-93.0% and 97.0-98.5%).
+  // caught 91.5-93.0% and 97.0-98.5%; feat/displacement: at 115 questions 10 failed the flaky bound at 6.8%; at 11: 1.2-1.3%
+  // stable, 2.5-4.5% flaky, caught 90.2-91.5% and 98.2-98.7%).
   for (const SEED of [20260805, 1, 2, 3, 4]) {
   let seed = SEED;
   const rand = () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; };

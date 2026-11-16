@@ -99,6 +99,9 @@ const { roundStepFor, roundStepError } = require('./round-numbers');
 const { pivots, lastBreaks, breaksOf, sweeps, untestedSwings, swingLevels, protectedOf } = require('./structure-events');
 // The 3m breaks with their protected swings (the owner's invalidation rule; the Market state reads them).
 const withProtected = (bars, lb) => Object.fromEntries(Object.entries(lb).map(([k, x]) => [k, x ? { ...x, protected: protectedOf(bars, x) } : x]));
+// The last break's displacement read (displacement.js: strength only; the summary's Break quality line says it, the detail
+// leaves it out); no gate, hook, compose or decision code reads it (tests/plugin/displacement-readers.test.js).
+const { qualityOf, breakLine } = require('./displacement');
 const { timingOf, timingLine } = require('./ltf-timing');
 const { sideValuesText, causalLevels } = require('./rules');
 const { cisdFacts } = require('./cisd');
@@ -452,6 +455,16 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
   // This bar's close against the session's levels (level-closes.js), each placed with its owner below, only when it
   // happened; the summary's "This bar's close" line says them (not repeated in the detail: SUMMARY_ONLY).
   const closes = own ? {} : levelCloses(bars, bars.length - 1, { levels: causal });
+  // The levels the sweeps read (and a break's origin sweep, displacement.js: the same rule on the same levels).
+  const sweepLevels = [
+    // The session's key levels: the runner's bars only (a frame's sweeps are of its own levels).
+    ...(own ? [] : [['prior RTH high', (lv.priorRth || {}).high, 'high', true], ['prior RTH low', (lv.priorRth || {}).low, 'low', true]]),
+    // The overnight range is final at 09:30 ET: its sweeps count in RTH only.
+    ...(rth && !own ? [['overnight high', (lv.overnight || {}).high, 'high', true], ['overnight low', (lv.overnight || {}).low, 'low', true]] : []),
+    ...(entryBars ? [] : [[`last ${ownSwing} swing high`, st.lastSwingHigh, 'high', false, st.lastSwingHighAt ? after(st.lastSwingHighAt) : null],
+      [`last ${ownSwing} swing low`, st.lastSwingLow, 'low', false, st.lastSwingLowAt ? after(st.lastSwingLowAt) : null]]),
+    ...eqHighs.map(x => [x.name, x.price, 'high', false, x.since]), ...eqLows.map(x => [x.name, x.price, 'low', false, x.since]),
+  ].map(([name, p, sideOf, key = false, since = null]) => ({ name, price: p, side: sideOf, key, since }));
   return {
     m3: {
       validUntil: new Date(closedAt.getTime() + step),
@@ -485,16 +498,8 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
         // Structure events (structure-events.js): the latest break on the trigger bars, sweeps of key liquidity in the last
         // 10 bars (only levels that existed before the sweep), the 1h swings not traded back to, and the 15m and 1h swings
         // against price (a 3m close through one since its candle closed: brokenAt).
-        lastBreak: withProtected(bars, lastBreaks(bars)),
-        sweeps: sweeps(bars, [
-          // The session's key levels: the runner's bars only (a frame's sweeps are of its own levels).
-          ...(own ? [] : [['prior RTH high', (lv.priorRth || {}).high, 'high', true], ['prior RTH low', (lv.priorRth || {}).low, 'low', true]]),
-          // The overnight range is final at 09:30 ET: its sweeps count in RTH only.
-          ...(rth && !own ? [['overnight high', (lv.overnight || {}).high, 'high', true], ['overnight low', (lv.overnight || {}).low, 'low', true]] : []),
-          ...(entryBars ? [] : [[`last ${ownSwing} swing high`, st.lastSwingHigh, 'high', false, st.lastSwingHighAt ? after(st.lastSwingHighAt) : null],
-            [`last ${ownSwing} swing low`, st.lastSwingLow, 'low', false, st.lastSwingLowAt ? after(st.lastSwingLowAt) : null]]),
-          ...eqHighs.map(x => [x.name, x.price, 'high', false, x.since]), ...eqLows.map(x => [x.name, x.price, 'low', false, x.since]),
-        ].map(([name, p, sideOf, key = false, since = null]) => ({ name, price: p, side: sideOf, key, since })), 10),
+        lastBreak: qualityOf(bars, withProtected(bars, lastBreaks(bars)), { minutes, levels: sweepLevels }),
+        sweeps: sweeps(bars, sweepLevels),
         htfLevels,
         untested1hSwings: untested1h,
         // The room to run: the three nearest levels above and below price, in points and R.
@@ -555,7 +560,9 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
       data: {
         frame: brief(f15, level),
         alignment: read15.alignment,
-        lastBreak: atClose(lastBreaks(c15), 15),
+        // The 15m last break's displacement read and its protected swing (as the 3m's; the last only, the line's): its origin sweep of the session's key
+        // levels only (its own swings are 3m).
+        lastBreak: atClose(qualityOf(c15, { ...lastBreaks(c15), last: withProtected(c15, { last: lastBreaks(c15).last }).last }, { levels: sweepLevels.filter(x => x.key) }), 15),
         // The 15m candles' own indicators (completed candles only): EMA9 and EMA20, as on the trigger bars.
         indicators: snap15 ? {
           regime: snap15.regime && { primary: snap15.regime.primary, volatility: snap15.regime.volatility },
@@ -870,6 +877,11 @@ function summaryLines(b, et) {
   // The 5m structure only when its last break is recent (m5-structure.js structureLine).
   const s5 = structureLine(m3.structure5m, et);
   if (s5) out.push(s5);
+  // A recent break's strength (displacement.js breakLine), on the runner's entry-frame briefing: the entry frame's last
+  // break and the 15m's, each while recent; strength only (structure confirms, the protected swing invalidates).
+  const bq = !own && tfLabel(b.minutes) === BIAS_RULE.chain.entry
+    ? breakLine({ entry: { tf, brk: (m3.lastBreak || {}).last, minutes: b.minutes }, setup: { tf: '15m', brk: (m15.lastBreak || {}).last } }, { et }) : null;
+  if (bq) out.push(bq);
   const cisd = cisdLine(m3.cisd, et);
   if (cisd) out.push(cisd);
   // Compression only when a timeframe is compressing or broke out of a box in its last candles (compression.js).
@@ -957,6 +969,8 @@ const CHAIN_FRAMES = (C => C.chainOf(C.SHIPPED))(require('./chain'));
 const SUMMARY_FIELDS = ['swingTargets', 'rangeTargets', 'fvgs', 'structure5m', 'compression', 'declared', 'timing', 'pullback', 'layers'];
 // What the summary's "This bar's close" line says in full, left out of the detail (only present when it happened).
 const SUMMARY_ONLY = { vwap: ['crossed'], today: ['openingRangeCrossed', 'soFar', 'rthVolatility'], location: ['closesBeyondValue', 'backInsideValue'] };
+/** A break without its displacement read (and its protected status's): the Break quality line's facts. */
+const unquality = x => ({ ...omit(x, ['quality']), ...(x.protected ? { protected: omit(x.protected, ['quality']) } : {}) });
 
 /**
  * A section's data as the detail shows it: what the summary already says in full is left out (SUMMARY_FIELDS: the
@@ -966,6 +980,8 @@ const SUMMARY_ONLY = { vwap: ['crossed'], today: ['openingRangeCrossed', 'soFar'
  */
 function detailEntries(data) {
   if ('brokerFields' in data) data = omit(data, ['brokerFields']);
+  // A break's `quality` (and its protected status's): the Break quality line says it while the break is recent.
+  if (data.lastBreak && data.lastBreak.last && data.lastBreak.last.quality !== undefined) data = { ...data, lastBreak: { ...data.lastBreak, last: unquality(data.lastBreak.last) } };
   const bar = data.bar || {};
   const ohlcv = c => (c.t === bar.t && c.o === bar.o && c.h === bar.h && c.l === bar.l && c.c === bar.c ? {} : { o: c.o, h: c.h, l: c.l, c: c.c, v: c.v });
   return Object.entries(data).filter(([k]) => !SUMMARY_FIELDS.includes(k)).map(([k, v]) => (k === 'candles' && v && typeof v === 'object'

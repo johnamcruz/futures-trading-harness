@@ -346,8 +346,9 @@ test('basics skills: frontmatter, the sections in order, and small', () => {
     // the measured need. Round 20 (the owner's three layers, chop checklist, behavioral list and classes quoted, one home
     // each): bos-vs-choch 871, trend-vs-range 834, at the measured need. The follow-up to #340 (round 20c, items 2 and 4:
     // a CHoCH then BOS confirms a transition, a reversal only through the protected level; the chop example's true leg
-    // clause): bos-vs-choch 892, trend-vs-range 869, at the measured need.
-    assert.ok(words >= 250 && words <= (s === 'candle-reading' ? 1280 : s === 'pullback-vs-reversal' ? 1778 : s === 'bos-vs-choch' ? 892 : s === 'trend-vs-range' ? 869 : 650), `${s}: ${words} words`);
+    // clause): bos-vs-choch 892, trend-vs-range 869, at the measured need. feat/displacement (bos-vs-choch's Fields name the
+    // last break's `quality` and the 15m last break's `protected`): bos-vs-choch 906, at the measured need.
+    assert.ok(words >= 250 && words <= (s === 'candle-reading' ? 1280 : s === 'pullback-vs-reversal' ? 1778 : s === 'bos-vs-choch' ? 906 : s === 'trend-vs-range' ? 869 : 650), `${s}: ${words} words`);
     // The two setups also carry a timeframe table (what the setup means on 3m/5m, 15m and 1h/4h): a little more room
     // (scripts/lib/skill-caps.js, the one source the training loop's probe edits read too).
     const max = skillByteCap(s);
@@ -635,9 +636,10 @@ test('bos-vs-choch: the description is short, and the swings and breaks are the 
   assert.match(se, /if \(direction === 'up'\) hi = null; else lo = null;/);
   const br = read('scripts/lib/trading/briefing.js');
   // The 3m breaks with their protected swings (round 15, the owner's invalidation rule; structure-events.js protectedOf).
-  assert.match(br, /lastBreak: withProtected\(bars, lastBreaks\(bars\)\),/);
+  // feat/displacement: the last break also carries its strength read (displacement.js qualityOf), the levels its origin sweep reads.
+  assert.match(br, /lastBreak: qualityOf\(bars, withProtected\(bars, lastBreaks\(bars\)\), \{ minutes, levels: sweepLevels \}\),/);
   assert.match(se, /function protectedOf\(bars, brk\)/);
-  assert.match(br, /lastBreak: atClose\(lastBreaks\(c15\), 15\),/);
+  assert.match(br, /lastBreak: atClose\(qualityOf\(c15, \{ \.\.\.lastBreaks\(c15\), last: withProtected\(c15, \{ last: lastBreaks\(c15\)\.last \}\)\.last \}, [^\n]*\), 15\),/);
   assert.match(br, /lastBreak: atClose\(lastBreaks\(c60\), 60\)/);
   // On a real briefing: the kinds and directions the skill names, knownAt on 15m and 1h, and no 4h break.
   const bs = briefings();
@@ -713,8 +715,11 @@ test('basics skills: the fib numbers have one home: fib-retracement states the c
   // The CISD skill's run and wait are the code's defaults.
   const c = flat(read(file('cisd')));
   assert.ok(c.includes(`at least ${cisd.PARAMS.minRun} consecutive bearish completed candles`) && c.includes(`within ${cisd.PARAMS.maxWait} candles of the run`));
-  // Its strong displacement is the code's: the body share, the extreme third, the range against ATR(14), engulfing.
-  assert.ok(c.includes(`body at least ${cisd.PARAMS.minBody} of the range, the close in the top third, and a range of at least ${cisd.PARAMS.minRangeAtr.toFixed(1)} x ATR(14) of that timeframe or a body engulfing the prior one`));
+  // Its strong displacement is the code's: the body share, the extreme third, the range against ATR(14), engulfing; stated
+  // once, in the `displacement` skill (feat/displacement: one rule for BOS, CHoCH, CISD and the invalidating close), which
+  // cisd points to.
+  assert.ok(flat(read(file('displacement'))).includes(`its body is at least ${cisd.PARAMS.minBody} of its range, its close is in the extreme third, and its range is at least ${cisd.PARAMS.minRangeAtr.toFixed(1)} x ATR(14) of its timeframe or its body engulfs the prior candle's`));
+  assert.ok(c.includes('Strong: the `displacement` skill\'s one rule, the same as a break\'s displaced.'));
   // Every bare field the cisd skill names is in a real briefing's m3.cisd entry (or its leg), and every status it names
   // is one the code sets: a field the briefing drops fails.
   const entries = briefings().flatMap(b => Object.values(b.sections.m3.data.cisd || {}).filter(x => x && typeof x === 'object'));

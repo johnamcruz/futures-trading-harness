@@ -60,11 +60,11 @@ test('planErrors: an index skill that doesn\'t exist, one in both lists, or an i
 test('the agents: role-index skills exist, aren\'t core, and the role holds skill_lookup; the proof case indexes the basics skills', () => {
   const agents = HS.loadAgents(ROOT);
   assert.doesNotThrow(() => HS.checkRoleSkills(ROOT));
-  // The proof case: the eleven basics skills, and cisd, fib-retracement, daily-bias, fair-value-gaps and compression since, are in the
+  // The proof case: the eleven basics skills, and cisd, fib-retracement, daily-bias, fair-value-gaps, compression and displacement since, are in the
   // index of the roles that carry them; so is the fallback market-snapshot (skill-retire.test.js).
   const BASICS = ['trend-vs-range', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'momentum-and-volume',
     'absorption', 'invalidation', 'confluence-counting', 'candle-reading', 'rejection', 'breakout', 'cisd', 'fib-retracement',
-    'daily-bias', 'fair-value-gaps', 'compression'];
+    'daily-bias', 'fair-value-gaps', 'compression', 'displacement'];
   // And the strategy-library split's pieces a role reads only when a cycle needs one (strategy-library, with the
   // priority order, stays core wherever it was), and the prop and sizing split's micro-mini-specs (the risk manager).
   const SPLIT = ['strategy-scan', 'strategy-gate-checks', 'micro-mini-specs'];
@@ -190,15 +190,16 @@ test('agentPrompt: the one load sentence (core and index) stays one in full mode
 // (indexed) for the market-structure analyst. Retired since: market-structure and liquidity-concepts; market-snapshot is
 // index-only; a role loads the skills their content went to where its body reads those fields (fair-value-gaps and the
 // topic skills: skill-retire.test.js). The risk manager no longer loads broker-refusals: it sends no order, so a
-// broker's refusal of one never reaches it (the executor keeps it).
+// broker's refusal of one never reaches it (the executor keeps it). From feat/displacement: displacement (indexed) for the
+// market-structure and trend-momentum analysts (the one strength rule of the breaks they read; the owner allows the growth).
 const MAIN_SKILLS = {
-  'market-structure-analyst': ['multi-timeframe-analysis', 'htf-to-ltf', 'daily-bias', 'market-snapshot', 'strategy-library', 'trader-process', 'trend-vs-range', 'bos-vs-choch', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'fair-value-gaps', 'candle-reading', 'rejection', 'breakout', 'cisd', 'fib-retracement', 'compression', 'tool-arguments', 'strategy-scan', 'strategy-gate-checks', 'bar-briefing', 'strategy-tools'],
+  'market-structure-analyst': ['multi-timeframe-analysis', 'htf-to-ltf', 'daily-bias', 'market-snapshot', 'strategy-library', 'trader-process', 'trend-vs-range', 'bos-vs-choch', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'fair-value-gaps', 'candle-reading', 'rejection', 'breakout', 'cisd', 'displacement', 'fib-retracement', 'compression', 'tool-arguments', 'strategy-scan', 'strategy-gate-checks', 'bar-briefing', 'strategy-tools'],
   'news-calendar-analyst': ['news-blackouts', 'exchange-holidays', 'trader-process'],
   'risk-manager': ['position-sizing', 'prop-challenge-pacing', 'trading-agent-security', 'strategy-library', 'broker-mcp', 'order-types', 'order-mechanics', 'order-failures', 'trade-journal', 'gate-refusals-limits', 'gate-refusals-cycle', 'trader-process', 'confluence-counting', 'invalidation', 'tool-arguments', 'strategy-scan', 'strategy-gate-checks', 'bar-briefing', 'reason-check', 'strategy-tools', 'micro-mini-specs', 'prop-pacing-judgment'],
   'strategy-researcher': ['strategy-authoring', 'strategy-rules', 'strategy-library', 'strategy-gate-checks', 'harness-root'],
   'trade-executor': ['broker-mcp', 'order-types', 'order-mechanics', 'order-failures', 'order-rationale', 'trade-journal', 'gate-refusals', 'gate-refusals-positions', 'broker-refusals'],
   'trade-reviewer': ['trade-review', 'setup-expectancy'],
-  'trend-momentum-analyst': ['trend-momentum-indicators', 'market-snapshot', 'strategy-library', 'trader-process', 'trend-vs-range', 'bos-vs-choch', 'momentum-and-volume', 'pullback-vs-reversal', 'tool-arguments', 'strategy-scan', 'strategy-gate-checks', 'bar-briefing', 'strategy-tools'],
+  'trend-momentum-analyst': ['trend-momentum-indicators', 'market-snapshot', 'strategy-library', 'trader-process', 'trend-vs-range', 'bos-vs-choch', 'momentum-and-volume', 'pullback-vs-reversal', 'displacement', 'tool-arguments', 'strategy-scan', 'strategy-gate-checks', 'bar-briefing', 'strategy-tools'],
   'volume-liquidity-analyst': ['vwap-volume-profile', 'session-timing', 'market-snapshot', 'trader-process', 'levels-and-reactions', 'momentum-and-volume', 'absorption', 'contract-roll', 'tool-arguments', 'bar-briefing', 'fair-value-gaps'],
 };
 

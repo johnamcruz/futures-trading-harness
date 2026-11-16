@@ -153,9 +153,13 @@ test('BOS (real): a close through the protected level past the tie tolerance fli
   assert.notStrictEqual(a.L.structure.side === 'down' && a.L.structure.status === 'intact', true, 'the down leg ended');
   assert.notStrictEqual(a.s.state, 'trend', a.line);
   const t = caseAt('2023-09-21', '11:48');
-  const close = t.w.find(x => x.t === t.last.protected.brokenAt).c;
+  // The raw first close through the level (feat/displacement: the briefing's brokenAt follows the tie, null here, and the
+  // Break quality line says `holds (tested, a tie)`, as this line says holds).
+  const raw = closesThrough(t.w, t.last)[0].t;
+  assert.deepStrictEqual([t.last.protected.brokenAt, t.last.protected.quality], [null, { tie: true }], 'brokenAt follows the tie');
+  const close = t.w.find(x => x.t === raw).c;
   const atr = ind.atr(t.w);
-  const k = t.w.findIndex(x => x.t === t.last.protected.brokenAt);
+  const k = t.w.findIndex(x => x.t === raw);
   assert.ok(close > t.last.protected.level && close - t.last.protected.level <= AN.marketState.equalAtr * atr[k], `a close ${close} within the tie of ${t.last.protected.level}`);
   assert.deepStrictEqual([t.L.structure.side, t.L.structure.status, t.L.structure.level], ['down', 'intact', t.last.protected.level], 'a tie is not a break');
   assert.match(t.line, new RegExp(`LH ${t.last.protected.level} holds`));

@@ -84,7 +84,8 @@ const TRAINING = {
   // behavioral list and five classes quoted, one home each; skill cap raises owner-approved when they improve context):
   // trend-vs-range 5426, bos-vs-choch 5233, at the measured need. The follow-up to #340 (round 20c: a CHoCH then BOS confirms
   // a transition, a reversal only through the protected level; the chop example's true leg clause): trend-vs-range 5658,
-  // bos-vs-choch 5418, at the measured need.
+  // bos-vs-choch 5418, at the measured need. feat/displacement (its Fields name the last break's strength read
+  // and the 15m last break's protected swing): bos-vs-choch 5506, at the measured need.
   skillCaps: { skillBytes: int(1), setupSkillBytes: int(1), perSkill: { 'candle-reading': int(1), 'pullback-vs-reversal': int(1), 'trend-vs-range': int(1), 'bos-vs-choch': int(1) } },
   compose: { maxExpects: int(1), maxWhy: int(1) },
   lessons: { maxLines: int(1), maxChars: int(1), refusedChars: int(1) },
@@ -244,6 +245,10 @@ const ANALYSIS = {
     frames: list(int(1), { min: 1 }), nr: list(int(2), { min: 1 }), maxWidthAtr: pos(), poleBars: int(0), expandAtr: nonneg(), minBeyondAtr: nonneg(), recentBars: int(0),
     maxRunAtr: nonneg(), levelBandAtr: nonneg(), maxLevels: int(1),
   },
+  // A break's displacement read (displacement.js, the `displacement` skill): the candles a body is compared with, how many
+  // candles (entry frame) and 15m candles (setup frame) a break prints for, and the line's byte budget. Display only:
+  // the strength rule's numbers stay cisd.minBody / cisd.minRangeAtr; nothing decides on these.
+  displacement: { bodyPrior: int(1), recentEntry: int(0), recentSetup: int(0), lineBytes: int(1) },
   briefing: { equalK: int(1), cisdFrames: list(int(1), { min: 1 }) },
   tradeRead: { frames: list(int(1), { min: 1 }), deepPullback: frac(), minSigns: int(1) },
   pullbackRead: { minLegAtr: pos(), maxStateDepth: frac() },
@@ -277,7 +282,7 @@ const PINS = deepFreeze({
     'screen.gainAlpha': 0.1, 'screen.harmAlpha': 0.2, 'screen.minDiscordant': 4, 'screen.minPairs': 10, 'screen.minEffect': 0.1, 'exitScreen.epsR': 0.05, 'exitScreen.runnerMfeR': 3,
     'loop.limits.maxIterations.max': 100, 'loop.limits.maxModelCalls.max': 100000, 'loop.limits.maxWallMinutes.max': 10080,
     'proposal.maxEdits': 3, 'proposal.maxText': 2000, 'proposal.maxChanged': 3000, 'looks.maxArms': 3,
-    'skillCaps.skillBytes': 3459, 'skillCaps.setupSkillBytes': 4000, 'skillCaps.perSkill.candle-reading': 7637, 'skillCaps.perSkill.pullback-vs-reversal': 10354, 'skillCaps.perSkill.trend-vs-range': 5658, 'skillCaps.perSkill.bos-vs-choch': 5418,
+    'skillCaps.skillBytes': 3459, 'skillCaps.setupSkillBytes': 4000, 'skillCaps.perSkill.candle-reading': 7637, 'skillCaps.perSkill.pullback-vs-reversal': 10354, 'skillCaps.perSkill.trend-vs-range': 5658, 'skillCaps.perSkill.bos-vs-choch': 5506,
     'goalRegression.tolerance.passRate': 0.005, 'goalRegression.tolerance.meanR': 0.005, 'goalRegression.tolerance.rCaught': 0,
     'goalRegression.tier2.tolerance.trades': 0, 'goalRegression.tier2.tolerance.totalR': 0.05, 'goalRegression.tier2.tolerance.fills': 0, 'goalRegression.tier2.tolerance.moveShare': 0, 'goalRegression.tier2.maxLossR': 1.25,
     'goalRegression.seed': 1, 'goalRegression.split': '2022-11-23', 'goalRegression.blocksPerHalf': 3, 'goalRegression.blockSessions': 5, 'goalRegression.trendPerHalf': 8,
@@ -345,7 +350,7 @@ const BUILT_IN = deepFreeze({
       recentDecisions: 10, historyPerLane: 10, slowerContext: 3, planChars: 400, reasonChars: 100, exitsKept: 50, unseenReads: 10,
       sessionStartLessons: 10, sessionStartLessonChars: 300, reportMaxText: 8000, trackRecordMinSlice: 10, lessonMinPlans: 10,
       trackRecordLiveSlice: 5, instinctsMinSetupTrades: 3, instinctsRecentReviews: 30, reviewedTrades: 10, feedbackMinTrades: 5, feedbackRecordGroups: 6, valuesPerStrategy: 6, brokerFieldsKept: 3,
-      brokerFieldsBytes: 600, brokerFieldChars: 250, cycleDataMaxBytes: 48000, situationalSkillBytes: 78389, maxPromptBytes: 126976,
+      brokerFieldsBytes: 600, brokerFieldChars: 250, cycleDataMaxBytes: 48000, situationalSkillBytes: 78402, maxPromptBytes: 126976,
       cacheTtlMinutes: { '5m': 5, '1h': 60 },
     },
     session: {
@@ -394,6 +399,7 @@ const BUILT_IN = deepFreeze({
     composeHints: { perStep: 3, maxTries: 2000 },
     fvg: { frames: [5, 15, 60], window: 60, max: 3 },
     compression: { frames: [3, 5, 15, 60], nr: [7], maxWidthAtr: 2, poleBars: 3, expandAtr: 1, minBeyondAtr: 0.1, recentBars: 3, maxRunAtr: 1, levelBandAtr: 0.25, maxLevels: 3 },
+    displacement: { bodyPrior: 10, recentEntry: 6, recentSetup: 2, lineBytes: 450 },
     briefing: { equalK: 2, cisdFrames: [3, 5, 15, 60] },
     tradeRead: { frames: [15], deepPullback: 0.618, minSigns: 2 },
     pullbackRead: { minLegAtr: 1, maxStateDepth: 0.62 },

@@ -188,6 +188,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - `daily-bias` (skills/daily-bias/SKILL.md): Use when setting today's bias - long, short or neutral, with confidence, reasons and what flips it - from the prior day, the open, 1h/4h structure.
 - `day-context` (skills/day-context/SKILL.md): Use when deciding a cycle - the premarket plan, the news, and the day so far.
 - `design-self-review` (skills/design-self-review/SKILL.md): Only for the training loop's proposer (FTH-SELF-REVIEW prompt) - review flagged decisions and propose skill or rule edits. Never in a trading cycle.
+- `displacement` (skills/displacement/SKILL.md): Use when a Break quality line or a CISD prints - read how strongly a BOS, CHoCH, CISD or protected-swing break moved (displaced or weak). A read, never a setup.
 - `end-of-day` (skills/end-of-day/SKILL.md): Use at the end of each session, from /eod, or at the runner's end-of-day time - flatten and confirm flat, cancel leftovers, review trades, journal the day.
 - `entry-outcome` (skills/entry-outcome/SKILL.md): Use after placing an entry - filled, working, refused, an unknown outcome, or flat.
 - `exchange-holidays` (skills/exchange-holidays/SKILL.md): Use when checking for an exchange holiday or an early close.

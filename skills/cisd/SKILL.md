@@ -23,9 +23,8 @@ hypotheses; a missing field is `unknown`.
    candles of the run (`confirmedClose`).
 
 **Only a strong displacement has a zone** (`displacement`, `engulfing`).
-Strong: body at least 0.6 of the range, the close in the top third, and a
-range of at least 1.0 x ATR(14) of that timeframe or a body engulfing the
-prior one. A doji, a small body or a mid-range close is weak: no zone,
+Strong: the `displacement` skill's one rule, the same as a break's
+displaced. A doji, a small body or a mid-range close is weak: no zone,
 no fib (`status` `weak`).
 
 **Sweep** (`sweep`, `breakout-vs-fakeout`): A CISD after a sweep of a key

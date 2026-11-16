@@ -92,7 +92,7 @@ const EXPECTED = {
     'manage-position', 'momentum-and-volume', 'mtf-bias-filter', 'position-sizing', 'prop-challenge-pacing',
     'pullback-vs-reversal', 'rejection', 'session-timing', 'take-profit', 'top-down-entry', 'trend-vs-range',
     'vwap-volume-profile'],
-  c: ['absorption', 'broker-mcp', 'broker-refusals', 'contract-roll', 'exchange-holidays', 'gate-refusals',
+  c: ['absorption', 'broker-mcp', 'broker-refusals', 'contract-roll', 'displacement', 'exchange-holidays', 'gate-refusals',
     'gate-refusals-cycle', 'gate-refusals-limits', 'gate-refusals-positions', 'harness-root', 'market-snapshot',
     'micro-mini-specs', 'news-blackouts', 'order-failures', 'order-mechanics', 'order-rationale', 'order-types',
     'prop-pacing-judgment', 'reason-check', 'setup-expectancy', 'strategy-authoring', 'strategy-gate-checks',
@@ -199,7 +199,7 @@ test('the budget: with every trigger that can hold at once, nothing is pushed to
   const everything = { state: { ...FLAT, attempts: [{ account: 'x', status: 'active' }] }, briefings: flatFacts.flatMap(x => x.briefings || []) };
   const all = SS.choose(ROOT, SS.factsOf(everything), { loaded: LOADED });
   assert.deepStrictEqual(all.over, [], `over the budget: ${all.over.join(', ')}`);
-  // The committed budget is the measured need of every trigger at once (feat/pullback-concept: 75534, feat/chop-read: 76367, then 76692 with the Market state redesign, then 78204 with round 20's three layers in bos-vs-choch, then 78389 with the follow-up to #340's CHoCH-then-BOS wording, then 76969 with round 15's protected swings, then 77163 with pvr's Depth row clause, pullback-vs-reversal's
+  // The committed budget is the measured need of every trigger at once (feat/pullback-concept: 75534, feat/chop-read: 76367, then 76692 with the Market state redesign, then 78204 with round 20's three layers in bos-vs-choch, then 78389 with the follow-up to #340's CHoCH-then-BOS wording, then 78402 with feat/displacement's bos-vs-choch Fields, then 76969 with round 15's protected swings, then 77163 with pvr's Depth row clause, pullback-vs-reversal's
   // read grown), not padding: 2,000 bytes under it something is pushed to the Also relevant line.
   const budget = require('../../scripts/lib/tunables').runner().prompt.situationalSkillBytes;
   assert.ok(SS.choose(ROOT, SS.factsOf(everything), { loaded: LOADED, budget: budget - 2000 }).over.length > 0, 'the budget is near the measured need');
