@@ -1800,37 +1800,50 @@ Frozen definitions:
   only; B: chop outnumbers trend; D: both, trend at least chop.
 - **The coded read** = the briefing's Market state (scripts/lib/trading/
   market-state.js `readState`, the one definition the summary line prints;
-  the Market state pull request), the class word of its table: chop reads
-  `chop`; the 4h and 1h not both one way read `unclear`; a pullback read
-  their way (an open `Pullback` line no deeper than config/analysis.json
-  `pullbackRead.maxStateDepth`, or the 15m trending their way under a 3m
-  last break that is a BOS against them) reads `trend-<way>`; a 3m trend
-  their way, ranging or forming under them, reads `trend-<way>`; a 3m trend
-  against them reads `unclear`. The 3m state, once, on the RTH breaks (those
-  whose candles closed at or after 09:30 ET): none yet: forming; one: a BOS
-  a trend that way, a CHoCH ranging unless a live 3m CISD its way on a later
-  candle confirms it; two or more: chop (the last two breaks both CHoCH, a
-  failed reversal; no pullback read active; the 15m not confirming the way
-  it ends with its last break a BOS that way known at or after 09:30 ET and
-  by the close; no confirmed turn), trend (the last break a BOS whose
-  protected swing still holds; the pair the 15m confirms; or a CHoCH
-  confirmed by a live 3m CISD its way closed on a later candle, or by a close
-  beyond the initial balance, complete from 10:30 ET, with the previous break
-  inside it), else ranging. Each 3m break's protected swing (structure-
-  events.js `protectedOf`: the origin of the leg that made it): a BOS whose
-  protected higher low (lower high) a close went through has ended its
-  trend (ranging); a CHoCH whose origin a close went through has failed (its
-  CISD turn no longer confirms it; no new chop condition). The pullback read
-  is open while the leg was never given back past its origin and its 15m
-  swing was never broken by a close since the extreme (pullback-read.js
-  `isOpen`, sticky on the leg). The day so far rotational and the RTH VWAP
-  crosses at `signals.crossesChop` are printed beside a chop, never its
-  conditions. It is never the model's. Against the coded read before it:
-  the bare CHoCH pair (no open `Pullback` line, no rotational day or crosses)
-  now reads `chop`; the 4h and 1h agreeing with the 3m's last break a BOS
-  against them and no pullback read reads `unclear` (it read the trend); the
-  RTH breaks, the 15m guard, the protected swings, the sticky and bounded
-  pullback and the early read on a BOS only are new. (The briefing passes
+  the Market state pull request, round 20 and its follow-up), the class
+  word the line ends with (`classWordOf`). The 3m state reads the owner's
+  three layers, which market-layers.js computes into the briefing's
+  `m3.layers` from the RTH bars (those whose candles closed at or after
+  09:30 ET) on the chain's entry frame only: internal structure (the 3m
+  k=2 breaks); protected structure (structure-layers.js: the leg's
+  protected level, the origin of the move that made its last break its
+  way; a close through it past the tie, config/analysis.json
+  `marketState.equalAtr` x ATR(14), is the only invalidation of the leg; a
+  CHoCH then BOS against the leg confirms a transition, printed `CHoCH then
+  BOS: transition confirmed` while the old level is unbroken and `reversal
+  confirmed` once a close goes through it); and price behavior
+  (market-behavior.js: overlap, efficiency, displacement, failed
+  continuation; the 3m and 15m words). The precedence, once: `forming` (no
+  RTH break yet); `pullback` (an open `Pullback` line, pullback-read.js
+  `isOpen`, no deeper than `pullbackRead.maxStateDepth`: the pullback
+  guard, no chop inside it); `rotation` (that pullback with rotation
+  evidence, or an intact leg with no new extreme by close for
+  `marketState.rotStale` bars); `transition` (the protected level broken by
+  a close, with displacement, that held; the new leg unconfirmed); `chop`; `weakening`
+  (an intact leg with a strong countertrend displacement breaking internal
+  structure); `trend` (an established leg whose behavior word is
+  `trending`); `leg` (an established leg otherwise, printed `in the up
+  leg`); else `range` (no established leg). Chop takes structural AND
+  behavioral evidence: S, no established leg (its last break failed, or its
+  level broken) with breaks both ways, a protected break (or a CHoCH then
+  BOS flip) or a failed break since the last end event; and B, no clean displaced break and at least
+  `marketState.chopMinFacts` of overlap, low efficiency, failed
+  continuation and no displacement, over at least `daySoFar.minBars` RTH
+  bars. A CHoCH pair alone is not chop, and chop needs no pair. It lasts
+  until displacement ends it (a displaced 3m break, a strong 3m CISD, a
+  displaced close beyond the initial balance, or a transition) or the leg
+  re-establishes and makes a fresh extreme its way by close; it never
+  prints under the pullback guard or the early read (the 15m trending the
+  4h + 1h way under a 3m leg against them). The classes: `chop` reads
+  `chop`; `rotation` and `weakening` read `unclear`; the 4h and 1h not both
+  one way read `unclear`; a pullback their way, the early read, `range` and
+  `forming` read `trend-<way>`; `trend`, `leg` and `transition` their way
+  read `trend-<way>`, against them `unclear`. Without `m3.layers` (an older
+  record, a quiz item built from printed lines) the printed breaks and
+  protected swings alone give `forming`, `pullback`, `leg` or `range`: no
+  chop, weakening or rotation there. The day so far rotational and the RTH
+  VWAP crosses at `signals.crossesChop` are printed beside a chop, never
+  its conditions. It is never the model's. (The briefing passes
   config/analysis.json `regime.rangeCrosses` for the printed crosses, pinned
   equal to `crossesChop`, and `pullbackRead.maxStateDepth`; the recognition
   key passes the same depth bound. C7 still reads the session crosses, as

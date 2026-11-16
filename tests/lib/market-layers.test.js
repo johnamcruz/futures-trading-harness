@@ -74,6 +74,26 @@ test('endedAt / chopNext (decision 6): chop ends only on displacement; an end ev
   assert.strictEqual(ML.chopNext({ structure: false, now: true, ended: false, prev: true }), false, 'no structure: no chop');
 });
 
+test('chopNext (round 20c, item 1): a re-established leg making a fresh extreme its way ends the chop memory (the owner\'s HH/HL override)', () => {
+  assert.strictEqual(ML.chopNext({ structure: true, now: false, ended: false, prev: true, renewed: true }), false, 'inChop, legOK, a fresh extreme: ended');
+  assert.strictEqual(ML.chopNext({ structure: true, now: false, ended: false, prev: true, renewed: false }), true, 'legOK without a fresh extreme: the memory holds');
+  assert.strictEqual(ML.renewedAt({ status: 'intact', legOK: true, sinceProgress: 0 }), true);
+  assert.strictEqual(ML.renewedAt({ status: 'intact', legOK: true, sinceProgress: 1 }), false, 'no new extreme by close at this bar');
+  assert.strictEqual(ML.renewedAt({ status: 'intact', legOK: false, sinceProgress: 0 }), false, 'a fresh extreme on a leg whose breaks failed');
+  assert.strictEqual(ML.renewedAt({ status: 'broken', legOK: false, sinceProgress: null }), false);
+  assert.strictEqual(ML.renewedAt(null), false);
+});
+
+test('chopAt (round 20c, item 6): B\'s no-clean-break clause: a last break with displacement and follow-through is not chop, whatever the facts', () => {
+  const clean = [brk('down', 8), brk('up', 2, { strong: true })];
+  const c = chop({ breaks: clean, edges: { atTop: 2, atBot: 0 } });
+  assert.deepStrictEqual([c.count >= P.chopMinFacts, c.B, c.now], [true, false, false], 'the facts counted, the clean break vetoes');
+  const failed = chop({ breaks: [brk('down', 8), brk('up', 2, { strong: true, failed: true })], edges: { atTop: 2, atBot: 0 } });
+  assert.strictEqual(failed.B, true, 'the same break failed: no veto');
+  const weak = chop({ breaks: [brk('down', 8), brk('up', 2)], edges: { atTop: 2, atBot: 0 } });
+  assert.strictEqual(weak.B, true, 'the same break undisplaced: no veto');
+});
+
 test('marketLayers: every threshold required; no bars or clock: null; before 09:30 ET: no RTH structure', () => {
   const bars = Array.from({ length: 40 }, (_, i) => ({ t: new Date(Date.UTC(2026, 0, 6, 12, 0) + i * 180000).toISOString(), o: 100, h: 101, l: 99, c: 100, v: 1 }));
   const args = { bars, minutes: 3, setupMinutes: 15, closedAt: new Date(Date.UTC(2026, 0, 6, 14, 0)).toISOString(), p: P, floor: FLOOR, ibBars: IB };

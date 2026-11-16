@@ -34,7 +34,8 @@ A wick through a swing that closes back inside is a sweep, not a break
   continuation.
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
-  A potential reversal: CHoCH then BOS: confirmed.
+  CHoCH then BOS the same way: a confirmed transition; a reversal once a
+  close goes through the old leg's protected level.
 
 **Three layers** (owner): "1. Internal structure: Small swings inside the
 larger market structure. These can change without invalidating the main
@@ -47,9 +48,10 @@ overlapping, consolidating, or repeatedly failing to continue."
   against the leg while its protected level holds is pullback or
   consolidation evidence, never a trend change.
 - Protected: the origin of the move that made the leg's last break its way
-  (the line's `HL` up, `LH` down); a close through it, past a tie, ends
-  the leg. Inside the leg, a CHoCH then a BOS the same way against it
-  confirms the transition too.
+  (the line's `HL` up, `LH` down); a close through it, past a tie, is the
+  only invalidation of the leg. A CHoCH then BOS against it confirms a
+  transition (`CHoCH then BOS: transition confirmed`), the level unbroken;
+  a close through it makes the reversal (`reversal confirmed`).
 - Each break has a protected swing: a BOS holds until the leg's higher
   low (lower high) breaks; a CHoCH holds until the low (high) that started
   the shift breaks. Only a close through it counts; a wick is not.
