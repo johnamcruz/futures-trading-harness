@@ -42,9 +42,11 @@ function positionQuote(answer, read = {}, { snapshot = [] } = {}) {
     // The field the clause before it names: the last field word since the clause began (a ';', '.', newline or ',').
     const before = text.slice(0, m.index);
     const clause = before.slice(Math.max(before.lastIndexOf(';'), before.lastIndexOf('\n'), before.lastIndexOf(', '), before.search(/\.\s[^.]*$/)) + 1);
-    let field = null;
-    let at = -1;
-    for (const [name, re] of FIELDS) for (const w of clause.matchAll(re)) if (w.index > at) { at = w.index; field = name; }
+    // "1.84R off the best" (the line's stop clause): the stop's distance from the best, a giveback, never the best.
+    const words = clause.replace(/\boff the best\b/gi, 'gives back');
+    let field = /^\s+off the best\b/i.test(text.slice(m.index + m[0].length)) ? 'give' : null;
+    let at = field ? Infinity : -1;
+    for (const [name, re] of FIELDS) for (const w of words.matchAll(re)) if (w.index > at) { at = w.index; field = name; }
     if (!field) continue;
     if (/^[-+]?1$/.test(m[1]) && !/^[-+]/.test(m[1]) && (DEFINES.test(before) || DEFINED.test(text.slice(m.index + m[0].length)))) continue;
     const value = Number(m[1]);

@@ -121,7 +121,7 @@ function lineOf(p, { level = x => String(r2(x)), et = hhmm } = {}) {
   const mfe = p.mfeR > 0 ? `MFE ${sR(p.mfeR)} at ${p.best === null ? '? (not recorded)' : `${level(p.best)} (${et(p.bestAt)} ET bar)`}` : 'MFE 0R (no closed bar beyond the entry yet)';
   const mae = p.maeR < 0 ? `MAE ${sR(p.maeR)}` : `MAE 0R (never ${p.sign > 0 ? 'below' : 'above'} the entry on a closed bar)`;
   const give = p.give !== null ? `giveback ${p.give}R (${p.giveShare}% of MFE)` : 'giveback: none';
-  const at = x => `${level(p.work)} (${sR(p.workR)}; a fill there gives back ${x}R)`;
+  const at = x => `${level(p.work)} (${sR(p.workR)}; a fill there is ${x}R off the best)`;
   const stop = p.work === null ? 'NO working stop' : p.stops > 1 ? `${p.stops} stop orders, the loosest ${at(p.atStopGive)}` : `working stop ${at(p.atStopGive)}`;
   const R = x => r2((p.sign * (x - p.entry)) / p.risk);
   const exit = p.mode === 'target_then_trail' ? `target ${p.armed ? `reached (lock ${p.lockR === null ? '?' : sR(p.lockR)})` : 'not reached'}`

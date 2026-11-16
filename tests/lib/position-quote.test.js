@@ -39,3 +39,8 @@ test('the unit\'s definition is no quoted value; a typographic minus reads as a 
   assert.strictEqual(positionQuote('a fill there gives back 1R', { atStopGive: 1.84, give: 1.27 }).share, 0);
 });
 
+test('"x R off the best" (the line\'s stop clause) reads as the stop\'s giveback, never the best', () => {
+  const q = positionQuote('working stop 15657.25 (-1R; a fill there is 1.84R off the best), MFE +0.84R', { workR: -1, atStopGive: 1.84, mfeR: 0.84 });
+  assert.deepStrictEqual(q.quoted.map(x => [x.field, x.value, x.ok]), [['stop', -1, true], ['give', 1.84, true], ['mfe', 0.84, true]]);
+});
+

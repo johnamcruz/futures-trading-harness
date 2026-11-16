@@ -20,8 +20,8 @@ const LONG_H = {
   bestPrice: 15699, bestBarT: '2021-09-01T13:48:00.000Z', worstPrice: 15656.75, lastClose: 15691.25, lastBarT: '2021-09-01T13:51:00.000Z',
   swingClass: { cls: 'C', trailBy: 'structure', swing: 15620.5, swingStop: 15620.25, lock: 15662.75, binds: 'lock', trailStop: null, wrongSide: false },
 };
-const L1354 = 'Position (code facts): MNQ long 1 @ 15659.5, 1R 9.5 pts; now +3.34R at 15691.25; MFE +4.16R at 15699 (09:48 ET bar); MAE -0.29R; giveback 0.82R (20% of MFE); working stop 15662.75 (+0.34R; a fill there gives back 3.82R); target reached (lock +0.34R); code floor: last confirmed 15m swing 15620.5 is behind the lock: the stop rests at the lock.';
-const L1357 = 'Position (code facts): MNQ long 1 @ 15659.5, 1R 9.5 pts; now +1.39R at 15672.75; MFE +4.16R at 15699 (09:48 ET bar); MAE -0.29R; giveback 2.77R (67% of MFE); working stop 15662.75 (+0.34R; a fill there gives back 3.82R); target reached (lock +0.34R); code floor: last confirmed 15m swing 15620.5 is behind the lock: the stop rests at the lock.';
+const L1354 = 'Position (code facts): MNQ long 1 @ 15659.5, 1R 9.5 pts; now +3.34R at 15691.25; MFE +4.16R at 15699 (09:48 ET bar); MAE -0.29R; giveback 0.82R (20% of MFE); working stop 15662.75 (+0.34R; a fill there is 3.82R off the best); target reached (lock +0.34R); code floor: last confirmed 15m swing 15620.5 is behind the lock: the stop rests at the lock.';
+const L1357 = 'Position (code facts): MNQ long 1 @ 15659.5, 1R 9.5 pts; now +1.39R at 15672.75; MFE +4.16R at 15699 (09:48 ET bar); MAE -0.29R; giveback 2.77R (67% of MFE); working stop 15662.75 (+0.34R; a fill there is 3.82R off the best); target reached (lock +0.34R); code floor: last confirmed 15m swing 15620.5 is behind the lock: the stop rests at the lock.';
 // 2022-03-07 15:36Z: the short before its target.
 const SHORT_T = { contractId: 'MNQ', side: 'short', sign: -1, size: 1, entry: 13674, averagePrice: 13674, risk: 82.25, riskFrom: 'journal', stop: 13756.25, stops: [13756.25], target: null, openedAt: '2022-03-07T14:51:00.000Z' };
 const SHORT_H = {
@@ -29,7 +29,7 @@ const SHORT_H = {
   bestPrice: 13563.5, bestBarT: '2022-03-07T15:30:00.000Z', worstPrice: 13693.75, lastClose: 13606.75, lastBarT: '2022-03-07T15:33:00.000Z',
   swingClass: { cls: 'A', trailBy: 'structure', swing: null, swingStop: null, lock: 13554.75, binds: null, trailStop: null, wrongSide: false },
 };
-const L0307 = 'Position (code facts): MNQ short 1 @ 13674, 1R 82.25 pts; now +0.82R at 13606.75; MFE +1.34R at 13563.5 (10:30 ET bar); MAE -0.24R; giveback 0.52R (39% of MFE); working stop 13756.25 (-1R; a fill there gives back 2.34R); target not reached; code floor: before the target: the initial stop holds.';
+const L0307 = 'Position (code facts): MNQ short 1 @ 13674, 1R 82.25 pts; now +0.82R at 13606.75; MFE +1.34R at 13563.5 (10:30 ET bar); MAE -0.24R; giveback 0.52R (39% of MFE); working stop 13756.25 (-1R; a fill there is 2.34R off the best); target not reached; code floor: before the target: the initial stop holds.';
 
 const line = (t, h, extra = {}) => positionLine(positionRead(t, { held: h, tick: TICK, ...extra }), { level });
 
@@ -58,8 +58,8 @@ test('the read: MAE never above 0; MFE 0 says so (no share); a share above 100% 
 
 test('the working stop: none, several (the loosest is the exposure), a tightened one above the lock as it rests', () => {
   assert.match(line({ ...LONG_T, stop: null, stops: [] }, LONG_H), /; NO working stop; /);
-  assert.match(line({ ...LONG_T, stops: [15662.75, 15660] }, LONG_H), /; 2 stop orders, the loosest 15660 \(\+0\.05R; a fill there gives back 4\.11R\); /);
-  assert.match(line({ ...LONG_T, stop: 15683.25, stops: [15683.25] }, LONG_H), /working stop 15683\.25 \(\+2\.5R; a fill there gives back 1\.66R\); target reached \(lock \+0\.34R\); code floor: /);
+  assert.match(line({ ...LONG_T, stops: [15662.75, 15660] }, LONG_H), /; 2 stop orders, the loosest 15660 \(\+0\.05R; a fill there is 4\.11R off the best\); /);
+  assert.match(line({ ...LONG_T, stop: 15683.25, stops: [15683.25] }, LONG_H), /working stop 15683\.25 \(\+2\.5R; a fill there is 1\.66R off the best\); target reached \(lock \+0\.34R\); code floor: /);
 });
 
 test('the code floor\'s class: B, C, D (lock or R trail binding; none or the wrong side), A, a trail by R; modes target and trail', () => {
@@ -107,7 +107,7 @@ test('not held: the line is folded from the bars with the journal\'s or the work
     { t: '2021-09-01T13:44:00.000Z', o: 15664, h: 15699, l: 15662, c: 15690 },
   ];
   const l = line(LONG_T, null, { bars, why: 'no held trade', graceMs: 30000 });
-  assert.strictEqual(l, 'Position (code facts): MNQ long 1 @ 15659.5, 1R 9.5 pts; now +3.21R at 15690; MFE +4.16R at 15699 (09:44 ET bar); MAE -0.29R; giveback 0.95R (23% of MFE); working stop 15662.75 (+0.34R; a fill there gives back 3.82R); no target order (not runner-managed: no held trade; risk from the journal stop).');
+  assert.strictEqual(l, 'Position (code facts): MNQ long 1 @ 15659.5, 1R 9.5 pts; now +3.21R at 15690; MFE +4.16R at 15699 (09:44 ET bar); MAE -0.29R; giveback 0.95R (23% of MFE); working stop 15662.75 (+0.34R; a fill there is 3.82R off the best); no target order (not runner-managed: no held trade; risk from the journal stop).');
   assert.match(line({ ...LONG_T, riskFrom: 'working' }, null, { bars, why: 'no held trade', graceMs: 30000 }), /risk from the working stop\)\.$/);
 });
 

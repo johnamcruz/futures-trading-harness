@@ -42,7 +42,7 @@ test('a long: setup and initial stop from the entry\'s order, working stop and t
   assert.deepStrictEqual(t.notes, []);
   const line = describeOpenTrade(t, { tickSize: 0.25, et: () => '10:41 ET' });
   // The Position line first (no held trade here: folded from the bars, said so); now, best and worst are its, not the sentence's.
-  assert.strictEqual(line, `Position (code facts): ${C} long 2 @ 21500.25, 1R 11.25 pts; now +0.84R at 21509.75; MFE +1.22R at 21514 (10:45 ET bar); MAE -0.38R; giveback 0.38R (31% of MFE); working stop 21494.75 (-0.49R; a fill there gives back 1.71R); target order 21560 (+5.31R) (not runner-managed: no held trade; risk from the journal stop). Open trade ${C} long 2 @ 21500.25 since 10:41 ET, 2 bars closed since (setup:value_area): initial stop 21489: risk 11.25 points = 45 ticks; working stop 21494.75 (-0.49R), target 21560 (+5.31R).`);
+  assert.strictEqual(line, `Position (code facts): ${C} long 2 @ 21500.25, 1R 11.25 pts; now +0.84R at 21509.75; MFE +1.22R at 21514 (10:45 ET bar); MAE -0.38R; giveback 0.38R (31% of MFE); working stop 21494.75 (-0.49R; a fill there is 1.71R off the best); target order 21560 (+5.31R) (not runner-managed: no held trade; risk from the journal stop). Open trade ${C} long 2 @ 21500.25 since 10:41 ET, 2 bars closed since (setup:value_area): initial stop 21489: risk 11.25 points = 45 ticks; working stop 21494.75 (-0.49R), target 21560 (+5.31R).`);
 });
 
 test('a short with no working stop and no planned stop: flagged, risk unknown', () => {
@@ -135,7 +135,7 @@ test('one basis: every R and every "best" in the Position line, the Open trade s
   assert.deepStrictEqual([t.rNow, t.mfeR, t.maeR], [0.95, 1.38, -0.42]);
   const read = tradeReadText(t, { bars: BARS, base: 3, tickSize: 0.25, exit: PLAN.afterTarget });
   const text = describeOpenTrade(t, { tickSize: 0.25, read });
-  assert.match(text, /^Position \(code facts\): MNQ long 2 @ 21500\.25, 1R 10 pts; now \+0\.95R at 21509\.75; MFE \+1\.38R at 21514 \(10:45 ET bar\); MAE -0\.42R; giveback 0\.43R \(31% of MFE\); working stop 21494\.75 \(-0\.55R; a fill there gives back 1\.93R\); target not reached; code floor: before the target: the initial stop holds\. /);
+  assert.match(text, /^Position \(code facts\): MNQ long 2 @ 21500\.25, 1R 10 pts; now \+0\.95R at 21509\.75; MFE \+1\.38R at 21514 \(10:45 ET bar\); MAE -0\.42R; giveback 0\.43R \(31% of MFE\); working stop 21494\.75 \(-0\.55R; a fill there is 1\.93R off the best\); target not reached; code floor: before the target: the initial stop holds\. /);
   assert.match(text, /Open trade MNQ long 2 @ 21500\.25.*: initial stop 21490\.25: risk 10 points = 40 ticks; working stop 21494\.75 \(-0\.55R\)/);
   assert.match(text, /Trade read \(closed bars since entry; pullback-vs-reversal\): best 21514; /);
   // The Manage read's warning level from the same best and 1R: 21514 - 0.5 x 10 = 21509.

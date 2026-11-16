@@ -56,7 +56,7 @@ description: Use when a position is open - its stop, the plan's management, the 
   the broker snapshot's R): now = R at the last close; MFE = the best
   closed-bar extreme, its price and bar; MAE = the worst, never above 0;
   giveback = MFE less now, in R and as a share of MFE; working stop = its R and
-  what a fill there gives back; target reached and the lock; code floor = what
+  how far a fill there is off the best; target reached and the lock; code floor = what
   the stop rests on (the initial stop, a 15m swing, or the lock).
   - Giveback in a 3m pullback, the 15m swing intact, no 15m CHoCH → hold.
   - "The stop rests at the lock" → the exposure, never an exit signal.

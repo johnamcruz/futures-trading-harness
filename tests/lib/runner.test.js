@@ -1320,7 +1320,7 @@ test('every run\'s prompt states the account, read just before it; an unreadable
   assert.deepStrictEqual(r.cancelled, [9, 10], 'the leftovers are cancelled once the account reads flat');
   // The open position is described once, as a trade (open-trades.js), not listed again in the account line.
   // Its Position line first (the runner's held trade: 1R 10 points from the entry record's 40 ticks), then its sentence.
-  assert.match(r.prompts.find(x => /trade-session/.test(x)), /Account 7 at .*: balance \$50,100; 1 open position \(below\); 2 working orders\. Position \(code facts\): MNQ long 1 @ 21500, 1R 10 pts; now \+0R at 21500; MFE \+0\.1R at 21501 \(\d\d:\d\d ET bar\); MAE -0\.1R; giveback 0\.1R \(100% of MFE\); working stop 21490 \(-1R; a fill there gives back 1\.1R\); trail 0\.5R behind the best from \+2R\. Open trade MNQ long 1 @ 21500 since 10:00 ET, 7 bars closed since \(setup unknown[^)]*\): initial stop 21490: risk 10 points = 40 ticks; working stop 21490 \(-1R\), target 21600 \(\+10R\)\./);
+  assert.match(r.prompts.find(x => /trade-session/.test(x)), /Account 7 at .*: balance \$50,100; 1 open position \(below\); 2 working orders\. Position \(code facts\): MNQ long 1 @ 21500, 1R 10 pts; now \+0R at 21500; MFE \+0\.1R at 21501 \(\d\d:\d\d ET bar\); MAE -0\.1R; giveback 0\.1R \(100% of MFE\); working stop 21490 \(-1R; a fill there is 1\.1R off the best\); trail 0\.5R behind the best from \+2R\. Open trade MNQ long 1 @ 21500 since 10:00 ET, 7 bars closed since \(setup unknown[^)]*\): initial stop 21490: risk 10 points = 40 ticks; working stop 21490 \(-1R\), target 21600 \(\+10R\)\./);
   // A managed cycle's open trade carries its read facts (trade-read.js), measured from its entry: the pullback-vs-reversal
   // read of an open trade, in the same line.
   assert.match(r.prompts.find(x => /trade-session/.test(x)), /Open trade MNQ long 1 @ 21500 [^\n]*\. Trade read \(closed bars since entry; pullback-vs-reversal\): best [\d.]+; [^;]+; [^;]+; pullback [^;]+; close vs RTH VWAP [^;]+; structure against since entry: 3m [^;]+, 15m [^;]+; 15m displacement against: [^;]+; compression against: [^;]+; HTF bias at entry [^,]+, now [^(]+\([^)]+\)\. Weakening signs: \d of 5[^;]*, 2 needed; reversal: [^.;]+\. Manage read \(answer every cycle with one line "STOP <price\|hold>: <reason>"; modify_order only when tighter\): code floor: /);
@@ -2488,7 +2488,7 @@ test('every managed prompt with a position carries exactly one Position line per
   }
   const last = managed[managed.length - 1];
   assert.match(last, /Position \(code facts\): MNQ long 1 @ 21500, 1R 10 pts; now \+1\.7R at 21517; MFE \+2\.4R at 21524 \(10:06 ET bar\); MAE -0\.1R; giveback 0\.7R \(29% of MFE\); /);
-  assert.match(last, /working stop 21514 \(\+1\.4R; a fill there gives back 1R\); target reached \(lock \+0\.5R\); code floor: the stop trails 1R behind the best \(21514\)\. Open trade/);
+  assert.match(last, /working stop 21514 \(\+1\.4R; a fill there is 1R off the best\); target reached \(lock \+0\.5R\); code floor: the stop trails 1R behind the best \(21514\)\. Open trade/);
   // Parity with the held trade itself, and the cycle record's structured fields (the T5 dataset fields).
   const held = r.saved.trails.MNQ;
   const ctx = r.contexts.filter(c => c && Array.isArray(c.openTrades) && c.openTrades.length).pop();
