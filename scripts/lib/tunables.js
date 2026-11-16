@@ -244,6 +244,10 @@ const ANALYSIS = {
     frames: list(int(1), { min: 1 }), nr: list(int(2), { min: 1 }), maxWidthAtr: pos(), poleBars: int(0), expandAtr: nonneg(), minBeyondAtr: nonneg(), recentBars: int(0),
     maxRunAtr: nonneg(), levelBandAtr: nonneg(), maxLevels: int(1),
   },
+  // A break's displacement read (displacement.js, the `displacement` skill): the candles a body is compared with, how many
+  // candles (entry frame) and 15m candles (setup frame) a break prints for, and the line's byte budget. Display only:
+  // the strength rule's numbers stay cisd.minBody / cisd.minRangeAtr; nothing decides on these.
+  displacement: { bodyPrior: int(1), recentEntry: int(0), recentSetup: int(0), lineBytes: int(1) },
   briefing: { equalK: int(1), cisdFrames: list(int(1), { min: 1 }) },
   tradeRead: { frames: list(int(1), { min: 1 }), deepPullback: frac(), minSigns: int(1) },
   pullbackRead: { minLegAtr: pos(), maxStateDepth: frac() },
@@ -394,6 +398,7 @@ const BUILT_IN = deepFreeze({
     composeHints: { perStep: 3, maxTries: 2000 },
     fvg: { frames: [5, 15, 60], window: 60, max: 3 },
     compression: { frames: [3, 5, 15, 60], nr: [7], maxWidthAtr: 2, poleBars: 3, expandAtr: 1, minBeyondAtr: 0.1, recentBars: 3, maxRunAtr: 1, levelBandAtr: 0.25, maxLevels: 3 },
+    displacement: { bodyPrior: 10, recentEntry: 6, recentSetup: 2, lineBytes: 450 },
     briefing: { equalK: 2, cisdFrames: [3, 5, 15, 60] },
     tradeRead: { frames: [15], deepPullback: 0.618, minSigns: 2 },
     pullbackRead: { minLegAtr: 1, maxStateDepth: 0.62 },

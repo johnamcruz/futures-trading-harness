@@ -74,7 +74,8 @@
  *
  *   PARAMS                                  the defaults above
  *   findCisds(candles, params)              [{ dir, level, runStart, runEnd, confirm }] (candle indexes)
- *   strongCandle(k, prev, dir, atr, p)      the displacement strength rule, { strong, engulfing, body, rangeAtr } (also the FVG's middle candle)
+ *   strongCandle(k, prev, dir, atr, p)      the displacement strength rule, { strong, engulfing, body, rangeAtr, withDir, extreme } (also the FVG's
+ *                                           middle candle; displacement.js imports it as candleDisplaced, the one rule's name)
  *   cisdSeries(bars, minutes, { levels, atr, params, barMinutes })   the series by base bar, and the latest state
  *   cisdFacts(bars, minutes, opts)          the latest CISD on that timeframe as the briefing shows it
  *   paramsFrom(strategyParams)              PARAMS overridden by cisdMinRun, cisdMaxWait, cisdExpiry, cisdVoidTol, cisdBufferAtr
@@ -222,8 +223,10 @@ function strongCandle(k, prev, dir, atr, p = PARAMS) {
   const prevOpposite = prev && (dir === 1 ? prev.c < prev.o : prev.c > prev.o);
   const engulfing = Boolean(withDir && prevOpposite && Math.min(k.o, k.c) <= Math.min(prev.o, prev.c) && Math.max(k.o, k.c) >= Math.max(prev.o, prev.c));
   const rangeAtr = Number.isFinite(atr) && atr > 0 ? range / atr : null;
-  const strong = withDir && body >= p.minBody && loc >= UPPER_THIRD && (engulfing || (rangeAtr !== null && rangeAtr >= p.minRangeAtr));
-  return { strong, engulfing, body, rangeAtr };
+  const extreme = loc >= UPPER_THIRD;
+  const strong = withDir && body >= p.minBody && extreme && (engulfing || (rangeAtr !== null && rangeAtr >= p.minRangeAtr));
+  // withDir and extreme: the rule's own parts, so a weak candle can say which failed (displacement.js strengthAt).
+  return { strong, engulfing, body, rangeAtr, withDir, extreme };
 }
 
 /**

@@ -635,9 +635,10 @@ test('bos-vs-choch: the description is short, and the swings and breaks are the 
   assert.match(se, /if \(direction === 'up'\) hi = null; else lo = null;/);
   const br = read('scripts/lib/trading/briefing.js');
   // The 3m breaks with their protected swings (round 15, the owner's invalidation rule; structure-events.js protectedOf).
-  assert.match(br, /lastBreak: withProtected\(bars, lastBreaks\(bars\)\),/);
+  // feat/displacement: the last break also carries its strength read (displacement.js qualityOf), the levels its origin sweep reads.
+  assert.match(br, /lastBreak: qualityOf\(bars, withProtected\(bars, lastBreaks\(bars\)\), \{ minutes, levels: sweepLevels \}\),/);
   assert.match(se, /function protectedOf\(bars, brk\)/);
-  assert.match(br, /lastBreak: atClose\(lastBreaks\(c15\), 15\),/);
+  assert.match(br, /lastBreak: atClose\(qualityOf\(c15, lastBreaks\(c15\), [^\n]*\), 15\),/);
   assert.match(br, /lastBreak: atClose\(lastBreaks\(c60\), 60\)/);
   // On a real briefing: the kinds and directions the skill names, knownAt on 15m and 1h, and no 4h break.
   const bs = briefings();
