@@ -1063,3 +1063,26 @@ test('quiz accuracy ruling 6: the keyed choice of q128 and q143 is not the longe
   const f = Object.fromEntries(q('q87').text.split('\n').filter(l => /^F\d - /.test(l)).map(l => [l.slice(0, 2), l.length]));
   assert.ok(Object.entries(f).some(([k, n]) => k !== 'F2' && n > f.F2), 'q87: a distractor line longer than F2');
 });
+
+// Census follow-up (post hoc, after the pre-registered census): q144 had two defensible keys. Reason first, half the
+// replies keyed "STOP 11912.5: protected-swing" by manage-position's 15m-BOS rule; that stop equalled the working stop,
+// so it was the same action as the hold. The fixed stem: the working stop was tightened earlier to 11935, so the 15m
+// BOS's stop (11912.5) is looser than it, and "never looser" leaves the hold the only defensible line.
+test('quiz accuracy, census follow-up: q144 has one defensible key: the protected-swing stop is looser than the working stop', () => {
+  const x = q('q144');
+  const PR = require('../../scripts/lib/trading/position-read');
+  const pos = PR.positionLine({ contractId: 'MNQ', side: 'long', size: 1, entry: 11990, risk: 77.5, averagePrice: 11990, tick: 0.25, nowR: 0.46, last: 12025.75,
+    mfeR: 0.8, best: 12051.75, bestAt: '2022-07-07T14:15:00Z', maeR: -0.07, sign: 1, give: 0.34, giveShare: 43, work: 11935, workR: -0.71, atStopGive: 1.51, stops: 1,
+    mode: 'target_then_trail', target: 12145, armed: false, swingClass: { cls: 'A' }, basis: 'held' }, { et: () => '10:15' });
+  assert.strictEqual(x.text.split('\n')[1], pos, 'the Position line is position-read.js on the fixed facts');
+  assert.strictEqual(Math.round(((11935 - 11990) / 77.5) * 100) / 100, -0.71);
+  assert.match(x.text, /protected swing 11912\.75 holds, stop beyond it 11912\.5 \(not tighter\)/);
+  assert.match(x.text, /^Prompt lines \(a managed cycle, adapted from 2022-07-07 10:39 ET: the working stop tightened earlier to 11935\):/);
+  const stopOf = c => { const m = /^STOP (\d+(?:\.\d+)?):/.exec(c); return m ? Number(m[1]) : null; };
+  const looser = x.choices.filter(c => stopOf(c) !== null && stopOf(c) < 11935);
+  assert.deepStrictEqual(looser, ['STOP 11912.5: protected-swing'], 'the protected-swing line is looser than the working stop: never looser');
+  assert.strictEqual(x.answer, 'STOP hold: hold');
+  const g = a => Q.gradeAnswer(QUIZ, x, a).pass;
+  for (const [a, want] of [['The 15m BOS stop is looser than 11935.\nANSWER: A', true], ['ANSWER: STOP hold: hold', true], ['ANSWER: C', false], ['ANSWER: C) STOP 11912.5: protected-swing', false],
+    ['ANSWER: A) STOP 11912.5: protected-swing', false], ['ANSWER: B', false], ['ANSWER: D', false], ['ANSWER: A\nwait\nANSWER: C', false], ['ANSWER: A or C', false]]) assert.strictEqual(g(a), want, a);
+});
