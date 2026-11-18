@@ -42,6 +42,16 @@ not time-of-day adjusted; no phrase: not computable), the 15m and 1h
 breaks against it (`stacked`: both). Weigh it with
 `pullback-vs-reversal`.
 
+**The `MTF structure` lines** (the runner's briefing, directly under
+the `Market state` line, every bar in the window): two lines
+(`1h > 15m` primary; `below: 15m > 3m` context), each the parent's
+structure, the pullback against it and one computed `stage` word
+(`NONE`, `POTENTIAL`, `DEVELOPING`, `ESTABLISHED`, `WEAKENING`,
+`REVERSING`, `CONFIRMED REVERSAL`, `COMPLETED`, `INVALIDATED`); the
+primary line also has an `Entry:` clause and ends with the 4h `Above:`
+clause. Read each stage off its own line, never infer it; the table is
+`bos-vs-choch`'s "Multi-timeframe structure".
+
 ## Examples
 
 ```text

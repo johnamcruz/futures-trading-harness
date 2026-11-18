@@ -10,6 +10,7 @@ description: Trader-process step 4 and an open trade - price moving against the 
 - Step 4, price against the higher-frame trend
   (`trend-vs-range`). Side: `htf-to-ltf`'s.
 - An open trade ("Trade read"); `manage-position` acts.
+- The nested read across timeframes (stages, entry models): the `MTF structure` lines, `bos-vs-choch`.
 
 ## How It Works
 

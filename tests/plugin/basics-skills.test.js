@@ -349,8 +349,10 @@ test('basics skills: frontmatter, the sections in order, and small', () => {
     // clause): bos-vs-choch 892, trend-vs-range 869, at the measured need. feat/displacement (bos-vs-choch's Fields name the
     // last break's `quality` and the 15m last break's `protected`): bos-vs-choch 906, at the measured need. swing-holds (fix/protected-status: the two broken-word lines): bos-vs-choch 968, at the measured need; after review (owner-approved
     // 2026-11-17: the closed-back line in every state; trend-vs-range's chop example in the new form): bos-vs-choch 980,
-    // trend-vs-range 879, at the measured need.
-    assert.ok(words >= 250 && words <= (s === 'candle-reading' ? 1280 : s === 'pullback-vs-reversal' ? 1778 : s === 'bos-vs-choch' ? 980 : s === 'trend-vs-range' ? 879 : 650), `${s}: ${words} words`);
+    // trend-vs-range 879, at the measured need. feat/mtf-structure (raised with the owner's approval, 2026-11-17: the
+    // "Multi-timeframe structure" section in bos-vs-choch, the pointer to it in pullback-vs-reversal): bos-vs-choch 1536,
+    // pullback-vs-reversal 1791, at the measured need.
+    assert.ok(words >= 250 && words <= (s === 'candle-reading' ? 1280 : s === 'pullback-vs-reversal' ? 1791 : s === 'bos-vs-choch' ? 1536 : s === 'trend-vs-range' ? 879 : 650), `${s}: ${words} words`);
     // The two setups also carry a timeframe table (what the setup means on 3m/5m, 15m and 1h/4h): a little more room
     // (scripts/lib/skill-caps.js, the one source the training loop's probe edits read too).
     const max = skillByteCap(s);
