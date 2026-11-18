@@ -147,8 +147,9 @@ test('CORE: the composed bar\'s reads the gate requires (SITUATIONAL taught in t
   // The row then says the early lock is off (the owner, 2026-11-15: the shipped exit stays the default), within the pin.
   // Then 85822 (feat/mtf-structure, raised with the owner's approval 2026-11-17): bar-briefing's `MTF structure` paragraph
   // (+558, the measured need); then 85895 (SPEC v3, owner-approved 2026-11-18: its clause naming each level's `pullback against the <parent>`
-  // phrase, +73, the measured need).
-  assert.ok(Buffer.byteLength(prompt) <= 85895, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
+  // phrase, +73, the measured need); then 86560 (SPEC v4, owner-approved 2026-11-18: the four reading rules in its
+  // always-loaded paragraph and the below line's frame named, +665, the measured need).
+  assert.ok(Buffer.byteLength(prompt) <= 86560, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
   // Only the head trader's prompt grows: no other role's prompt embeds trade-lifecycle (the risk manager's embeds
   // confluence-counting and invalidation as before; its prompt is unchanged, pinned in trade-session-split.test.js).
   for (const [name, a] of Object.entries(index.agent)) if (name !== H.HEAD_AGENT && a.prompt) assert.ok(!a.prompt.includes('<skill name="trade-lifecycle">'), name);
