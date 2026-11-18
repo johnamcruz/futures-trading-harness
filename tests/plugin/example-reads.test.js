@@ -48,6 +48,10 @@ const SLOTS = { '<tf>': '15m', '<level>': 'prior vah', '<price>': '21500', '<nam
 // Spans that start like a read and are none, each with its reason; one that no longer appears fails (the list only shrinks).
 const NOT_READS = [
   { file: 'skills/momentum-and-volume/SKILL.md', span: 'momentum up|down', why: 'the briefing\'s candle-line text, beside the read it names (`<tf> momentum up|down`)' },
+  { file: 'skills/bos-vs-choch/SKILL.md', span: '1h > 15m', why: 'the primary `MTF structure` line\'s name (a level: parent > setup), no read (feat/mtf-structure)' },
+  { file: 'skills/bos-vs-choch/SKILL.md', span: '1h structure', why: 'the MTF structure line\'s words for the 1h break record, quoted, no read (feat/mtf-structure)' },
+  { file: 'skills/bos-vs-choch/SKILL.md', span: '15m structure UP ... below 15m > 3m: 3m pullback against the 15m: DOWN', why: 'the MTF structure below line\'s two words (its phrase names its frame), quoted to show the reading direction, no compose read form (feat/mtf-structure, SPEC v3, v4)' },
+  { file: 'skills/bar-briefing/SKILL.md', span: '1h > 15m', why: 'the primary `MTF structure` line\'s name (a level: parent > setup), no read (feat/mtf-structure)' },
 ];
 
 /** Every alternative of a template, its slots filled. */

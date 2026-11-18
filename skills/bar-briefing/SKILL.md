@@ -42,6 +42,29 @@ not time-of-day adjusted; no phrase: not computable), the 15m and 1h
 breaks against it (`stacked`: both). Weigh it with
 `pullback-vs-reversal`.
 
+**The `MTF structure` lines** (the runner's briefing, directly under
+the `Market state` line, every bar in the window): two lines
+(`1h > 15m` primary; `below: 15m > 3m` context), each the parent's
+structure, the pullback against it and one computed `stage` word
+(`NONE`, `POTENTIAL`, `DEVELOPING`, `ESTABLISHED`, `WEAKENING`,
+`REVERSING`, `CONFIRMED REVERSAL`, `COMPLETED`, `INVALIDATED`); the
+primary line also has an `Entry:` clause. The table is `bos-vs-choch`'s
+"Multi-timeframe structure"; these rules read the lines without it:
+
+- Copy each `stage` off its own line: never infer it, never carry it
+  to the other line.
+- Two words per line, never one for the other: `<parent> structure
+  UP|DOWN` (the parent's way) and `<frame> pullback against the
+  <parent>: UP|DOWN|NONE` (the pullback's way, opposite to that line's
+  structure word; `NONE` = not pulling back). The below line names its
+  frame (`below 15m > 3m: 3m pullback against the 15m:`): the 3m's
+  way, never the primary's 15m word.
+- A CHoCH fails only on a CLOSE through its ORIGIN (the swing its move
+  started from): the old structure then stands. A close back through
+  the level it BROKE is an early warning only; a wick is nothing.
+- `structural stop` is a structure level, a fact: never an order's
+  stop (an order's stop is the STOP line's).
+
 ## Examples
 
 ```text

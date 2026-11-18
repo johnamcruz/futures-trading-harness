@@ -119,7 +119,7 @@ const { structure5m, structureLine } = require('./m5-structure');
 const { compressionFrames, compressionLine } = require('./compression');
 const { declaredFacts, declaredLine } = require('./trend-declared');
 const { daySoFar, daySoFarLine, rthVolatility, volatilityText } = require('./day-so-far');
-const { biasLine, RULE: BIAS_RULE } = require('./bias-line');
+const { biasLine, biasSides, RULE: BIAS_RULE } = require('./bias-line');
 const { marketLayers } = require('./market-layers');
 const AN_STATE = require('../tunables').analysis(); // config/analysis.json: marketState, daySoFar.minBars (the chop floor), dayContext.ibMinutes
 const { stateOf, marketStateLine, stateThresholds } = require('./market-state');
@@ -127,6 +127,12 @@ const { stateOf, marketStateLine, stateThresholds } = require('./market-state');
 // recognition key's frozen crossesChop).
 const STATE_TH = stateThresholds(require('../tunables').analysis());
 const { pullbackRead, pullbackLine } = require('./pullback-read');
+// The multi-timeframe nested structure read (mtf-structure.js): the pullback against the 1h's break record, staged on the
+// 15m, timed on the 3m, with the 4h above and the 15m > 3m below, printed as two lines under the Market state line; a read:
+// nothing in the gate, compose_check, order_plan, the trend rule or the Market state reads it
+// (tests/plugin/market-state-readers.test.js).
+const MTF = require('./mtf-structure');
+const { trendOf: ruleTrendOf } = require('./entry-rule');
 const { GLOBEX_OPEN_MIN, RTH_OPEN_MIN, RTH_CLOSE_MIN } = require('./clock'); // the session boundaries' one home
 
 const SECTIONS = ['m3', 'm15', 'h1', 'day'];
@@ -164,6 +170,50 @@ function gateValidBars(env = process.env) {
   }
   validBarsCache.set(key, n);
   return n;
+}
+
+/**
+ * The lifecycle strategy's stop rule (trade-lifecycle.js stopRuleOf on its STRATEGY.md risk): the MTF structure read's
+ * structural-stop buffer reads it (decision 14: the existing buffer, no new key). { rule }, or { reason } when the strategy
+ * can't be read or has no valid stop rule (then the record is { unavailable: reason } and one line says so: review m3).
+ */
+const stopRuleCache = new Map();
+function gateStopRule(env = process.env) {
+  const key = String(env.FTH_STRATEGIES_DIRS || '');
+  if (stopRuleCache.has(key)) return stopRuleCache.get(key);
+  let out;
+  const TL = require('./trade-lifecycle');
+  try {
+    const all = require('./strategies').loadStrategies(require('path').resolve(__dirname, '..', '..', '..'), env).strategies;
+    const doc = all.find(x => x && x.name === TL.STRATEGY);
+    const rule = doc ? TL.stopRuleOf(doc.risk) : null;
+    out = rule ? { rule } : { reason: doc ? `the ${TL.STRATEGY} strategy has no valid stop rule` : `no ${TL.STRATEGY} strategy` };
+  } catch (err) {
+    out = { reason: `the ${TL.STRATEGY} strategy could not be read: ${String((err && err.message) || err).split('\n')[0]}` };
+  }
+  stopRuleCache.set(key, out);
+  return out;
+}
+
+/**
+ * The MTF structure record on the chain's entry frame (m3.mtfStructure); null when the config is refused (only the gated
+ * `intraday` hierarchy and the `rule` side mode are printed: mtf-structure.js configProblem) or there are no bars;
+ * { unavailable: reason } without the strategy's stop rule.
+ * Its side is the entry rule's (the Bias line's: biasSides on these sections), the Bias line's own frame reads beside it.
+ */
+function mtfRecordOf({ bars, minutes, tick, fresh }) {
+  const cfg = AN_STATE.mtfStructure;
+  if (MTF.configProblem(cfg)) return null;
+  // Never silent (review m3): without the stop rule the record says why, and the briefing prints one line saying so.
+  const g = gateStopRule();
+  if (!g.rule) return { unavailable: g.reason };
+  const rule = g.rule;
+  const view = { minutes, sections: { h1: { data: fresh.h1.data }, m15: { data: fresh.m15.data }, m3: { data: fresh.m3.data } } };
+  const sides = biasSides(view);
+  const side = sides.long && !sides.short ? 'long' : sides.short && !sides.long ? 'short' : null;
+  const bias = Object.fromEntries(BIAS_RULE.biasFrames.map(tf => [tf, ruleTrendOf(view, tf)]));
+  return MTF.mtfStructure({ bars, minutes, levels: MTF.levelsOf(cfg), hierarchy: cfg.hierarchy, tick, bufferTicks: rule.bufferTicks, equalAtr: AN_STATE.marketState.equalAtr,
+    k: AN_STATE.indicators.swingK, depth: cfg.depth, sideMode: cfg.sideMode, side, bias, warmBars: cfg.warmBars });
 }
 
 /** When the `minutes` candle containing `at` closes (candles from the trading day's 18:00 ET open). */
@@ -216,6 +266,8 @@ function nextRthRoll(barOpen, minutes) {
 
 const etClock = at => new Intl.DateTimeFormat('en-US', { timeZone: ET, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(at);
 const round2 = x => (Number.isFinite(x) ? Math.round(x * 100) / 100 : null);
+/** A price as the briefing shows it for a symbol: on its contract's tick (contracts.js), two decimals for an unlisted root. */
+const priceOnTick = symbol => { const grid = tickOf(symbol); return x => (Number.isFinite(x) ? (grid ? levelOnTick(x, grid) : round2(x)) : x); };
 const frameOf = (read, minutes) => (read.frames.find(f => f.minutes === minutes) || {}).read || null;
 // A higher-timeframe read (mtf.js): its EMAs are EMA20 and EMA50 (named so: the 3m and 15m indicators are EMA9/EMA20),
 // its swing pattern, and the last 20 candles' range (high, low) with its 50% (not a swing-to-swing dealing range).
@@ -744,6 +796,10 @@ function buildBriefing({ symbol, contractId = null, bars: raw, minutes, fineBars
   if (!own && tfLabel(minutes) === BIAS_RULE.chain.entry) {
     fresh.m3.data.layers = marketLayers({ bars, minutes, setupMinutes: parseInt(BIAS_RULE.chain.setup, 10), closedAt: closedAt.toISOString(), pullback: fresh.m3.data.pullback, p: AN_STATE.marketState, floor: AN_STATE.daySoFar.minBars, ibBars: AN_STATE.dayContext.ibMinutes / minutes });
   }
+  // The MTF structure read (mtf-structure.js), on the chain's entry frame only, beside the Market state: its side the entry
+  // rule's, its stop buffer the lifecycle strategy's. A presented fact (SUMMARY_FIELDS: its two lines say it); nothing in
+  // the gate, compose_check, order_plan, the trend rule or the Market state reads it.
+  if (!own && tfLabel(minutes) === BIAS_RULE.chain.entry) fresh.m3.data.mtfStructure = mtfRecordOf({ bars, minutes, tick, fresh });
   // Same symbol, bar size and contract (a roll to the next month is new prices, never the old month's levels).
   const usable = prev && prev.symbol === symbol && prev.minutes === minutes && (prev.contractId || null) === contractId && Date.parse(prev.closedAt) < closedAt.getTime();
   const sections = {};
@@ -861,6 +917,10 @@ function summaryLines(b, et) {
     // The Market state (market-state.js): one present-tense read, the precedence applied once (taught in trade-session's
     // table); a read, not a filter: no gate, hook, compose or decision code reads it, and it is never a data field.
     ...(!own && stateOf(b, STATE_TH) ? [`- ${marketStateLine(stateOf(b, STATE_TH))}.`] : []),
+    // The MTF structure lines (mtf-structure.js mtfLines): the primary 1h > 15m with its entry clause, then below:
+    // 15m > 3m; directly under the Market state line, facts only; one `unavailable` line when the record cannot be made.
+    // Prices through the briefing's own tick formatter (review m1: a 0.1-tick contract prints its stop on the tick).
+    ...(!own ? MTF.mtfLines(m3.mtfStructure, { lineBytes: AN_STATE.mtfStructure.lineBytes, primaryBytes: AN_STATE.mtfStructure.primaryBytes, level: priceOnTick(b.symbol) }) : []),
     alignment,
     own ? `- VWAP and the session's levels (today, overnight, opening range, IB, profile): each ${SESSION_ELSEWHERE}, one value in every briefing; ${typeof m3.setups === 'string' ? `the room below is this ${tf} bar's own levels` : `the room below and the setups' levels include them (the runner's values), with this ${tf} bar's own`}.`
       : `- VWAP (${vw.applies || '?'}): price ${vw.side || '?'}, ${Number.isFinite(vw.distanceAtr) ? Math.abs(vw.distanceAtr) : '?'} x ${tf} ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP ${vw.rthCrossesLast30 ?? '?'}, the session VWAP ${vw.sessionCrossesLast30 ?? '?'} (the regime's count).`,
@@ -970,7 +1030,7 @@ const targets = list => list.reduce((out, x) => {
 
 // The m3 fields the summary says in full (one line each), left out of the detail whole.
 const CHAIN_FRAMES = (C => C.chainOf(C.SHIPPED))(require('./chain'));
-const SUMMARY_FIELDS = ['swingTargets', 'rangeTargets', 'fvgs', 'structure5m', 'compression', 'declared', 'timing', 'pullback', 'layers'];
+const SUMMARY_FIELDS = ['swingTargets', 'rangeTargets', 'fvgs', 'structure5m', 'compression', 'declared', 'timing', 'pullback', 'layers', 'mtfStructure'];
 // What the summary's "This bar's close" line says in full, left out of the detail (only present when it happened).
 const SUMMARY_ONLY = { vwap: ['crossed'], today: ['openingRangeCrossed', 'soFar', 'rthVolatility'], location: ['closesBeyondValue', 'backInsideValue'] };
 /** A break without its displacement read (and its protected status's): the Break quality line's facts. */

@@ -74,8 +74,11 @@ const code = t => t.replace(/^[ \t]*\/\*[^]*?\*\//gm, ' ').replace(/^[ \t]*\/\/[
 // displacement.js reads the last break's protected swing to print its invalidating close's strength (the Break quality
 // line, display only: tests/plugin/displacement-readers.test.js keeps it off every decision path). structure-read.js reads the
 // printed briefing (the protected swing, the class word) as the structure-read dataset's truth, offline: no cycle runs it.
+// mtf-structure.js keeps its own protected swings (each level's parent break record's and its pullback's, `protected` in
+// its record) to print the MTF structure lines, display only (the last test below keeps it off every decision path).
 const FIELD_READERS = ['scripts/lib/trading/market-state.js', 'scripts/lib/trading/market-layers.js', 'scripts/lib/trading/structure-layers.js', 'scripts/lib/trading/briefing.js',
-  'scripts/lib/learning/recognition/key.js', 'scripts/lib/eval/context-quiz.js', 'scripts/lib/trading/displacement.js', 'scripts/lib/learning/structure-read.js'];
+  'scripts/lib/learning/recognition/key.js', 'scripts/lib/eval/context-quiz.js', 'scripts/lib/trading/displacement.js', 'scripts/lib/learning/structure-read.js',
+  'scripts/lib/trading/mtf-structure.js'];
 const DECIDES = /(^hooks\/|^scripts\/hooks\/|gate|gateway|compose|entry-rule|order-plan|decision|verdict|phase2|autotrader|runner)/;
 // The one exception (feat/entry-exit, DECISIONS M4; the owner, 2026-11-15: "I approve your change for trigger
 // invalidation"): compose's trigger stop
@@ -127,4 +130,21 @@ test('round 20c: the field scan catches a reader that never requires market-stat
   for (const s of planted) assert.ok(fieldsIn(s).length > 0, s);
   for (const s of ['// the gate never reads m3.layers or "; class chop"', '/* layers.inChop is the briefing\'s */ const a = 1;', 'const classes = {}; classes[k] = 1;', 'const { lastBreaks, protectedOf } = require("./structure-events");', 'player.layer = 1;'])
     assert.deepStrictEqual(fieldsIn(s), [], s);
+});
+
+// The MTF structure read (mtf-structure.js, m3.mtfStructure, the two `- MTF structure ...` lines): a read beside the Market
+// state, never a filter. The briefing computes and prints it; tunables.js names its config block (schema and built-ins);
+// the module itself. No gate, hook, gateway, compose, order-plan, exit, entry-rule, trend-rule or decision code names it,
+// and the Market state's modules never read it (it feeds no state or class word). No runner file holds deeper bars for it:
+// the runner's window already covers it (historyBars).
+const MTF_READERS = ['scripts/lib/trading/mtf-structure.js', 'scripts/lib/trading/briefing.js', 'scripts/lib/tunables.js'];
+const MTF_NAME = /\bmtfStructure\b|mtf-structure['"]|MTF structure/;
+test('the MTF structure read is named only by its module, the briefing and its config schema; no decision path or Market state module reads it', () => {
+  const named = ALL.filter(f => MTF_NAME.test(code(fs.readFileSync(path.join(ROOT, f), 'utf8'))));
+  assert.deepStrictEqual(named.sort(), [...MTF_READERS].sort());
+  for (const f of MTF_READERS) assert.doesNotMatch(f, DECIDES, f);
+  for (const f of ['scripts/lib/trading/market-state.js', 'scripts/lib/trading/market-layers.js', 'scripts/lib/trading/structure-layers.js', 'scripts/lib/trading/state-read.js', 'scripts/lib/trading/entry-rule.js', 'scripts/lib/trading/composed-reads.js', 'scripts/lib/trading/order-plan.js', 'scripts/lib/trading/order-gate.js']) {
+    if (fs.existsSync(path.join(ROOT, f))) assert.doesNotMatch(fs.readFileSync(path.join(ROOT, f), 'utf8'), MTF_NAME, f);
+  }
+  for (const s of ['const p = b.sections.m3.data.mtfStructure;', "require('./mtf-structure')", 'if (/- MTF structure 1h/.test(t)) refuse();', 'const { mtfStructure } = m3;']) assert.match(code(s), MTF_NAME, s);
 });

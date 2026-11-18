@@ -200,7 +200,7 @@ test('the budget: with every trigger that can hold at once, nothing is pushed to
   const all = SS.choose(ROOT, SS.factsOf(everything), { loaded: LOADED });
   assert.deepStrictEqual(all.over, [], `over the budget: ${all.over.join(', ')}`);
   // The committed budget is the measured need of every trigger at once (feat/pullback-concept: 75534, feat/chop-read: 76367, then 76692 with the Market state redesign, then 78204 with round 20's three layers in bos-vs-choch, then 78389 with the follow-up to #340's CHoCH-then-BOS wording, then 78402 with feat/displacement's bos-vs-choch Fields, then 76969 with round 15's protected swings, then 77163 with pvr's Depth row clause, pullback-vs-reversal's
-  // read grown; then 78726 with swing-holds' two broken-word lines in bos-vs-choch, +324 bytes, then 78788 after its review, +62), not padding: 2,000 bytes under it something is pushed to the Also relevant line.
+  // read grown; then 78726 with swing-holds' two broken-word lines in bos-vs-choch, +324 bytes, then 78788 after its review, +62, then 81995 with feat/mtf-structure's bos-vs-choch section and pullback-vs-reversal pointer, +3207, raised with the owner's approval 2026-11-17, then 83180 with its SPEC v3 bullets, +1185, owner-approved 2026-11-18, then 82971 with SPEC v4, -209, lowered), not padding: 2,000 bytes under it something is pushed to the Also relevant line.
   const budget = require('../../scripts/lib/tunables').runner().prompt.situationalSkillBytes;
   assert.ok(SS.choose(ROOT, SS.factsOf(everything), { loaded: LOADED, budget: budget - 2000 }).over.length > 0, 'the budget is near the measured need');
   const managed = SS.choose(ROOT, SS.factsOf({ state: { ...OPEN, entryLines: ['entry'] }, briefings: everything.briefings }), { loaded: LOADED });
