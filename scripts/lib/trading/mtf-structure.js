@@ -50,6 +50,7 @@
  */
 
 const { through, tieAt } = require('./protected-status');
+const { onTick } = require('./contracts'); // the structural stop on the contract's tick, its decimals exact (review m1)
 const { label: tfLabel } = require('./mtf');
 const { RTH_OPEN_MIN } = require('./clock');
 
@@ -122,7 +123,8 @@ function protectedAt(bars, swingI, breakI, dir) {
  * from the superseded 15m structure phase, unchanged but for `protI`): `none`; `bias` (a break with a protected swing);
  * `transitioning` (a break against while the protected swing holds: the way stays, a warning; a BOS against confirms the
  * turn; a close through the CHoCH's own protected swing past the tie invalidates the CHoCH and the old parent returns; a
- * close back through its broken level is a warning only). A parent close through the protected swing past the tie is
+ * close back through its broken level is a warning only: kept as `failedBreak` and a `choch-failed` event in this series,
+ * record-only, never printed and never a change of state). A parent close through the protected swing past the tie is
  * `invalid` (tested first); the break against is then promoted when its own protected swing has no close through it.
  */
 function parentSeries({ exec, parent, equalAtr, k, prims = defaultPrims() }) {
@@ -478,7 +480,7 @@ function levelRecord(L, R, j, o, ctx) {
 function entryOf(out, i, j, o, when) {
   const buf = o.tick * o.bufferTicks;
   const D = i.D;
-  const stopOf = x => Math.round((x - D * buf) / o.tick) * o.tick;
+  const stopOf = x => onTick(x - D * buf, o.tick);
   let model = null;
   let ev = null;
   let also = null;
@@ -682,11 +684,16 @@ function aboveRelation(lv, primary) {
 }
 /**
  * The two summary lines (spec 4.2; v4: no `Above:` clause): the primary with its entry clause, then `below:`. Over the
- * budget (the primary over primaryBytes, or both over lineBytes) the parts are cut in CUTS order; never a line, a stage
- * word, a structure's way or protected swing, the Bias disagreement, the pullback's way, the WARNING, a ready entry with
- * its age and stop, the reason after `Entry: none:`, or `(last: COMPLETED|INVALIDATED ...)`.
+ * budget (the primary over primaryBytes, or both over lineBytes) the parts are cut in CUTS order. Never cut: a line, a
+ * stage word, a structure's way, the pullback's way; on the primary also its protected swing, the Bias disagreement, the
+ * WARNING, a ready entry with its age and stop, the reason after `Entry: none:` and `(last: COMPLETED|INVALIDATED ...)`.
+ * The first cut (`belowShort`) shortens the below line to its stage, its 15m structure's way and its named pullback
+ * phrase (and a COMPLETED or INVALIDATED last): the below line's protected swing and WARNING go with it (the review's m4;
+ * on tune and the hold-out no bar reaches a cut at the configured budgets).
+ * A record `{ unavailable: reason }` (the briefing without the strategy's stop rule) prints one line saying so.
  */
 function mtfLines(rec, { lineBytes = Infinity, primaryBytes = Infinity, level = x => x, cut: atCut = null } = {}) {
+  if (isObj(rec) && typeof rec.unavailable === 'string') return [`- MTF structure: unavailable (${rec.unavailable}).`];
   if (!isObj(rec) || !Array.isArray(rec.levels)) return [];
   const L = x => level(x);
   const primary = rec.levels.find(l => l.role === 'primary');

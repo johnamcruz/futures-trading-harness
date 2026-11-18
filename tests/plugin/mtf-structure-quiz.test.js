@@ -45,3 +45,28 @@ test('the gated quiz is unchanged in size: 113 items, maxSlips 11, none of the M
   assert.equal(gated.gate.maxSlips, 11);
   assert.ok(!gated.questions.some(q => /^ms\d+$/.test(q.id)));
 });
+
+test('the items cannot drift from the module (review m4): every sentence of every printed MTF line in the 28 items, numbers and times masked, is one the module itself prints on the real fixtures (every side, every cut)', () => {
+  const fs = require('fs');
+  const zlib = require('zlib');
+  const M = require('../../scripts/lib/trading/mtf-structure');
+  const GF = require('../../scripts/lib/eval/goal-fixture');
+  const AN = require('../../scripts/lib/tunables').analysis();
+  const CFG = AN.mtfStructure;
+  const OPTS = { tick: 0.25, bufferTicks: 1, equalAtr: AN.marketState.equalAtr, k: AN.indicators.swingK, depth: CFG.depth, sideMode: 'rule', warmBars: CFG.warmBars, hierarchy: CFG.hierarchy };
+  // A sentence's skeleton: dated and plain times -> T, every number -> N; sentences split at ". " (a new sentence) and "; ".
+  const skeletons = l => l.replace(/\b\d\d-\d\d \d\d:\d\d\b/g, 'T').replace(/\b\d\d:\d\d\b/g, 'T').replace(/-?\d+(\.\d+)?/g, 'N').split(/(?<=\.) (?=[A-Z0-9-])|; /);
+  const known = new Set();
+  for (const d of ['2022-03-07', '2022-04-11', '2022-04-25', '2022-07-12']) {
+    const bars = GF.decodeBars(JSON.parse(zlib.gunzipSync(fs.readFileSync(path.join(ROOT, 'tests', 'fixtures', 'mtf-structure', `${d}.json.gz`)))).bars);
+    for (const side of ['long', 'short', null]) {
+      for (const r of M.recordsOf({ ...OPTS, bars, minutes: 3, levels: M.levelsOf(CFG), side, biasAt: j => ({ '4h': ['up', 'down', 'range'][j % 3], '1h': ['range', 'up', 'down'][j % 3] }) })) {
+        if (!r) continue;
+        for (const o of [{ lineBytes: CFG.lineBytes, primaryBytes: CFG.primaryBytes }, ...M.CUTS.map((_, c) => ({ cut: c + 1 }))]) for (const l of M.mtfLines(r, o)) for (const s of skeletons(l)) known.add(s);
+      }
+    }
+  }
+  const drift = [];
+  for (const q of ITEMS.questions) for (const l of q.text.split('\n').filter(x => x.startsWith('- MTF structure'))) for (const s of skeletons(l)) if (!known.has(s)) drift.push(`${q.id}: ${s}`);
+  assert.deepEqual(drift, []);
+});

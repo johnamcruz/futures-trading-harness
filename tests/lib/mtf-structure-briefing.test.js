@@ -158,3 +158,64 @@ test('M2: no MTF line and the Pullback line print opposite status words (holds /
   }
   assert.ok(both > 0, 'some bars carry both lines');
 });
+
+test('review m1: the lines print through the briefing\'s own tick formatter (a 0.1-tick contract shows its stop on the tick, no float noise)', () => {
+  const W = require('../fixtures/mtf-structure/world');
+  const AN = require('../../scripts/lib/tunables').analysis();
+  const A = W.world({ keys: W.KEYS, events: W.EVENTS });
+  const v = { ...A, level: { ...A.level, name: '1h>15m' }, below: { ...A.below, name: '15m>3m' } };
+  const rec = MTF.recordsOf({ tick: 0.25, bufferTicks: 1, equalAtr: AN.marketState.equalAtr, k: AN.indicators.swingK, depth: CFG.depth, sideMode: 'rule', warmBars: 0, hierarchy: CFG.hierarchy, bars: v.bars, minutes: v.base, levels: [v.level, v.below], side: 'long', prims: v.prims })[A.at(25, 1)];
+  const noisy = JSON.parse(JSON.stringify(rec));
+  noisy.levels[0].entry.stop = 21302 * 0.1; // 2130.2 with float noise, as a bare tick product prints
+  noisy.levels[0].parent.protected.level = 21003 * 0.1;
+  assert.notEqual(String(noisy.levels[0].entry.stop), '2130.2');
+  const { b, now } = briefAt('2022-08-16', '10:15');
+  const m2k = JSON.parse(JSON.stringify(b));
+  m2k.symbol = 'M2K';
+  m2k.sections.m3.data.mtfStructure = noisy;
+  const lines = B.renderBriefing(m2k, { now }).split('\n').filter(IS_MTF);
+  assert.equal(lines.length, 2);
+  assert.match(lines[0], /structural stop 2130\.2 \(a structure level, not an order stop\)/);
+  assert.match(lines[0], /1h protected low 2100\.3 /);
+  for (const l of lines) assert.doesNotMatch(l, /\d\.\d{3,}/, l);
+});
+
+test('review m2: the briefing\'s record carries the strategy\'s stop buffer (a real ready entry: its structural stop is the origin less the buffer, not the bare origin)', () => {
+  const AN = require('../../scripts/lib/tunables').analysis();
+  const { b, w } = briefAt('2021-05-25', '10:24');
+  const rec = b.sections.m3.data.mtfStructure;
+  const p = rec.levels.find(l => l.role === 'primary');
+  assert.ok(p.entry, 'a ready entry at 2021-05-25 10:24 ET');
+  const TL = require('../../scripts/lib/trading/trade-lifecycle');
+  const doc = require('../../scripts/lib/trading/strategies').loadStrategies(REPO, process.env).strategies.find(x => x.name === TL.STRATEGY);
+  const rule = TL.stopRuleOf(doc.risk);
+  assert.ok(rule.bufferTicks > 0);
+  const again = bt => MTF.mtfStructure({ bars: w, minutes: 3, levels: MTF.levelsOf(CFG), hierarchy: CFG.hierarchy, tick: 0.25, bufferTicks: bt, equalAtr: AN.marketState.equalAtr, k: AN.indicators.swingK, depth: CFG.depth, sideMode: CFG.sideMode, side: rec.side, bias: rec.bias, warmBars: CFG.warmBars }).levels.find(l => l.role === 'primary').entry.stop;
+  assert.equal(p.entry.stop, again(rule.bufferTicks));
+  assert.notEqual(p.entry.stop, again(0));
+});
+
+test('review m3: when the strategy cannot be read, the briefing prints one line, `MTF structure: unavailable (<reason>)`, never nothing', () => {
+  const S = require('../../scripts/lib/trading/strategies');
+  const real = S.loadStrategies;
+  const saved = process.env.FTH_STRATEGIES_DIRS;
+  process.env.FTH_STRATEGIES_DIRS = path.join(os.tmpdir(), `fth-mtf-unavailable-${process.pid}`); // a fresh cache key
+  S.loadStrategies = () => { throw new Error('a broken STRATEGY.md'); };
+  try {
+    const BARS = barsOf('2022-08-16');
+    const j = BARS.findIndex(x => x.t.startsWith('2022-08-16') && etHm(Date.parse(x.t) + 180000) === '10:15');
+    const t = Date.parse(BARS[j].t);
+    const win = BARS.filter((x, k) => k <= j && Date.parse(x.t) >= t - DOC.historyHours * 3600000);
+    const now = new Date(t + 180000);
+    const b = B.buildBriefing({ symbol: 'NQ', bars: win, minutes: 3, now });
+    const lines = B.renderBriefing(b, { now }).split('\n');
+    const mtf = lines.filter(l => l.startsWith('- MTF structure'));
+    assert.deepEqual(mtf, ['- MTF structure: unavailable (the trade_lifecycle strategy could not be read: a broken STRATEGY.md).']);
+    const i = lines.indexOf(mtf[0]);
+    assert.match(lines[i - 1], /^- Market state \(3m\): /);
+  } finally {
+    S.loadStrategies = real;
+    if (saved === undefined) delete process.env.FTH_STRATEGIES_DIRS; else process.env.FTH_STRATEGIES_DIRS = saved;
+  }
+  assert.deepEqual(MTF.mtfLines({ unavailable: 'no stop rule' }), ['- MTF structure: unavailable (no stop rule).']);
+});

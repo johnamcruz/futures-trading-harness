@@ -128,6 +128,30 @@ test('every Entry: none: reason, and the entry\'s ages (new this bar, n bars, 1 
   assert.match(one(rec), /stage ESTABLISHED\. .*15m pullback against the 1h: UP \(15m CHoCH up 03-06 22:30, BOS up 00:00\);/);
 });
 
+test('the stop-traded check starts on the first bar after the event (review m2): a wick through the structural stop on that bar withholds the entry at once', () => {
+  const ev = A.at(25, 1); // the 3m CHoCH up 04:21 (aggressive ready, structural stop 129.75)
+  const wick = W.world({ keys: W.KEYS, events: W.EVENTS, overrides: { [ev + 1]: { l: 129.75 } }, atr: { timing: 10 } });
+  const r = run(wick);
+  assert.match(one(RA[ev]), /aggressive ready LONG new this bar, structural stop 129\.75/);
+  assert.match(one(r[ev + 1]), /Entry: none: the aggressive structural stop 129\.75 traded through at 04:24\./);
+});
+
+test('a 0.1-tick contract (review m1): the structural stop and every price print on the tick, no float noise', () => {
+  const sh = 0.3;
+  const v = named(A);
+  const bars = v.bars.map(b => ({ ...b, o: b.o + sh, h: b.h + sh, l: b.l + sh, c: b.c + sh }));
+  const recs = M.recordsOf({ ...OPTS, bars, minutes: v.base, levels: [v.level, v.below], warmBars: 0, side: 'long', prims: v.prims, tick: 0.1 });
+  let ready = 0;
+  for (const rec of recs) {
+    if (!rec) continue;
+    const text = M.mtfLines(rec).join('\n');
+    assert.doesNotMatch(text, /\d\.\d{3,}/, text);
+    const m = /structural stop (\d+(?:\.\d+)?)/.exec(text);
+    if (m) { ready += 1; assert.match(m[1], /^\d+(\.\d)?$/, text); }
+  }
+  assert.ok(ready > 0);
+});
+
 test('no Above: clause (SPEC v4): with a 4h level of any stage in the record, neither line prints the 4h structure or a 1h pullback against it; the lines equal the record without the level', () => {
   const base = clone(RA[A.at(25, 1)]);
   const lv4 = patch => ({ name: '4h>1h', role: 'above', frames: { parent: '4h', setup: '1h', timing: '15m' }, partial: false, parent: { way: 'down', protected: { side: 'high', level: 14060.25 }, differs: true, biasRead: 'range' }, stage: 'NONE', instance: null, ...patch });

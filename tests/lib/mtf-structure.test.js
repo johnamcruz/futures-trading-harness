@@ -319,6 +319,23 @@ test('non-repainting: mtfStructure on the bars up to j equals row j of the full 
   }
 });
 
+test('non-repainting at data gaps (review m2): at every bar on either side of a gap in the bars (a session break or a missing bar), the prefix equals the full pass, so a higher-frame candle cut short by a gap is used only once complete', () => {
+  let gaps = 0;
+  for (const day of ['2022-03-07', '2022-04-11', '2022-04-25', '2022-07-12']) {
+    const bars = real(day);
+    const full = M.recordsOf({ ...OPTS, bars, minutes: 3, levels: LEVELS, side: 'long' });
+    for (let j = 1; j < bars.length; j += 1) {
+      if (Date.parse(bars[j].t) - Date.parse(bars[j - 1].t) <= 180000) continue;
+      gaps += 1;
+      for (const q of [j - 1, j, j + 1]) {
+        if (q < 400 || q >= bars.length) continue;
+        assert.deepEqual(M.mtfStructure({ ...OPTS, bars: bars.slice(0, q + 1), minutes: 3, levels: LEVELS, side: 'long' }), full[q], `${day} bar ${q} (gap before ${j})`);
+      }
+    }
+  }
+  assert.ok(gaps >= 4, `gaps sampled: ${gaps}`);
+});
+
 test('window independence (B1): once warm, the record at a bar is the same from a window starting at s and at s + 1 (every bar of the last session)', () => {
   for (const day of ['2022-03-07', '2022-04-11', '2022-04-25', '2022-07-12']) {
     const bars = real(day);
