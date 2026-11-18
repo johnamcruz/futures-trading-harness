@@ -261,8 +261,10 @@ test('the tie at the protected level (the Market state\'s, structure-layers.js):
   // The tie reads the closing candle's own ATR (atr[k], as structure-layers.js): 6 at bar 12 alone is a tie, 1 at bar 12
   // alone (0.05 < 0.25) is a break.
   const own = v => Array.from({ length: 13 }, (_, i) => (i === 12 ? v : 7 - v));
-  assert.deepStrictEqual(D.invalidationQuality(c, bos, prot, own(6), D.PARAMS), { tie: true });
-  assert.strictEqual(D.invalidationQuality(c, bos, prot, own(1), D.PARAMS).tie, undefined);
+  // Read on main's record for these bars (brokenAt the first close beyond, unbanded): the ATR handed in decides.
+  const raw = { ...prot, brokenAt: c[12].t };
+  assert.deepStrictEqual(D.invalidationQuality(c, bos, raw, own(6), D.PARAMS), { tie: true });
+  assert.strictEqual(D.invalidationQuality(c, bos, raw, own(1), D.PARAMS).tie, undefined);
   // Scope: here the BOS is handed in as the last break. On these bars alone the tied close is also a k=2 close under the
   // swing low 100.25, so lastBreaks' last is a CHoCH down (k=2 breaks have no tie, as on main); the tie governs the
   // protected status this line prints, not which break is the last.
