@@ -1378,6 +1378,15 @@ overlapping, consolidating, or repeatedly failing to continue."
   low (lower high) breaks; a CHoCH holds until the low (high) that started
   the shift breaks.
   Only a close through it counts; a wick is not.
+- A CHoCH fails one way only (owner): a CLOSE through its ORIGIN, the
+  swing its move started from (CHoCH up: the low under it; CHoCH down:
+  the high above it).
+  Two levels, never mix them:
+  - a close back through the level the CHoCH BROKE -> early warning
+    only; the CHoCH still stands;
+  - a close through its ORIGIN -> the CHoCH is invalidated; the old
+    structure stands as before.
+  - a wick through either -> nothing.
 - Behavior: `behavior` (rotation/weakening/transition), 15m words.
 - A BOS stays labelled BOS after its protected swing breaks; the Market
   state line's status (`holds` or `broken by a close`) decides what it
@@ -1399,9 +1408,9 @@ overlapping, consolidating, or repeatedly failing to continue."
 the `Market state` line, the runner's briefing).
   `1h > 15m` (primary,
 timed on the 3m; the only `Entry:` clause; it ends with `Above:`, the
-4h structure and whether the 1h is pulling back against it: no stage
-word) and `below: 15m > 3m` (context; no frame under it, so no
-`POTENTIAL`, `WEAKENING`, `REVERSING`).
+4h structure and the 1h pullback against it: no stage word) and
+`below: 15m > 3m` (context; no frame under it, so no `POTENTIAL`,
+`WEAKENING`, `REVERSING`).
   Each `stage` word is computed:
 copy it from its own line, never infer it, never carry it to another
 level.
@@ -1419,6 +1428,18 @@ level.
 | `COMPLETED` | a 15m close above the 1h impulse high | the 1h trend continued: this pullback is finished |
 | `INVALIDATED` | a 1h close below the 1h protected low | that line's parent structure is broken: setup cancelled |
 
+- Reading direction: every level prints two words, never one for the
+  other: `<parent> structure UP|DOWN` (the parent's way) and `<frame>
+  pullback against the <parent>: UP|DOWN|NONE` (the pullback's way:
+  always opposite to that structure word; `NONE` = not pulling back).
+  Take each pair from its own clause: 4h and 1h from `Above:`, 1h and
+  15m from the primary, 15m and 3m from `below:`.
+  `15m structure UP ...
+  3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
+- `Above:` uses the primary's own 1h structure: `1h pullback against
+  the 4h: UP` = the 1h structure is UP while the 4h is DOWN; `NONE` =
+  the 1h structure runs with the 4h (a 1h CHoCH against it is the
+  primary's warning, not a 1h pullback).
 - No stage predicts the outcome: a stage is where the structure is, not
   where it goes.
 - Direction: the pullback runs AGAINST the parent.
@@ -1435,8 +1456,8 @@ level.
   `REVERSING` -> `ESTABLISHED` again; the 3m turn is void.
 - `Entry:` (a fact, never an order, a wait or a filter; other setups
   stand): `ready` names the model whose condition is met, since when,
-  and the structural stop: the structure's level, a fact; an order's
-  stop is the STOP line's.
+  and the structural stop: the structure's level, a fact, never an
+  order's stop (flat or not, an order's stop is the STOP line's).
   `Entry: none: <why>` -> context only
   (against the side, no side, a warning, the stop already traded).
 - `1h structure` is the 1h break record; the Bias line's 1h is the
@@ -2897,6 +2918,15 @@ overlapping, consolidating, or repeatedly failing to continue."
   low (lower high) breaks; a CHoCH holds until the low (high) that started
   the shift breaks.
   Only a close through it counts; a wick is not.
+- A CHoCH fails one way only (owner): a CLOSE through its ORIGIN, the
+  swing its move started from (CHoCH up: the low under it; CHoCH down:
+  the high above it).
+  Two levels, never mix them:
+  - a close back through the level the CHoCH BROKE -> early warning
+    only; the CHoCH still stands;
+  - a close through its ORIGIN -> the CHoCH is invalidated; the old
+    structure stands as before.
+  - a wick through either -> nothing.
 - Behavior: `behavior` (rotation/weakening/transition), 15m words.
 - A BOS stays labelled BOS after its protected swing breaks; the Market
   state line's status (`holds` or `broken by a close`) decides what it
@@ -2918,9 +2948,9 @@ overlapping, consolidating, or repeatedly failing to continue."
 the `Market state` line, the runner's briefing).
   `1h > 15m` (primary,
 timed on the 3m; the only `Entry:` clause; it ends with `Above:`, the
-4h structure and whether the 1h is pulling back against it: no stage
-word) and `below: 15m > 3m` (context; no frame under it, so no
-`POTENTIAL`, `WEAKENING`, `REVERSING`).
+4h structure and the 1h pullback against it: no stage word) and
+`below: 15m > 3m` (context; no frame under it, so no `POTENTIAL`,
+`WEAKENING`, `REVERSING`).
   Each `stage` word is computed:
 copy it from its own line, never infer it, never carry it to another
 level.
@@ -2938,6 +2968,18 @@ level.
 | `COMPLETED` | a 15m close above the 1h impulse high | the 1h trend continued: this pullback is finished |
 | `INVALIDATED` | a 1h close below the 1h protected low | that line's parent structure is broken: setup cancelled |
 
+- Reading direction: every level prints two words, never one for the
+  other: `<parent> structure UP|DOWN` (the parent's way) and `<frame>
+  pullback against the <parent>: UP|DOWN|NONE` (the pullback's way:
+  always opposite to that structure word; `NONE` = not pulling back).
+  Take each pair from its own clause: 4h and 1h from `Above:`, 1h and
+  15m from the primary, 15m and 3m from `below:`.
+  `15m structure UP ...
+  3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
+- `Above:` uses the primary's own 1h structure: `1h pullback against
+  the 4h: UP` = the 1h structure is UP while the 4h is DOWN; `NONE` =
+  the 1h structure runs with the 4h (a 1h CHoCH against it is the
+  primary's warning, not a 1h pullback).
 - No stage predicts the outcome: a stage is where the structure is, not
   where it goes.
 - Direction: the pullback runs AGAINST the parent.
@@ -2954,8 +2996,8 @@ level.
   `REVERSING` -> `ESTABLISHED` again; the 3m turn is void.
 - `Entry:` (a fact, never an order, a wait or a filter; other setups
   stand): `ready` names the model whose condition is met, since when,
-  and the structural stop: the structure's level, a fact; an order's
-  stop is the STOP line's.
+  and the structural stop: the structure's level, a fact, never an
+  order's stop (flat or not, an order's stop is the STOP line's).
   `Entry: none: <why>` -> context only
   (against the side, no side, a warning, the stop already traded).
 - `1h structure` is the 1h break record; the Bias line's 1h is the
@@ -4425,6 +4467,15 @@ overlapping, consolidating, or repeatedly failing to continue."
   low (lower high) breaks; a CHoCH holds until the low (high) that started
   the shift breaks.
   Only a close through it counts; a wick is not.
+- A CHoCH fails one way only (owner): a CLOSE through its ORIGIN, the
+  swing its move started from (CHoCH up: the low under it; CHoCH down:
+  the high above it).
+  Two levels, never mix them:
+  - a close back through the level the CHoCH BROKE -> early warning
+    only; the CHoCH still stands;
+  - a close through its ORIGIN -> the CHoCH is invalidated; the old
+    structure stands as before.
+  - a wick through either -> nothing.
 - Behavior: `behavior` (rotation/weakening/transition), 15m words.
 - A BOS stays labelled BOS after its protected swing breaks; the Market
   state line's status (`holds` or `broken by a close`) decides what it
@@ -4446,9 +4497,9 @@ overlapping, consolidating, or repeatedly failing to continue."
 the `Market state` line, the runner's briefing).
   `1h > 15m` (primary,
 timed on the 3m; the only `Entry:` clause; it ends with `Above:`, the
-4h structure and whether the 1h is pulling back against it: no stage
-word) and `below: 15m > 3m` (context; no frame under it, so no
-`POTENTIAL`, `WEAKENING`, `REVERSING`).
+4h structure and the 1h pullback against it: no stage word) and
+`below: 15m > 3m` (context; no frame under it, so no `POTENTIAL`,
+`WEAKENING`, `REVERSING`).
   Each `stage` word is computed:
 copy it from its own line, never infer it, never carry it to another
 level.
@@ -4466,6 +4517,18 @@ level.
 | `COMPLETED` | a 15m close above the 1h impulse high | the 1h trend continued: this pullback is finished |
 | `INVALIDATED` | a 1h close below the 1h protected low | that line's parent structure is broken: setup cancelled |
 
+- Reading direction: every level prints two words, never one for the
+  other: `<parent> structure UP|DOWN` (the parent's way) and `<frame>
+  pullback against the <parent>: UP|DOWN|NONE` (the pullback's way:
+  always opposite to that structure word; `NONE` = not pulling back).
+  Take each pair from its own clause: 4h and 1h from `Above:`, 1h and
+  15m from the primary, 15m and 3m from `below:`.
+  `15m structure UP ...
+  3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
+- `Above:` uses the primary's own 1h structure: `1h pullback against
+  the 4h: UP` = the 1h structure is UP while the 4h is DOWN; `NONE` =
+  the 1h structure runs with the 4h (a 1h CHoCH against it is the
+  primary's warning, not a 1h pullback).
 - No stage predicts the outcome: a stage is where the structure is, not
   where it goes.
 - Direction: the pullback runs AGAINST the parent.
@@ -4482,8 +4545,8 @@ level.
   `REVERSING` -> `ESTABLISHED` again; the 3m turn is void.
 - `Entry:` (a fact, never an order, a wait or a filter; other setups
   stand): `ready` names the model whose condition is met, since when,
-  and the structural stop: the structure's level, a fact; an order's
-  stop is the STOP line's.
+  and the structural stop: the structure's level, a fact, never an
+  order's stop (flat or not, an order's stop is the STOP line's).
   `Entry: none: <why>` -> context only
   (against the side, no side, a warning, the stop already traded).
 - `1h structure` is the 1h break record; the Bias line's 1h is the
@@ -5944,6 +6007,15 @@ overlapping, consolidating, or repeatedly failing to continue."
   low (lower high) breaks; a CHoCH holds until the low (high) that started
   the shift breaks.
   Only a close through it counts; a wick is not.
+- A CHoCH fails one way only (owner): a CLOSE through its ORIGIN, the
+  swing its move started from (CHoCH up: the low under it; CHoCH down:
+  the high above it).
+  Two levels, never mix them:
+  - a close back through the level the CHoCH BROKE -> early warning
+    only; the CHoCH still stands;
+  - a close through its ORIGIN -> the CHoCH is invalidated; the old
+    structure stands as before.
+  - a wick through either -> nothing.
 - Behavior: `behavior` (rotation/weakening/transition), 15m words.
 - A BOS stays labelled BOS after its protected swing breaks; the Market
   state line's status (`holds` or `broken by a close`) decides what it
@@ -5965,9 +6037,9 @@ overlapping, consolidating, or repeatedly failing to continue."
 the `Market state` line, the runner's briefing).
   `1h > 15m` (primary,
 timed on the 3m; the only `Entry:` clause; it ends with `Above:`, the
-4h structure and whether the 1h is pulling back against it: no stage
-word) and `below: 15m > 3m` (context; no frame under it, so no
-`POTENTIAL`, `WEAKENING`, `REVERSING`).
+4h structure and the 1h pullback against it: no stage word) and
+`below: 15m > 3m` (context; no frame under it, so no `POTENTIAL`,
+`WEAKENING`, `REVERSING`).
   Each `stage` word is computed:
 copy it from its own line, never infer it, never carry it to another
 level.
@@ -5985,6 +6057,18 @@ level.
 | `COMPLETED` | a 15m close above the 1h impulse high | the 1h trend continued: this pullback is finished |
 | `INVALIDATED` | a 1h close below the 1h protected low | that line's parent structure is broken: setup cancelled |
 
+- Reading direction: every level prints two words, never one for the
+  other: `<parent> structure UP|DOWN` (the parent's way) and `<frame>
+  pullback against the <parent>: UP|DOWN|NONE` (the pullback's way:
+  always opposite to that structure word; `NONE` = not pulling back).
+  Take each pair from its own clause: 4h and 1h from `Above:`, 1h and
+  15m from the primary, 15m and 3m from `below:`.
+  `15m structure UP ...
+  3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
+- `Above:` uses the primary's own 1h structure: `1h pullback against
+  the 4h: UP` = the 1h structure is UP while the 4h is DOWN; `NONE` =
+  the 1h structure runs with the 4h (a 1h CHoCH against it is the
+  primary's warning, not a 1h pullback).
 - No stage predicts the outcome: a stage is where the structure is, not
   where it goes.
 - Direction: the pullback runs AGAINST the parent.
@@ -6001,8 +6085,8 @@ level.
   `REVERSING` -> `ESTABLISHED` again; the 3m turn is void.
 - `Entry:` (a fact, never an order, a wait or a filter; other setups
   stand): `ready` names the model whose condition is met, since when,
-  and the structural stop: the structure's level, a fact; an order's
-  stop is the STOP line's.
+  and the structural stop: the structure's level, a fact, never an
+  order's stop (flat or not, an order's stop is the STOP line's).
   `Entry: none: <why>` -> context only
   (against the side, no side, a warning, the stop already traded).
 - `1h structure` is the 1h break record; the Bias line's 1h is the
@@ -7472,6 +7556,15 @@ overlapping, consolidating, or repeatedly failing to continue."
   low (lower high) breaks; a CHoCH holds until the low (high) that started
   the shift breaks.
   Only a close through it counts; a wick is not.
+- A CHoCH fails one way only (owner): a CLOSE through its ORIGIN, the
+  swing its move started from (CHoCH up: the low under it; CHoCH down:
+  the high above it).
+  Two levels, never mix them:
+  - a close back through the level the CHoCH BROKE -> early warning
+    only; the CHoCH still stands;
+  - a close through its ORIGIN -> the CHoCH is invalidated; the old
+    structure stands as before.
+  - a wick through either -> nothing.
 - Behavior: `behavior` (rotation/weakening/transition), 15m words.
 - A BOS stays labelled BOS after its protected swing breaks; the Market
   state line's status (`holds` or `broken by a close`) decides what it
@@ -7493,9 +7586,9 @@ overlapping, consolidating, or repeatedly failing to continue."
 the `Market state` line, the runner's briefing).
   `1h > 15m` (primary,
 timed on the 3m; the only `Entry:` clause; it ends with `Above:`, the
-4h structure and whether the 1h is pulling back against it: no stage
-word) and `below: 15m > 3m` (context; no frame under it, so no
-`POTENTIAL`, `WEAKENING`, `REVERSING`).
+4h structure and the 1h pullback against it: no stage word) and
+`below: 15m > 3m` (context; no frame under it, so no `POTENTIAL`,
+`WEAKENING`, `REVERSING`).
   Each `stage` word is computed:
 copy it from its own line, never infer it, never carry it to another
 level.
@@ -7513,6 +7606,18 @@ level.
 | `COMPLETED` | a 15m close above the 1h impulse high | the 1h trend continued: this pullback is finished |
 | `INVALIDATED` | a 1h close below the 1h protected low | that line's parent structure is broken: setup cancelled |
 
+- Reading direction: every level prints two words, never one for the
+  other: `<parent> structure UP|DOWN` (the parent's way) and `<frame>
+  pullback against the <parent>: UP|DOWN|NONE` (the pullback's way:
+  always opposite to that structure word; `NONE` = not pulling back).
+  Take each pair from its own clause: 4h and 1h from `Above:`, 1h and
+  15m from the primary, 15m and 3m from `below:`.
+  `15m structure UP ...
+  3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
+- `Above:` uses the primary's own 1h structure: `1h pullback against
+  the 4h: UP` = the 1h structure is UP while the 4h is DOWN; `NONE` =
+  the 1h structure runs with the 4h (a 1h CHoCH against it is the
+  primary's warning, not a 1h pullback).
 - No stage predicts the outcome: a stage is where the structure is, not
   where it goes.
 - Direction: the pullback runs AGAINST the parent.
@@ -7529,8 +7634,8 @@ level.
   `REVERSING` -> `ESTABLISHED` again; the 3m turn is void.
 - `Entry:` (a fact, never an order, a wait or a filter; other setups
   stand): `ready` names the model whose condition is met, since when,
-  and the structural stop: the structure's level, a fact; an order's
-  stop is the STOP line's.
+  and the structural stop: the structure's level, a fact, never an
+  order's stop (flat or not, an order's stop is the STOP line's).
   `Entry: none: <why>` -> context only
   (against the side, no side, a warning, the stop already traded).
 - `1h structure` is the 1h break record; the Bias line's 1h is the
@@ -8991,6 +9096,15 @@ overlapping, consolidating, or repeatedly failing to continue."
   low (lower high) breaks; a CHoCH holds until the low (high) that started
   the shift breaks.
   Only a close through it counts; a wick is not.
+- A CHoCH fails one way only (owner): a CLOSE through its ORIGIN, the
+  swing its move started from (CHoCH up: the low under it; CHoCH down:
+  the high above it).
+  Two levels, never mix them:
+  - a close back through the level the CHoCH BROKE -> early warning
+    only; the CHoCH still stands;
+  - a close through its ORIGIN -> the CHoCH is invalidated; the old
+    structure stands as before.
+  - a wick through either -> nothing.
 - Behavior: `behavior` (rotation/weakening/transition), 15m words.
 - A BOS stays labelled BOS after its protected swing breaks; the Market
   state line's status (`holds` or `broken by a close`) decides what it
@@ -9012,9 +9126,9 @@ overlapping, consolidating, or repeatedly failing to continue."
 the `Market state` line, the runner's briefing).
   `1h > 15m` (primary,
 timed on the 3m; the only `Entry:` clause; it ends with `Above:`, the
-4h structure and whether the 1h is pulling back against it: no stage
-word) and `below: 15m > 3m` (context; no frame under it, so no
-`POTENTIAL`, `WEAKENING`, `REVERSING`).
+4h structure and the 1h pullback against it: no stage word) and
+`below: 15m > 3m` (context; no frame under it, so no `POTENTIAL`,
+`WEAKENING`, `REVERSING`).
   Each `stage` word is computed:
 copy it from its own line, never infer it, never carry it to another
 level.
@@ -9032,6 +9146,18 @@ level.
 | `COMPLETED` | a 15m close above the 1h impulse high | the 1h trend continued: this pullback is finished |
 | `INVALIDATED` | a 1h close below the 1h protected low | that line's parent structure is broken: setup cancelled |
 
+- Reading direction: every level prints two words, never one for the
+  other: `<parent> structure UP|DOWN` (the parent's way) and `<frame>
+  pullback against the <parent>: UP|DOWN|NONE` (the pullback's way:
+  always opposite to that structure word; `NONE` = not pulling back).
+  Take each pair from its own clause: 4h and 1h from `Above:`, 1h and
+  15m from the primary, 15m and 3m from `below:`.
+  `15m structure UP ...
+  3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
+- `Above:` uses the primary's own 1h structure: `1h pullback against
+  the 4h: UP` = the 1h structure is UP while the 4h is DOWN; `NONE` =
+  the 1h structure runs with the 4h (a 1h CHoCH against it is the
+  primary's warning, not a 1h pullback).
 - No stage predicts the outcome: a stage is where the structure is, not
   where it goes.
 - Direction: the pullback runs AGAINST the parent.
@@ -9048,8 +9174,8 @@ level.
   `REVERSING` -> `ESTABLISHED` again; the 3m turn is void.
 - `Entry:` (a fact, never an order, a wait or a filter; other setups
   stand): `ready` names the model whose condition is met, since when,
-  and the structural stop: the structure's level, a fact; an order's
-  stop is the STOP line's.
+  and the structural stop: the structure's level, a fact, never an
+  order's stop (flat or not, an order's stop is the STOP line's).
   `Entry: none: <why>` -> context only
   (against the side, no side, a warning, the stop already traded).
 - `1h structure` is the 1h break record; the Bias line's 1h is the
@@ -10510,6 +10636,15 @@ overlapping, consolidating, or repeatedly failing to continue."
   low (lower high) breaks; a CHoCH holds until the low (high) that started
   the shift breaks.
   Only a close through it counts; a wick is not.
+- A CHoCH fails one way only (owner): a CLOSE through its ORIGIN, the
+  swing its move started from (CHoCH up: the low under it; CHoCH down:
+  the high above it).
+  Two levels, never mix them:
+  - a close back through the level the CHoCH BROKE -> early warning
+    only; the CHoCH still stands;
+  - a close through its ORIGIN -> the CHoCH is invalidated; the old
+    structure stands as before.
+  - a wick through either -> nothing.
 - Behavior: `behavior` (rotation/weakening/transition), 15m words.
 - A BOS stays labelled BOS after its protected swing breaks; the Market
   state line's status (`holds` or `broken by a close`) decides what it
@@ -10531,9 +10666,9 @@ overlapping, consolidating, or repeatedly failing to continue."
 the `Market state` line, the runner's briefing).
   `1h > 15m` (primary,
 timed on the 3m; the only `Entry:` clause; it ends with `Above:`, the
-4h structure and whether the 1h is pulling back against it: no stage
-word) and `below: 15m > 3m` (context; no frame under it, so no
-`POTENTIAL`, `WEAKENING`, `REVERSING`).
+4h structure and the 1h pullback against it: no stage word) and
+`below: 15m > 3m` (context; no frame under it, so no `POTENTIAL`,
+`WEAKENING`, `REVERSING`).
   Each `stage` word is computed:
 copy it from its own line, never infer it, never carry it to another
 level.
@@ -10551,6 +10686,18 @@ level.
 | `COMPLETED` | a 15m close above the 1h impulse high | the 1h trend continued: this pullback is finished |
 | `INVALIDATED` | a 1h close below the 1h protected low | that line's parent structure is broken: setup cancelled |
 
+- Reading direction: every level prints two words, never one for the
+  other: `<parent> structure UP|DOWN` (the parent's way) and `<frame>
+  pullback against the <parent>: UP|DOWN|NONE` (the pullback's way:
+  always opposite to that structure word; `NONE` = not pulling back).
+  Take each pair from its own clause: 4h and 1h from `Above:`, 1h and
+  15m from the primary, 15m and 3m from `below:`.
+  `15m structure UP ...
+  3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
+- `Above:` uses the primary's own 1h structure: `1h pullback against
+  the 4h: UP` = the 1h structure is UP while the 4h is DOWN; `NONE` =
+  the 1h structure runs with the 4h (a 1h CHoCH against it is the
+  primary's warning, not a 1h pullback).
 - No stage predicts the outcome: a stage is where the structure is, not
   where it goes.
 - Direction: the pullback runs AGAINST the parent.
@@ -10567,8 +10714,8 @@ level.
   `REVERSING` -> `ESTABLISHED` again; the 3m turn is void.
 - `Entry:` (a fact, never an order, a wait or a filter; other setups
   stand): `ready` names the model whose condition is met, since when,
-  and the structural stop: the structure's level, a fact; an order's
-  stop is the STOP line's.
+  and the structural stop: the structure's level, a fact, never an
+  order's stop (flat or not, an order's stop is the STOP line's).
   `Entry: none: <why>` -> context only
   (against the side, no side, a warning, the stop already traded).
 - `1h structure` is the 1h break record; the Bias line's 1h is the
@@ -12125,6 +12272,15 @@ overlapping, consolidating, or repeatedly failing to continue."
   low (lower high) breaks; a CHoCH holds until the low (high) that started
   the shift breaks.
   Only a close through it counts; a wick is not.
+- A CHoCH fails one way only (owner): a CLOSE through its ORIGIN, the
+  swing its move started from (CHoCH up: the low under it; CHoCH down:
+  the high above it).
+  Two levels, never mix them:
+  - a close back through the level the CHoCH BROKE -> early warning
+    only; the CHoCH still stands;
+  - a close through its ORIGIN -> the CHoCH is invalidated; the old
+    structure stands as before.
+  - a wick through either -> nothing.
 - Behavior: `behavior` (rotation/weakening/transition), 15m words.
 - A BOS stays labelled BOS after its protected swing breaks; the Market
   state line's status (`holds` or `broken by a close`) decides what it
@@ -12146,9 +12302,9 @@ overlapping, consolidating, or repeatedly failing to continue."
 the `Market state` line, the runner's briefing).
   `1h > 15m` (primary,
 timed on the 3m; the only `Entry:` clause; it ends with `Above:`, the
-4h structure and whether the 1h is pulling back against it: no stage
-word) and `below: 15m > 3m` (context; no frame under it, so no
-`POTENTIAL`, `WEAKENING`, `REVERSING`).
+4h structure and the 1h pullback against it: no stage word) and
+`below: 15m > 3m` (context; no frame under it, so no `POTENTIAL`,
+`WEAKENING`, `REVERSING`).
   Each `stage` word is computed:
 copy it from its own line, never infer it, never carry it to another
 level.
@@ -12166,6 +12322,18 @@ level.
 | `COMPLETED` | a 15m close above the 1h impulse high | the 1h trend continued: this pullback is finished |
 | `INVALIDATED` | a 1h close below the 1h protected low | that line's parent structure is broken: setup cancelled |
 
+- Reading direction: every level prints two words, never one for the
+  other: `<parent> structure UP|DOWN` (the parent's way) and `<frame>
+  pullback against the <parent>: UP|DOWN|NONE` (the pullback's way:
+  always opposite to that structure word; `NONE` = not pulling back).
+  Take each pair from its own clause: 4h and 1h from `Above:`, 1h and
+  15m from the primary, 15m and 3m from `below:`.
+  `15m structure UP ...
+  3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
+- `Above:` uses the primary's own 1h structure: `1h pullback against
+  the 4h: UP` = the 1h structure is UP while the 4h is DOWN; `NONE` =
+  the 1h structure runs with the 4h (a 1h CHoCH against it is the
+  primary's warning, not a 1h pullback).
 - No stage predicts the outcome: a stage is where the structure is, not
   where it goes.
 - Direction: the pullback runs AGAINST the parent.
@@ -12182,8 +12350,8 @@ level.
   `REVERSING` -> `ESTABLISHED` again; the 3m turn is void.
 - `Entry:` (a fact, never an order, a wait or a filter; other setups
   stand): `ready` names the model whose condition is met, since when,
-  and the structural stop: the structure's level, a fact; an order's
-  stop is the STOP line's.
+  and the structural stop: the structure's level, a fact, never an
+  order's stop (flat or not, an order's stop is the STOP line's).
   `Entry: none: <why>` -> context only
   (against the side, no side, a warning, the stop already traded).
 - `1h structure` is the 1h break record; the Bias line's 1h is the
@@ -13737,6 +13905,15 @@ overlapping, consolidating, or repeatedly failing to continue."
   low (lower high) breaks; a CHoCH holds until the low (high) that started
   the shift breaks.
   Only a close through it counts; a wick is not.
+- A CHoCH fails one way only (owner): a CLOSE through its ORIGIN, the
+  swing its move started from (CHoCH up: the low under it; CHoCH down:
+  the high above it).
+  Two levels, never mix them:
+  - a close back through the level the CHoCH BROKE -> early warning
+    only; the CHoCH still stands;
+  - a close through its ORIGIN -> the CHoCH is invalidated; the old
+    structure stands as before.
+  - a wick through either -> nothing.
 - Behavior: `behavior` (rotation/weakening/transition), 15m words.
 - A BOS stays labelled BOS after its protected swing breaks; the Market
   state line's status (`holds` or `broken by a close`) decides what it
@@ -13758,9 +13935,9 @@ overlapping, consolidating, or repeatedly failing to continue."
 the `Market state` line, the runner's briefing).
   `1h > 15m` (primary,
 timed on the 3m; the only `Entry:` clause; it ends with `Above:`, the
-4h structure and whether the 1h is pulling back against it: no stage
-word) and `below: 15m > 3m` (context; no frame under it, so no
-`POTENTIAL`, `WEAKENING`, `REVERSING`).
+4h structure and the 1h pullback against it: no stage word) and
+`below: 15m > 3m` (context; no frame under it, so no `POTENTIAL`,
+`WEAKENING`, `REVERSING`).
   Each `stage` word is computed:
 copy it from its own line, never infer it, never carry it to another
 level.
@@ -13778,6 +13955,18 @@ level.
 | `COMPLETED` | a 15m close above the 1h impulse high | the 1h trend continued: this pullback is finished |
 | `INVALIDATED` | a 1h close below the 1h protected low | that line's parent structure is broken: setup cancelled |
 
+- Reading direction: every level prints two words, never one for the
+  other: `<parent> structure UP|DOWN` (the parent's way) and `<frame>
+  pullback against the <parent>: UP|DOWN|NONE` (the pullback's way:
+  always opposite to that structure word; `NONE` = not pulling back).
+  Take each pair from its own clause: 4h and 1h from `Above:`, 1h and
+  15m from the primary, 15m and 3m from `below:`.
+  `15m structure UP ...
+  3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
+- `Above:` uses the primary's own 1h structure: `1h pullback against
+  the 4h: UP` = the 1h structure is UP while the 4h is DOWN; `NONE` =
+  the 1h structure runs with the 4h (a 1h CHoCH against it is the
+  primary's warning, not a 1h pullback).
 - No stage predicts the outcome: a stage is where the structure is, not
   where it goes.
 - Direction: the pullback runs AGAINST the parent.
@@ -13794,8 +13983,8 @@ level.
   `REVERSING` -> `ESTABLISHED` again; the 3m turn is void.
 - `Entry:` (a fact, never an order, a wait or a filter; other setups
   stand): `ready` names the model whose condition is met, since when,
-  and the structural stop: the structure's level, a fact; an order's
-  stop is the STOP line's.
+  and the structural stop: the structure's level, a fact, never an
+  order's stop (flat or not, an order's stop is the STOP line's).
   `Entry: none: <why>` -> context only
   (against the side, no side, a warning, the stop already traded).
 - `1h structure` is the 1h break record; the Bias line's 1h is the
@@ -15343,6 +15532,15 @@ overlapping, consolidating, or repeatedly failing to continue."
   low (lower high) breaks; a CHoCH holds until the low (high) that started
   the shift breaks.
   Only a close through it counts; a wick is not.
+- A CHoCH fails one way only (owner): a CLOSE through its ORIGIN, the
+  swing its move started from (CHoCH up: the low under it; CHoCH down:
+  the high above it).
+  Two levels, never mix them:
+  - a close back through the level the CHoCH BROKE -> early warning
+    only; the CHoCH still stands;
+  - a close through its ORIGIN -> the CHoCH is invalidated; the old
+    structure stands as before.
+  - a wick through either -> nothing.
 - Behavior: `behavior` (rotation/weakening/transition), 15m words.
 - A BOS stays labelled BOS after its protected swing breaks; the Market
   state line's status (`holds` or `broken by a close`) decides what it
@@ -15364,9 +15562,9 @@ overlapping, consolidating, or repeatedly failing to continue."
 the `Market state` line, the runner's briefing).
   `1h > 15m` (primary,
 timed on the 3m; the only `Entry:` clause; it ends with `Above:`, the
-4h structure and whether the 1h is pulling back against it: no stage
-word) and `below: 15m > 3m` (context; no frame under it, so no
-`POTENTIAL`, `WEAKENING`, `REVERSING`).
+4h structure and the 1h pullback against it: no stage word) and
+`below: 15m > 3m` (context; no frame under it, so no `POTENTIAL`,
+`WEAKENING`, `REVERSING`).
   Each `stage` word is computed:
 copy it from its own line, never infer it, never carry it to another
 level.
@@ -15384,6 +15582,18 @@ level.
 | `COMPLETED` | a 15m close above the 1h impulse high | the 1h trend continued: this pullback is finished |
 | `INVALIDATED` | a 1h close below the 1h protected low | that line's parent structure is broken: setup cancelled |
 
+- Reading direction: every level prints two words, never one for the
+  other: `<parent> structure UP|DOWN` (the parent's way) and `<frame>
+  pullback against the <parent>: UP|DOWN|NONE` (the pullback's way:
+  always opposite to that structure word; `NONE` = not pulling back).
+  Take each pair from its own clause: 4h and 1h from `Above:`, 1h and
+  15m from the primary, 15m and 3m from `below:`.
+  `15m structure UP ...
+  3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
+- `Above:` uses the primary's own 1h structure: `1h pullback against
+  the 4h: UP` = the 1h structure is UP while the 4h is DOWN; `NONE` =
+  the 1h structure runs with the 4h (a 1h CHoCH against it is the
+  primary's warning, not a 1h pullback).
 - No stage predicts the outcome: a stage is where the structure is, not
   where it goes.
 - Direction: the pullback runs AGAINST the parent.
@@ -15400,8 +15610,8 @@ level.
   `REVERSING` -> `ESTABLISHED` again; the 3m turn is void.
 - `Entry:` (a fact, never an order, a wait or a filter; other setups
   stand): `ready` names the model whose condition is met, since when,
-  and the structural stop: the structure's level, a fact; an order's
-  stop is the STOP line's.
+  and the structural stop: the structure's level, a fact, never an
+  order's stop (flat or not, an order's stop is the STOP line's).
   `Entry: none: <why>` -> context only
   (against the side, no side, a warning, the stop already traded).
 - `1h structure` is the 1h break record; the Bias line's 1h is the
@@ -16876,6 +17086,15 @@ overlapping, consolidating, or repeatedly failing to continue."
   low (lower high) breaks; a CHoCH holds until the low (high) that started
   the shift breaks.
   Only a close through it counts; a wick is not.
+- A CHoCH fails one way only (owner): a CLOSE through its ORIGIN, the
+  swing its move started from (CHoCH up: the low under it; CHoCH down:
+  the high above it).
+  Two levels, never mix them:
+  - a close back through the level the CHoCH BROKE -> early warning
+    only; the CHoCH still stands;
+  - a close through its ORIGIN -> the CHoCH is invalidated; the old
+    structure stands as before.
+  - a wick through either -> nothing.
 - Behavior: `behavior` (rotation/weakening/transition), 15m words.
 - A BOS stays labelled BOS after its protected swing breaks; the Market
   state line's status (`holds` or `broken by a close`) decides what it
@@ -16897,9 +17116,9 @@ overlapping, consolidating, or repeatedly failing to continue."
 the `Market state` line, the runner's briefing).
   `1h > 15m` (primary,
 timed on the 3m; the only `Entry:` clause; it ends with `Above:`, the
-4h structure and whether the 1h is pulling back against it: no stage
-word) and `below: 15m > 3m` (context; no frame under it, so no
-`POTENTIAL`, `WEAKENING`, `REVERSING`).
+4h structure and the 1h pullback against it: no stage word) and
+`below: 15m > 3m` (context; no frame under it, so no `POTENTIAL`,
+`WEAKENING`, `REVERSING`).
   Each `stage` word is computed:
 copy it from its own line, never infer it, never carry it to another
 level.
@@ -16917,6 +17136,18 @@ level.
 | `COMPLETED` | a 15m close above the 1h impulse high | the 1h trend continued: this pullback is finished |
 | `INVALIDATED` | a 1h close below the 1h protected low | that line's parent structure is broken: setup cancelled |
 
+- Reading direction: every level prints two words, never one for the
+  other: `<parent> structure UP|DOWN` (the parent's way) and `<frame>
+  pullback against the <parent>: UP|DOWN|NONE` (the pullback's way:
+  always opposite to that structure word; `NONE` = not pulling back).
+  Take each pair from its own clause: 4h and 1h from `Above:`, 1h and
+  15m from the primary, 15m and 3m from `below:`.
+  `15m structure UP ...
+  3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
+- `Above:` uses the primary's own 1h structure: `1h pullback against
+  the 4h: UP` = the 1h structure is UP while the 4h is DOWN; `NONE` =
+  the 1h structure runs with the 4h (a 1h CHoCH against it is the
+  primary's warning, not a 1h pullback).
 - No stage predicts the outcome: a stage is where the structure is, not
   where it goes.
 - Direction: the pullback runs AGAINST the parent.
@@ -16933,8 +17164,8 @@ level.
   `REVERSING` -> `ESTABLISHED` again; the 3m turn is void.
 - `Entry:` (a fact, never an order, a wait or a filter; other setups
   stand): `ready` names the model whose condition is met, since when,
-  and the structural stop: the structure's level, a fact; an order's
-  stop is the STOP line's.
+  and the structural stop: the structure's level, a fact, never an
+  order's stop (flat or not, an order's stop is the STOP line's).
   `Entry: none: <why>` -> context only
   (against the side, no side, a warning, the stop already traded).
 - `1h structure` is the 1h break record; the Bias line's 1h is the
@@ -18491,6 +18722,15 @@ overlapping, consolidating, or repeatedly failing to continue."
   low (lower high) breaks; a CHoCH holds until the low (high) that started
   the shift breaks.
   Only a close through it counts; a wick is not.
+- A CHoCH fails one way only (owner): a CLOSE through its ORIGIN, the
+  swing its move started from (CHoCH up: the low under it; CHoCH down:
+  the high above it).
+  Two levels, never mix them:
+  - a close back through the level the CHoCH BROKE -> early warning
+    only; the CHoCH still stands;
+  - a close through its ORIGIN -> the CHoCH is invalidated; the old
+    structure stands as before.
+  - a wick through either -> nothing.
 - Behavior: `behavior` (rotation/weakening/transition), 15m words.
 - A BOS stays labelled BOS after its protected swing breaks; the Market
   state line's status (`holds` or `broken by a close`) decides what it
@@ -18512,9 +18752,9 @@ overlapping, consolidating, or repeatedly failing to continue."
 the `Market state` line, the runner's briefing).
   `1h > 15m` (primary,
 timed on the 3m; the only `Entry:` clause; it ends with `Above:`, the
-4h structure and whether the 1h is pulling back against it: no stage
-word) and `below: 15m > 3m` (context; no frame under it, so no
-`POTENTIAL`, `WEAKENING`, `REVERSING`).
+4h structure and the 1h pullback against it: no stage word) and
+`below: 15m > 3m` (context; no frame under it, so no `POTENTIAL`,
+`WEAKENING`, `REVERSING`).
   Each `stage` word is computed:
 copy it from its own line, never infer it, never carry it to another
 level.
@@ -18532,6 +18772,18 @@ level.
 | `COMPLETED` | a 15m close above the 1h impulse high | the 1h trend continued: this pullback is finished |
 | `INVALIDATED` | a 1h close below the 1h protected low | that line's parent structure is broken: setup cancelled |
 
+- Reading direction: every level prints two words, never one for the
+  other: `<parent> structure UP|DOWN` (the parent's way) and `<frame>
+  pullback against the <parent>: UP|DOWN|NONE` (the pullback's way:
+  always opposite to that structure word; `NONE` = not pulling back).
+  Take each pair from its own clause: 4h and 1h from `Above:`, 1h and
+  15m from the primary, 15m and 3m from `below:`.
+  `15m structure UP ...
+  3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
+- `Above:` uses the primary's own 1h structure: `1h pullback against
+  the 4h: UP` = the 1h structure is UP while the 4h is DOWN; `NONE` =
+  the 1h structure runs with the 4h (a 1h CHoCH against it is the
+  primary's warning, not a 1h pullback).
 - No stage predicts the outcome: a stage is where the structure is, not
   where it goes.
 - Direction: the pullback runs AGAINST the parent.
@@ -18548,8 +18800,8 @@ level.
   `REVERSING` -> `ESTABLISHED` again; the 3m turn is void.
 - `Entry:` (a fact, never an order, a wait or a filter; other setups
   stand): `ready` names the model whose condition is met, since when,
-  and the structural stop: the structure's level, a fact; an order's
-  stop is the STOP line's.
+  and the structural stop: the structure's level, a fact, never an
+  order's stop (flat or not, an order's stop is the STOP line's).
   `Entry: none: <why>` -> context only
   (against the side, no side, a warning, the stop already traded).
 - `1h structure` is the 1h break record; the Bias line's 1h is the
@@ -20097,6 +20349,15 @@ overlapping, consolidating, or repeatedly failing to continue."
   low (lower high) breaks; a CHoCH holds until the low (high) that started
   the shift breaks.
   Only a close through it counts; a wick is not.
+- A CHoCH fails one way only (owner): a CLOSE through its ORIGIN, the
+  swing its move started from (CHoCH up: the low under it; CHoCH down:
+  the high above it).
+  Two levels, never mix them:
+  - a close back through the level the CHoCH BROKE -> early warning
+    only; the CHoCH still stands;
+  - a close through its ORIGIN -> the CHoCH is invalidated; the old
+    structure stands as before.
+  - a wick through either -> nothing.
 - Behavior: `behavior` (rotation/weakening/transition), 15m words.
 - A BOS stays labelled BOS after its protected swing breaks; the Market
   state line's status (`holds` or `broken by a close`) decides what it
@@ -20118,9 +20379,9 @@ overlapping, consolidating, or repeatedly failing to continue."
 the `Market state` line, the runner's briefing).
   `1h > 15m` (primary,
 timed on the 3m; the only `Entry:` clause; it ends with `Above:`, the
-4h structure and whether the 1h is pulling back against it: no stage
-word) and `below: 15m > 3m` (context; no frame under it, so no
-`POTENTIAL`, `WEAKENING`, `REVERSING`).
+4h structure and the 1h pullback against it: no stage word) and
+`below: 15m > 3m` (context; no frame under it, so no `POTENTIAL`,
+`WEAKENING`, `REVERSING`).
   Each `stage` word is computed:
 copy it from its own line, never infer it, never carry it to another
 level.
@@ -20138,6 +20399,18 @@ level.
 | `COMPLETED` | a 15m close above the 1h impulse high | the 1h trend continued: this pullback is finished |
 | `INVALIDATED` | a 1h close below the 1h protected low | that line's parent structure is broken: setup cancelled |
 
+- Reading direction: every level prints two words, never one for the
+  other: `<parent> structure UP|DOWN` (the parent's way) and `<frame>
+  pullback against the <parent>: UP|DOWN|NONE` (the pullback's way:
+  always opposite to that structure word; `NONE` = not pulling back).
+  Take each pair from its own clause: 4h and 1h from `Above:`, 1h and
+  15m from the primary, 15m and 3m from `below:`.
+  `15m structure UP ...
+  3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
+- `Above:` uses the primary's own 1h structure: `1h pullback against
+  the 4h: UP` = the 1h structure is UP while the 4h is DOWN; `NONE` =
+  the 1h structure runs with the 4h (a 1h CHoCH against it is the
+  primary's warning, not a 1h pullback).
 - No stage predicts the outcome: a stage is where the structure is, not
   where it goes.
 - Direction: the pullback runs AGAINST the parent.
@@ -20154,8 +20427,8 @@ level.
   `REVERSING` -> `ESTABLISHED` again; the 3m turn is void.
 - `Entry:` (a fact, never an order, a wait or a filter; other setups
   stand): `ready` names the model whose condition is met, since when,
-  and the structural stop: the structure's level, a fact; an order's
-  stop is the STOP line's.
+  and the structural stop: the structure's level, a fact, never an
+  order's stop (flat or not, an order's stop is the STOP line's).
   `Entry: none: <why>` -> context only
   (against the side, no side, a warning, the stop already traded).
 - `1h structure` is the 1h break record; the Bias line's 1h is the
@@ -21703,6 +21976,15 @@ overlapping, consolidating, or repeatedly failing to continue."
   low (lower high) breaks; a CHoCH holds until the low (high) that started
   the shift breaks.
   Only a close through it counts; a wick is not.
+- A CHoCH fails one way only (owner): a CLOSE through its ORIGIN, the
+  swing its move started from (CHoCH up: the low under it; CHoCH down:
+  the high above it).
+  Two levels, never mix them:
+  - a close back through the level the CHoCH BROKE -> early warning
+    only; the CHoCH still stands;
+  - a close through its ORIGIN -> the CHoCH is invalidated; the old
+    structure stands as before.
+  - a wick through either -> nothing.
 - Behavior: `behavior` (rotation/weakening/transition), 15m words.
 - A BOS stays labelled BOS after its protected swing breaks; the Market
   state line's status (`holds` or `broken by a close`) decides what it
@@ -21724,9 +22006,9 @@ overlapping, consolidating, or repeatedly failing to continue."
 the `Market state` line, the runner's briefing).
   `1h > 15m` (primary,
 timed on the 3m; the only `Entry:` clause; it ends with `Above:`, the
-4h structure and whether the 1h is pulling back against it: no stage
-word) and `below: 15m > 3m` (context; no frame under it, so no
-`POTENTIAL`, `WEAKENING`, `REVERSING`).
+4h structure and the 1h pullback against it: no stage word) and
+`below: 15m > 3m` (context; no frame under it, so no `POTENTIAL`,
+`WEAKENING`, `REVERSING`).
   Each `stage` word is computed:
 copy it from its own line, never infer it, never carry it to another
 level.
@@ -21744,6 +22026,18 @@ level.
 | `COMPLETED` | a 15m close above the 1h impulse high | the 1h trend continued: this pullback is finished |
 | `INVALIDATED` | a 1h close below the 1h protected low | that line's parent structure is broken: setup cancelled |
 
+- Reading direction: every level prints two words, never one for the
+  other: `<parent> structure UP|DOWN` (the parent's way) and `<frame>
+  pullback against the <parent>: UP|DOWN|NONE` (the pullback's way:
+  always opposite to that structure word; `NONE` = not pulling back).
+  Take each pair from its own clause: 4h and 1h from `Above:`, 1h and
+  15m from the primary, 15m and 3m from `below:`.
+  `15m structure UP ...
+  3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
+- `Above:` uses the primary's own 1h structure: `1h pullback against
+  the 4h: UP` = the 1h structure is UP while the 4h is DOWN; `NONE` =
+  the 1h structure runs with the 4h (a 1h CHoCH against it is the
+  primary's warning, not a 1h pullback).
 - No stage predicts the outcome: a stage is where the structure is, not
   where it goes.
 - Direction: the pullback runs AGAINST the parent.
@@ -21760,8 +22054,8 @@ level.
   `REVERSING` -> `ESTABLISHED` again; the 3m turn is void.
 - `Entry:` (a fact, never an order, a wait or a filter; other setups
   stand): `ready` names the model whose condition is met, since when,
-  and the structural stop: the structure's level, a fact; an order's
-  stop is the STOP line's.
+  and the structural stop: the structure's level, a fact, never an
+  order's stop (flat or not, an order's stop is the STOP line's).
   `Entry: none: <why>` -> context only
   (against the side, no side, a warning, the stop already traded).
 - `1h structure` is the 1h break record; the Bias line's 1h is the
@@ -23243,6 +23537,15 @@ overlapping, consolidating, or repeatedly failing to continue."
   low (lower high) breaks; a CHoCH holds until the low (high) that started
   the shift breaks.
   Only a close through it counts; a wick is not.
+- A CHoCH fails one way only (owner): a CLOSE through its ORIGIN, the
+  swing its move started from (CHoCH up: the low under it; CHoCH down:
+  the high above it).
+  Two levels, never mix them:
+  - a close back through the level the CHoCH BROKE -> early warning
+    only; the CHoCH still stands;
+  - a close through its ORIGIN -> the CHoCH is invalidated; the old
+    structure stands as before.
+  - a wick through either -> nothing.
 - Behavior: `behavior` (rotation/weakening/transition), 15m words.
 - A BOS stays labelled BOS after its protected swing breaks; the Market
   state line's status (`holds` or `broken by a close`) decides what it
@@ -23264,9 +23567,9 @@ overlapping, consolidating, or repeatedly failing to continue."
 the `Market state` line, the runner's briefing).
   `1h > 15m` (primary,
 timed on the 3m; the only `Entry:` clause; it ends with `Above:`, the
-4h structure and whether the 1h is pulling back against it: no stage
-word) and `below: 15m > 3m` (context; no frame under it, so no
-`POTENTIAL`, `WEAKENING`, `REVERSING`).
+4h structure and the 1h pullback against it: no stage word) and
+`below: 15m > 3m` (context; no frame under it, so no `POTENTIAL`,
+`WEAKENING`, `REVERSING`).
   Each `stage` word is computed:
 copy it from its own line, never infer it, never carry it to another
 level.
@@ -23284,6 +23587,18 @@ level.
 | `COMPLETED` | a 15m close above the 1h impulse high | the 1h trend continued: this pullback is finished |
 | `INVALIDATED` | a 1h close below the 1h protected low | that line's parent structure is broken: setup cancelled |
 
+- Reading direction: every level prints two words, never one for the
+  other: `<parent> structure UP|DOWN` (the parent's way) and `<frame>
+  pullback against the <parent>: UP|DOWN|NONE` (the pullback's way:
+  always opposite to that structure word; `NONE` = not pulling back).
+  Take each pair from its own clause: 4h and 1h from `Above:`, 1h and
+  15m from the primary, 15m and 3m from `below:`.
+  `15m structure UP ...
+  3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
+- `Above:` uses the primary's own 1h structure: `1h pullback against
+  the 4h: UP` = the 1h structure is UP while the 4h is DOWN; `NONE` =
+  the 1h structure runs with the 4h (a 1h CHoCH against it is the
+  primary's warning, not a 1h pullback).
 - No stage predicts the outcome: a stage is where the structure is, not
   where it goes.
 - Direction: the pullback runs AGAINST the parent.
@@ -23300,8 +23615,8 @@ level.
   `REVERSING` -> `ESTABLISHED` again; the 3m turn is void.
 - `Entry:` (a fact, never an order, a wait or a filter; other setups
   stand): `ready` names the model whose condition is met, since when,
-  and the structural stop: the structure's level, a fact; an order's
-  stop is the STOP line's.
+  and the structural stop: the structure's level, a fact, never an
+  order's stop (flat or not, an order's stop is the STOP line's).
   `Entry: none: <why>` -> context only
   (against the side, no side, a warning, the stop already traded).
 - `1h structure` is the 1h break record; the Bias line's 1h is the
@@ -24774,6 +25089,15 @@ overlapping, consolidating, or repeatedly failing to continue."
   low (lower high) breaks; a CHoCH holds until the low (high) that started
   the shift breaks.
   Only a close through it counts; a wick is not.
+- A CHoCH fails one way only (owner): a CLOSE through its ORIGIN, the
+  swing its move started from (CHoCH up: the low under it; CHoCH down:
+  the high above it).
+  Two levels, never mix them:
+  - a close back through the level the CHoCH BROKE -> early warning
+    only; the CHoCH still stands;
+  - a close through its ORIGIN -> the CHoCH is invalidated; the old
+    structure stands as before.
+  - a wick through either -> nothing.
 - Behavior: `behavior` (rotation/weakening/transition), 15m words.
 - A BOS stays labelled BOS after its protected swing breaks; the Market
   state line's status (`holds` or `broken by a close`) decides what it
@@ -24795,9 +25119,9 @@ overlapping, consolidating, or repeatedly failing to continue."
 the `Market state` line, the runner's briefing).
   `1h > 15m` (primary,
 timed on the 3m; the only `Entry:` clause; it ends with `Above:`, the
-4h structure and whether the 1h is pulling back against it: no stage
-word) and `below: 15m > 3m` (context; no frame under it, so no
-`POTENTIAL`, `WEAKENING`, `REVERSING`).
+4h structure and the 1h pullback against it: no stage word) and
+`below: 15m > 3m` (context; no frame under it, so no `POTENTIAL`,
+`WEAKENING`, `REVERSING`).
   Each `stage` word is computed:
 copy it from its own line, never infer it, never carry it to another
 level.
@@ -24815,6 +25139,18 @@ level.
 | `COMPLETED` | a 15m close above the 1h impulse high | the 1h trend continued: this pullback is finished |
 | `INVALIDATED` | a 1h close below the 1h protected low | that line's parent structure is broken: setup cancelled |
 
+- Reading direction: every level prints two words, never one for the
+  other: `<parent> structure UP|DOWN` (the parent's way) and `<frame>
+  pullback against the <parent>: UP|DOWN|NONE` (the pullback's way:
+  always opposite to that structure word; `NONE` = not pulling back).
+  Take each pair from its own clause: 4h and 1h from `Above:`, 1h and
+  15m from the primary, 15m and 3m from `below:`.
+  `15m structure UP ...
+  3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
+- `Above:` uses the primary's own 1h structure: `1h pullback against
+  the 4h: UP` = the 1h structure is UP while the 4h is DOWN; `NONE` =
+  the 1h structure runs with the 4h (a 1h CHoCH against it is the
+  primary's warning, not a 1h pullback).
 - No stage predicts the outcome: a stage is where the structure is, not
   where it goes.
 - Direction: the pullback runs AGAINST the parent.
@@ -24831,8 +25167,8 @@ level.
   `REVERSING` -> `ESTABLISHED` again; the 3m turn is void.
 - `Entry:` (a fact, never an order, a wait or a filter; other setups
   stand): `ready` names the model whose condition is met, since when,
-  and the structural stop: the structure's level, a fact; an order's
-  stop is the STOP line's.
+  and the structural stop: the structure's level, a fact, never an
+  order's stop (flat or not, an order's stop is the STOP line's).
   `Entry: none: <why>` -> context only
   (against the side, no side, a warning, the stop already traded).
 - `1h structure` is the 1h break record; the Bias line's 1h is the
@@ -26216,6 +26552,15 @@ overlapping, consolidating, or repeatedly failing to continue."
   low (lower high) breaks; a CHoCH holds until the low (high) that started
   the shift breaks.
   Only a close through it counts; a wick is not.
+- A CHoCH fails one way only (owner): a CLOSE through its ORIGIN, the
+  swing its move started from (CHoCH up: the low under it; CHoCH down:
+  the high above it).
+  Two levels, never mix them:
+  - a close back through the level the CHoCH BROKE -> early warning
+    only; the CHoCH still stands;
+  - a close through its ORIGIN -> the CHoCH is invalidated; the old
+    structure stands as before.
+  - a wick through either -> nothing.
 - Behavior: `behavior` (rotation/weakening/transition), 15m words.
 - A BOS stays labelled BOS after its protected swing breaks; the Market
   state line's status (`holds` or `broken by a close`) decides what it
@@ -26237,9 +26582,9 @@ overlapping, consolidating, or repeatedly failing to continue."
 the `Market state` line, the runner's briefing).
   `1h > 15m` (primary,
 timed on the 3m; the only `Entry:` clause; it ends with `Above:`, the
-4h structure and whether the 1h is pulling back against it: no stage
-word) and `below: 15m > 3m` (context; no frame under it, so no
-`POTENTIAL`, `WEAKENING`, `REVERSING`).
+4h structure and the 1h pullback against it: no stage word) and
+`below: 15m > 3m` (context; no frame under it, so no `POTENTIAL`,
+`WEAKENING`, `REVERSING`).
   Each `stage` word is computed:
 copy it from its own line, never infer it, never carry it to another
 level.
@@ -26257,6 +26602,18 @@ level.
 | `COMPLETED` | a 15m close above the 1h impulse high | the 1h trend continued: this pullback is finished |
 | `INVALIDATED` | a 1h close below the 1h protected low | that line's parent structure is broken: setup cancelled |
 
+- Reading direction: every level prints two words, never one for the
+  other: `<parent> structure UP|DOWN` (the parent's way) and `<frame>
+  pullback against the <parent>: UP|DOWN|NONE` (the pullback's way:
+  always opposite to that structure word; `NONE` = not pulling back).
+  Take each pair from its own clause: 4h and 1h from `Above:`, 1h and
+  15m from the primary, 15m and 3m from `below:`.
+  `15m structure UP ...
+  3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
+- `Above:` uses the primary's own 1h structure: `1h pullback against
+  the 4h: UP` = the 1h structure is UP while the 4h is DOWN; `NONE` =
+  the 1h structure runs with the 4h (a 1h CHoCH against it is the
+  primary's warning, not a 1h pullback).
 - No stage predicts the outcome: a stage is where the structure is, not
   where it goes.
 - Direction: the pullback runs AGAINST the parent.
@@ -26273,8 +26630,8 @@ level.
   `REVERSING` -> `ESTABLISHED` again; the 3m turn is void.
 - `Entry:` (a fact, never an order, a wait or a filter; other setups
   stand): `ready` names the model whose condition is met, since when,
-  and the structural stop: the structure's level, a fact; an order's
-  stop is the STOP line's.
+  and the structural stop: the structure's level, a fact, never an
+  order's stop (flat or not, an order's stop is the STOP line's).
   `Entry: none: <why>` -> context only
   (against the side, no side, a warning, the stop already traded).
 - `1h structure` is the 1h break record; the Bias line's 1h is the
