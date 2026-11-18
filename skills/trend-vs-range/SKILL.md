@@ -107,7 +107,7 @@ hypotheses):
 ## Examples
 
 ```text
-Chop: the line prints `chop: the down leg's last break failed, LH 21440.25 holds (a failed break)` -> sit out.
+Chop: the line prints `chop: the down leg's last break failed, LH 21440.25 broken by a close, closed back below (a failed protected break, a failed break)` -> sit out.
   It prints `trend up: HL 21380.5 holds, BOS up 6 min ago (displaced)` -> trend-up.
 Take: 4h, 1h, 15m up; m3 trend-up (adx 24.10); overnight broke out its way. Read: trend.
   Reads: 1h up, 15m bos up. Priority order: aligned; the count for -> take.

@@ -125,15 +125,18 @@ test('context quiz: every layer asked, ids unique, the bar the whole quiz at K 5
   // and three recorded holds (a 3m pullback, a 67% giveback at the lock, a warning past the price); the managed
   // situation's prompt; closed choices). A drafted synthetic item (a 15m CHoCH against with a placeable level ->
   // choch-against) failed 0/3 on main and on the branch and was deferred to the "what is a WARNING" study:
-  // the taught warning stop is not a validated right answer (it cost R in the exit study). swing-holds: q147 (a level a
-  // 3m close went through that closed back within 3 bars is not holding; the line keeps the leg's read) and q148 (the
-  // failed break's extreme is the swing above) added from the real 2022-04-11 10:06 moment; at 115 the gate's Monte Carlo
-  // misses its flaky bound (6.7%) and at 114 its caught-broken bound (seed 3, 538 of 600) under maxSlips 11, so q140 (a
-  // weak close still breaks the protected swing: q131 and q147 ask a close through it) and q138 (a displaced CHoCH is a
-  // potential reversal a BOS confirms: q127 and q133 ask it) retired; the quiz stays at 113.
+  // the taught warning stop is not a validated right answer (it cost R in the exit study). swing-holds: q147 (what the line's
+  // words say happened at a level: a 3m close went through it, then one came back; the wording fact, no verdict on the
+  // hand-back, swing-holds D1) and q148 (the failed break's extreme is the swing above) added from the real 2022-04-11
+  // 10:06 moment. At 115 the gate's Monte Carlo misses its flaky bound (6.7%) and at 114 its caught-broken bound (seed 3,
+  // 538 of 600) under maxSlips 11, so two items whose anchor a kept item shares retired: q33 (q30's mirror, the same
+  // anchor "Side first, from the candle" and the same lesson for a low) and q132 (a CHoCH fails at its origin: q127 keeps
+  // that anchor, and q131 and q147 ask a close through a protected level). q138 and q140, the only items on two
+  // displacement sentences, stay. The quiz stays at 113.
   assert.strictEqual(QUIZ.questions.length, 113);
   assert.ok(['q147', 'q148'].every(id => QUIZ.questions.some(x => x.id === id)), 'q147 and q148 added');
-  assert.ok(!QUIZ.questions.some(x => ['q138', 'q140'].includes(x.id)), 'q138 and q140 retired');
+  assert.ok(!QUIZ.questions.some(x => ['q33', 'q132'].includes(x.id)), 'q33 and q132 retired');
+  assert.ok(['q134', 'q135', 'q136', 'q137', 'q138', 'q139', 'q140'].every(id => QUIZ.questions.some(x => x.id === id)), 'every displacement item kept');
   assert.deepStrictEqual(QUIZ.questions.filter(x => x.layer === 'manage').map(x => x.id), ['q141', 'q142', 'q143', 'q144', 'q145', 'q146']);
   assert.ok(!QUIZ.questions.some(x => ['q55', 'q59', 'q94', 'q108', 'q113'].includes(x.id)), 'q55, q59, q94, q108 and q113 retired');
   assert.ok(QUIZ.questions.some(x => x.id === 'q118a'), 'q118a added');
@@ -294,7 +297,6 @@ test('context quiz: the chop-read questions (q114-q133, less q115, q116, q117, q
     ['q54', 'lookup', ['bos-vs-choch'], 'not invalidated: only a close below 21480.25 counts; the trend holds', /Only a close through it counts; a wick is not\./g],
     ['q130', 'lookup', ['bos-vs-choch'], 'the trend holds: no close below the protected HL 21480.25', /a BOS holds until the leg's higher low \(lower high\) breaks/g],
     ['q131', 'lookup', ['bos-vs-choch'], 'invalidated: the close below the protected HL ended the up trend (a potential reversal, unconfirmed)', /a BOS holds until the leg's higher low \(lower high\) breaks/g],
-    ['q132', 'lookup', ['bos-vs-choch'], 'failed: the potential reversal up is invalidated', /a CHoCH holds until the low \(high\) that started the shift breaks/g],
     ['q133', 'lookup', ['bos-vs-choch'], 'a confirmed transition up: the CHoCH up was followed by a BOS up', /CHoCH then BOS the same way: a confirmed transition; a reversal once a close goes through the old leg's protected level/g],
     // Top-down: the 3m CHoCH pair the 15m BOS confirms is the 15m continuation (owner, 2026-11-15).
     ['q128', 'head', undefined, "trend-up: the 3m CHoCH pair is the 15m BOS up (continuation); long setups the side's way", /`trend`, their way: setups the side's way\./g],
@@ -326,7 +328,6 @@ test('context quiz: the chop-read questions (q114-q133, less q115, q116, q117, q
   assert.match(tq('q119'), /\n- Market state \(3m\): chop: no leg holds \(breaks both ways\); overlap 0\.\d+, efficiency 0\.05, failed continuation; [^\n]*; class chop\.\n/);
   assert.ok(QUIZ.questions.find(x => x.id === 'q119').layers, 'q119: its layer facts');
   assert.strictEqual(QUIZ.questions.find(x => x.id === 'q119').layers.structure.status, 'broken', 'q119: no protected level holds');
-  assert.match(tq('q132'), /Market state \(3m\): range: 3m BOS down then CHoCH up \(failed: a close below its origin 21462\.5\); 4h\+1h up/);
   assert.match(tq('q127'), /Market state \(3m\): range: 3m BOS down then CHoCH up \(unconfirmed, holds above 21462\.5 \(origin\)\); 4h\+1h up/);
   // The chop-end items show the facts that confirm the CHoCH (round 20: no layer facts stated, so no chop memory: the line
   // prints the confirmed leg).

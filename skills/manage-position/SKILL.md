@@ -76,7 +76,7 @@ description: Use when a position is open - its stop, the plan's management, the 
   - A 15m close through the protected swing past the tie (Manage read:
     BROKEN; the Trade read's `reversal: 15m BOS`) → the reversal:
     `close_position`, then the full top-down flow decides anew. A close
-    only at the swing, within the tie, is no break: it `holds`.
+    only at the swing, within the tie, is no break: `holds (tested, a tie)`.
   - Healthy pullback, a 3m swing or CHoCH, one candle against → hold.
   - A level the Manage read says is past the price → hold (the floor
     stands); never a stop through the market.

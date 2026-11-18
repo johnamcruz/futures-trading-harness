@@ -86,7 +86,9 @@ const TRAINING = {
   // a transition, a reversal only through the protected level; the chop example's true leg clause): trend-vs-range 5658,
   // bos-vs-choch 5418, at the measured need. feat/displacement (its Fields name the last break's strength read
   // and the 15m last break's protected swing): bos-vs-choch 5506, at the measured need. swing-holds (fix/protected-status: the
-  // two broken-word lines, the failed break and the new protected swing): bos-vs-choch 5830, at the measured need.
+  // two broken-word lines, the failed break and the new protected swing): bos-vs-choch 5830, at the measured need; after
+  // review (owner-approved 2026-11-17: the closed-back line in every state; trend-vs-range's chop example in the new form):
+  // bos-vs-choch 5892, trend-vs-range 5715, at the measured need.
   skillCaps: { skillBytes: int(1), setupSkillBytes: int(1), perSkill: { 'candle-reading': int(1), 'pullback-vs-reversal': int(1), 'trend-vs-range': int(1), 'bos-vs-choch': int(1) } },
   compose: { maxExpects: int(1), maxWhy: int(1) },
   lessons: { maxLines: int(1), maxChars: int(1), refusedChars: int(1) },
@@ -285,7 +287,7 @@ const PINS = deepFreeze({
     'screen.gainAlpha': 0.1, 'screen.harmAlpha': 0.2, 'screen.minDiscordant': 4, 'screen.minPairs': 10, 'screen.minEffect': 0.1, 'exitScreen.epsR': 0.05, 'exitScreen.runnerMfeR': 3,
     'loop.limits.maxIterations.max': 100, 'loop.limits.maxModelCalls.max': 100000, 'loop.limits.maxWallMinutes.max': 10080,
     'proposal.maxEdits': 3, 'proposal.maxText': 2000, 'proposal.maxChanged': 3000, 'looks.maxArms': 3,
-    'skillCaps.skillBytes': 3459, 'skillCaps.setupSkillBytes': 4000, 'skillCaps.perSkill.candle-reading': 7637, 'skillCaps.perSkill.pullback-vs-reversal': 10354, 'skillCaps.perSkill.trend-vs-range': 5658, 'skillCaps.perSkill.bos-vs-choch': 5830,
+    'skillCaps.skillBytes': 3459, 'skillCaps.setupSkillBytes': 4000, 'skillCaps.perSkill.candle-reading': 7637, 'skillCaps.perSkill.pullback-vs-reversal': 10354, 'skillCaps.perSkill.trend-vs-range': 5715, 'skillCaps.perSkill.bos-vs-choch': 5892,
     'goalRegression.tolerance.passRate': 0.005, 'goalRegression.tolerance.meanR': 0.005, 'goalRegression.tolerance.rCaught': 0,
     'goalRegression.tier2.tolerance.trades': 0, 'goalRegression.tier2.tolerance.totalR': 0.05, 'goalRegression.tier2.tolerance.fills': 0, 'goalRegression.tier2.tolerance.moveShare': 0, 'goalRegression.tier2.maxLossR': 1.25,
     'goalRegression.seed': 1, 'goalRegression.split': '2022-11-23', 'goalRegression.blocksPerHalf': 3, 'goalRegression.blockSessions': 5, 'goalRegression.trendPerHalf': 8,
@@ -353,7 +355,7 @@ const BUILT_IN = deepFreeze({
       recentDecisions: 10, historyPerLane: 10, slowerContext: 3, planChars: 400, reasonChars: 100, exitsKept: 50, unseenReads: 10,
       sessionStartLessons: 10, sessionStartLessonChars: 300, reportMaxText: 8000, trackRecordMinSlice: 10, lessonMinPlans: 10,
       trackRecordLiveSlice: 5, instinctsMinSetupTrades: 3, instinctsRecentReviews: 30, reviewedTrades: 10, feedbackMinTrades: 5, feedbackRecordGroups: 6, valuesPerStrategy: 6, brokerFieldsKept: 3,
-      brokerFieldsBytes: 600, brokerFieldChars: 250, cycleDataMaxBytes: 48000, situationalSkillBytes: 78726, maxPromptBytes: 126976,
+      brokerFieldsBytes: 600, brokerFieldChars: 250, cycleDataMaxBytes: 48000, situationalSkillBytes: 78788, maxPromptBytes: 126976,
       cacheTtlMinutes: { '5m': 5, '1h': 60 },
     },
     session: {

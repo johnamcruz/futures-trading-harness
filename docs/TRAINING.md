@@ -1811,15 +1811,14 @@ Frozen definitions:
   `marketState.equalAtr` x ATR(14), is the only invalidation of the leg; a
   CHoCH then BOS against the leg confirms a transition, printed `CHoCH then
   BOS: transition confirmed` while the old level is unbroken and `reversal
-  confirmed` once a close goes through it; one rule, the hand-back: a
-  protected break whose close comes back through the level within
-  `marketState.followBars` failed, and the old side keeps the read, its
-  level printed `LH X broken by a close N min ago, closed back below, the
-  break's high E`, never `holds`; a broken level with no leg restored
+  confirmed` once a close goes through it; a level a close went through
+  past the tie is never printed `holds`: the Market state line, the break
+  record (`last` and `previous`), the Break quality line and the Manage
+  read read one predicate, protected-status.js, a close past the tie
+  breaks it and it stays broken (the Pullback line's `15m X holds` and
+  `m3.htfLevels` are other objects with their own rules); a broken level
   prints `broken by a close`, `closed back` while the latest close is back
-  past it, and `new protected low Y` from the break record. Every printer
-  of a protected swing's status reads one predicate, protected-status.js: a
-  close past the tie breaks it, and it stays broken); and price behavior
+  past it, and `new protected low Y` from the break record); and price behavior
   (market-behavior.js: overlap, efficiency, displacement, failed
   continuation; the 3m and 15m words). The precedence, once: `forming` (no
   RTH break yet); `pullback` (an open `Pullback` line, pullback-read.js
@@ -1924,6 +1923,13 @@ Frozen definitions:
   `atrPeriod` (14). It uses no briefing word, but path efficiency is the
   same family of idea as the day so far's efficiency, so their agreement
   is a diagnostic, not independence.
+
+Not frozen: the 3m machine's hand-back (structure-layers.js). A protected
+break whose close comes back through the level within
+`marketState.followBars` failed, and the old side keeps the read; its level
+then prints `LH X broken by a close N min ago, closed back below, the
+break's high E`, never `holds`. Kept for now; owner decision pending
+(swing-holds D1: removing it measured worse on the round-20 hold-out).
 
 The report aggregates only trend vs chop, with n and the cases listed:
 recall (cases recognised within the margin) with the coded read's beside
