@@ -565,7 +565,7 @@ function headOf(lv, cut, L) {
   const w = p.way;
   const differ = p.differs ? ` (its break record; the Bias line reads the ${P} ${p.biasRead}: the side is the Bias line's)` : '';
   const origin = cutOut(cut, 'origin') ? '' : ` (the origin of the last ${P} break)`;
-  const status = lv.warning ? `not broken on a ${P} close; WARNING: a ${lv.warning.frame} close ${L(lv.warning.close)} ${belowAbove(w)} it at ${lv.warning.et} (the ${P} close decides)` : 'holds';
+  const status = lv.warning ? `not broken on a ${P} close; WARNING: a ${lv.warning.frame} close ${L(lv.warning.close)} ${belowAbove(w)} it at ${lv.warning.et} (the ${P} close decides)` : `holds on ${P} closes`;
   const ch = p.against && !cutOut(cut, 'parentChoch') ? ` (${P} ${p.against.kind} ${p.against.direction} at ${L(p.against.level)}: a warning, not a reversal)` : '';
   return `${P} structure ${UPW(w)}${differ}, ${P} protected ${lowHigh(w)} ${L(p.protected.level)}${origin} ${status}${ch}`;
 }
@@ -675,7 +675,7 @@ function aboveClause(lv, primary, cut, L) {
   const i = lv.instance;
   const pbk = pulling ? `the ${S} is pulling back ${UPW(opp(w))} against it (${S} CHoCH ${opp(w)} ${i.developing.et}${i.established ? `, BOS ${opp(w)} ${i.established.et}` : ''})`
     : st === 'CONFIRMED REVERSAL' ? `the ${S} pullback ${UPW(opp(w))} against it is over` : `the ${S} is not pulling back against it`;
-  return ` Above: ${P} structure ${UPW(w)}${differ}${nb}, ${P} protected ${lowHigh(w)} ${L(lv.parent.protected.level)} holds; ${pbk}.`;
+  return ` Above: ${P} structure ${UPW(w)}${differ}${nb}, ${P} protected ${lowHigh(w)} ${L(lv.parent.protected.level)} holds on ${P} closes; ${pbk}.`;
 }
 
 /**

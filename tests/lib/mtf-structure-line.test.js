@@ -51,7 +51,7 @@ const DAYS = ['2022-03-07', '2022-04-11', '2022-04-25', '2022-07-12'];
 
 test('every primary stage\'s line, the parent up, exactly (the grammar of pilot round three, spec 4.2)', () => {
   const at = A.at;
-  const head = '1h structure UP, 1h protected low 100 (the origin of the last 1h break) holds';
+  const head = '1h structure UP, 1h protected low 100 (the origin of the last 1h break) holds on 1h closes';
   const want = {
     [at(17, 0) - 1]: `stage NONE. ${head}. No 15m pullback open. Entry: none.`,
     [at(17, 0)]: `stage POTENTIAL. ${head}. 3m CHoCH down 02:18 against it; no 15m break down yet; price has not turned back up. Monitor only. Entry: none.`,
@@ -136,19 +136,19 @@ test('every Above: form: UP and DOWN, pulling back (CHoCH; CHoCH and BOS), over,
     return one(r).replace(/^.* Above: /, 'Above: ');
   };
   const dev = { developing: { et: '08:00' }, established: null };
-  assert.equal(above({}), 'Above: 4h structure DOWN, 4h protected high 14060.25 holds; the 1h is not pulling back against it.');
-  assert.equal(above({ stage: 'DEVELOPING', instance: dev }), 'Above: 4h structure DOWN, 4h protected high 14060.25 holds; the 1h is pulling back UP against it (1h CHoCH up 08:00).');
-  assert.equal(above({ stage: 'REVERSING', instance: { developing: { et: '08:00' }, established: { et: '10:00' } } }), 'Above: 4h structure DOWN, 4h protected high 14060.25 holds; the 1h is pulling back UP against it (1h CHoCH up 08:00, BOS up 10:00).');
-  assert.equal(above({ stage: 'CONFIRMED REVERSAL', instance: dev }), 'Above: 4h structure DOWN, 4h protected high 14060.25 holds; the 1h pullback UP against it is over.');
-  assert.equal(above({ stage: 'POTENTIAL', instance: dev }), 'Above: 4h structure DOWN, 4h protected high 14060.25 holds; the 1h is not pulling back against it.');
-  assert.equal(above({ parent: { way: 'up', protected: { side: 'low', level: 11836.5 }, differs: false } }), 'Above: 4h structure UP, 4h protected low 11836.5 holds; the 1h is not pulling back against it.');
+  assert.equal(above({}), 'Above: 4h structure DOWN, 4h protected high 14060.25 holds on 4h closes; the 1h is not pulling back against it.');
+  assert.equal(above({ stage: 'DEVELOPING', instance: dev }), 'Above: 4h structure DOWN, 4h protected high 14060.25 holds on 4h closes; the 1h is pulling back UP against it (1h CHoCH up 08:00).');
+  assert.equal(above({ stage: 'REVERSING', instance: { developing: { et: '08:00' }, established: { et: '10:00' } } }), 'Above: 4h structure DOWN, 4h protected high 14060.25 holds on 4h closes; the 1h is pulling back UP against it (1h CHoCH up 08:00, BOS up 10:00).');
+  assert.equal(above({ stage: 'CONFIRMED REVERSAL', instance: dev }), 'Above: 4h structure DOWN, 4h protected high 14060.25 holds on 4h closes; the 1h pullback UP against it is over.');
+  assert.equal(above({ stage: 'POTENTIAL', instance: dev }), 'Above: 4h structure DOWN, 4h protected high 14060.25 holds on 4h closes; the 1h is not pulling back against it.');
+  assert.equal(above({ parent: { way: 'up', protected: { side: 'low', level: 11836.5 }, differs: false } }), 'Above: 4h structure UP, 4h protected low 11836.5 holds on 4h closes; the 1h is not pulling back against it.');
   const inv = clone(base);
   inv.levels[0] = { ...inv.levels[0], stage: 'INVALIDATED', invalidated: { close: 99, level: 100, way: 'up' } };
   inv.levels.unshift({ name: '4h>1h', role: 'above', frames: { parent: '4h', setup: '1h', timing: '15m' }, partial: false, parent: { way: 'down', protected: { side: 'high', level: 13781 }, differs: false }, stage: 'NONE', instance: null });
-  assert.equal(one(inv).replace(/^.* Above: /, 'Above: '), 'Above: 4h structure DOWN, not broken, 4h protected high 13781 holds; the 1h is not pulling back against it.');
+  assert.equal(one(inv).replace(/^.* Above: /, 'Above: '), 'Above: 4h structure DOWN, not broken, 4h protected high 13781 holds on 4h closes; the 1h is not pulling back against it.');
   assert.equal(above({ parent: null }), 'Above: 4h structure: none (its protected swing broke).');
   assert.equal(above({ partial: true }), 'Above: 4h structure: not enough history.');
-  assert.equal(above({ parent: { way: 'down', protected: { side: 'high', level: 14060.25 }, differs: true, biasRead: 'range' } }), 'Above: 4h structure DOWN (its break record; the Bias line reads the 4h range), 4h protected high 14060.25 holds; the 1h is not pulling back against it.');
+  assert.equal(above({ parent: { way: 'down', protected: { side: 'high', level: 14060.25 }, differs: true, biasRead: 'range' } }), 'Above: 4h structure DOWN (its break record; the Bias line reads the 4h range), 4h protected high 14060.25 holds on 4h closes; the 1h is not pulling back against it.');
 });
 
 test('the 1h head: the Bias disagreement at every stage, the parent CHoCH warning, not enough history', () => {
@@ -158,7 +158,7 @@ test('the 1h head: the Bias disagreement at every stage, the parent CHoCH warnin
   }
   assert.doesNotMatch(one(run(A, { bias: { '1h': 'up' } })[A.at(25, 1)]), /its break record/);
   const pt = W.world({ keys: W.KEYS, events: [...W.EVENTS.slice(0, 4), { f: 'parent', at: 6, kind: 'CHoCH', dir: -1, swing: 4, level: 140 }] });
-  assert.match(one(run(pt)[pt.endP(6)]), /1h protected low 100 \(the origin of the last 1h break\) holds \(1h CHoCH down at 140: a warning, not a reversal\)\./);
+  assert.match(one(run(pt)[pt.endP(6)]), /1h protected low 100 \(the origin of the last 1h break\) holds on 1h closes \(1h CHoCH down at 140: a warning, not a reversal\)\./);
   assert.match(one(run(A, { warmBars: 5 })[A.at(25, 1)]), /^- MTF structure 1h > 15m \(primary\): stage NONE\. Not enough 1h history\. Entry: none\.$/);
 });
 
@@ -172,7 +172,7 @@ test('the cut order, step by step: each step leaves out its part and keeps every
   p.parent.differs = true; p.parent.biasRead = 'range';
   r.levels[1] = { ...r.levels[1], stage: 'NONE', instance: null, last: { why: 'ended before established', et: '04:00' }, parent: { way: 'up', protected: { side: 'low', level: 125 }, differs: false } };
   r.levels.unshift({ name: '4h>1h', role: 'above', frames: { parent: '4h', setup: '1h', timing: '15m' }, partial: false, parent: { way: 'up', protected: { side: 'low', level: 90 }, differs: false }, stage: 'NONE', instance: null });
-  const MARK = { belowShort: /No 3m pullback open/, aboveShort: /Above: 4h structure UP, 4h protected low 90 holds/, origin: /\(the origin of the last 1h break\)/, depth: /; depth moderate \(0\.4\)/,
+  const MARK = { belowShort: /No 3m pullback open/, aboveShort: /Above: 4h structure UP, 4h protected low 90 holds on 4h closes/, origin: /\(the origin of the last 1h break\)/, depth: /; depth moderate \(0\.4\)/,
     last: /\(last: ended before ESTABLISHED/, early: /Early weakening/, protected: /its protected high 145/, parentChoch: /a warning, not a reversal/, notReady: /balanced NOT ready/ };
   assert.deepEqual(Object.keys(MARK), [...M.CUTS]);
   // `last` lives on the below line, which the first cut shortens: its own check uses a NONE primary.
