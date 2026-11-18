@@ -1924,12 +1924,14 @@ Frozen definitions:
   same family of idea as the day so far's efficiency, so their agreement
   is a diagnostic, not independence.
 
-Not frozen: the 3m machine's hand-back (structure-layers.js). A protected
-break whose close comes back through the level within
-`marketState.followBars` failed, and the old side keeps the read; its level
-then prints `LH X broken by a close N min ago, closed back below, the
-break's high E`, never `holds`. Kept for now; owner decision pending
-(swing-holds D1: removing it measured worse on the round-20 hold-out).
+The 3m machine's hand-back (structure-layers.js; a rule of the Market
+state, not one of the frozen definitions above): a protected break whose
+close comes back through the level within `marketState.followBars` failed,
+and the old side keeps the read; its level then prints `LH X broken by a
+close N min ago, closed back below, the break's high E`, never `holds`.
+Kept (decided 2026-11-17, swing-holds D1: removing it measured worse on the
+round-20 hold-out, false chop 6 -> 25, missed chop 215 -> 235, trend recall
+87.5% -> 84.0%).
 
 The report aggregates only trend vs chop, with n and the cases listed:
 recall (cases recognised within the margin) with the coded read's beside

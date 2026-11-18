@@ -92,4 +92,6 @@ test('displacement: the invalidation read at the tie\'s exact boundary, and with
   const early = [c(0, 99), c(1, 101), c(2, 99.75)];
   assert.deepStrictEqual(D.invalidationQuality(early, { direction: 'up' }, { level: 100, brokenAt: t(2) }, [5, 5, 5], D.PARAMS), { tie: true }, 'the scan starts at brokenAt (a tie at 2): the close at 0, 1 past the level, is not counted');
   assert.strictEqual(D.invalidationQuality(early, { direction: 'up' }, { level: 100, brokenAt: null }, [5, 5, 5], D.PARAMS), null, 'no break candle, no record: nothing');
+  // A tie-only series, no break candle and no broken record: nothing (not a tie read from the whole series).
+  assert.strictEqual(D.invalidationQuality([c(0, 101), c(1, 99.9)], { direction: 'up' }, { level: 100, brokenAt: null }, [5, 5], D.PARAMS), null, 'no anchor: no scan');
 });
