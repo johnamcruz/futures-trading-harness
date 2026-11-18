@@ -1,0 +1,455 @@
+{
+ "about": "Gate 3 of feat/mtf-structure (SPEC v2): the 25 MTF structure items, outside the gated quiz (config/context-quiz.json stays at 113). Each prints the built module's lines at a real tune bar with the Bias and Market state lines; asked against the head prompt plus bos-vs-choch (lookup), k = 3, before and after. Hashed before the first ask.",
+ "questions": [
+  {
+   "id": "ms1",
+   "layer": "setup",
+   "prompt": "lookup",
+   "lookup": [
+    "bos-vs-choch"
+   ],
+   "text": "Briefing lines (real, 2021-11-12 10:39 ET), flat:\n- Bias: short only (4h range, 1h down; long refused).\n- Market state (3m): rotation down: LH 19444.5 holds, no new low for 60 min; behavior failing (overlap 0.69, efficiency 0.13), 15m rotating; 4h range, 1h down (not aligned); class unclear.\n- MTF structure 1h > 15m (primary): stage NONE. 1h structure DOWN, 1h protected high 19444.5 (the origin of the last 1h break) holds on 1h closes. No 15m pullback open (last: INVALIDATED, 11-11 21:00). Entry: none. Above: 4h structure DOWN (its break record; the Bias line reads the 4h range), 4h protected high 19746.75 holds on 4h closes; the 1h pullback UP against it is over.\n- MTF structure below: 15m > 3m (context): stage ESTABLISHED. 15m structure DOWN, 15m protected high 19444.5 (the origin of the last 15m break) holds on 15m closes. 3m pullback UP: CHoCH up 09:57, BOS up 10:21; pullback high 19428.5.\nWhat does the primary line say about a 15m pullback against the 1h now?",
+   "rule": "NONE: no pullback open",
+   "anchor": "no pullback open",
+   "choices": [
+    "none is open: nothing to read on the primary",
+    "a 15m pullback is established",
+    "an entry is ready",
+    "the 1h structure is broken"
+   ],
+   "answer": "none is open: nothing to read on the primary"
+  },
+  {
+   "id": "ms2",
+   "layer": "setup",
+   "prompt": "lookup",
+   "lookup": [
+    "bos-vs-choch"
+   ],
+   "text": "Briefing lines (real, 2021-07-16 09:33 ET), flat:\n- Bias: neutral → 15m up + declared long → long only.\n- Market state (3m): transition up: LH 18198.75 broken by a displaced close this bar, the new leg unconfirmed; behavior early, 15m early; 4h range, 1h range (not aligned); class unclear.\n- MTF structure 1h > 15m (primary): stage POTENTIAL. 1h structure UP (its break record; the Bias line reads the 1h range: the side is the Bias line's), 1h protected low 18122.25 (the origin of the last 1h break) holds on 1h closes. 3m CHoCH down 09:30 against it; no 15m break down yet; price has not turned back up. Monitor only. Entry: none. Above: 4h structure DOWN (its break record; the Bias line reads the 4h range), 4h protected high 18342 holds on 4h closes; the 1h is pulling back UP against it (1h CHoCH up 04:00, BOS up 07:00).\n- MTF structure below: 15m > 3m (context): stage COMPLETED. 15m structure UP, 15m protected low 18153 (the origin of the last 15m break) holds on 15m closes. A 3m close 18204 above the 15m impulse high 18198.75: the 15m up trend continued; this pullback is finished.\nThe primary line says POTENTIAL. What is it?",
+   "rule": "POTENTIAL: a 3m CHoCH against while the 1h protected swing holds; monitor",
+   "anchor": "a pullback may start: monitor",
+   "choices": [
+    "a pullback may start: monitor only",
+    "a 15m pullback is established",
+    "the 1h has reversed down",
+    "an aggressive entry is ready"
+   ],
+   "answer": "a pullback may start: monitor only"
+  },
+  {
+   "id": "ms3",
+   "layer": "setup",
+   "prompt": "lookup",
+   "lookup": [
+    "bos-vs-choch"
+   ],
+   "text": "Briefing lines (real, 2022-05-16 09:42 ET), flat:\n- Bias: no side yet (15m range).\n- Market state (3m): range: the down leg's last break failed, LH 15688.75 holds, edges 15591-15705.25 (travel edge to edge); overlap 0.36, efficiency 0.01, 15m early; 4h range, 1h range (not aligned); class unclear.\n- MTF structure 1h > 15m (primary): stage DEVELOPING. 1h structure UP (its break record; the Bias line reads the 1h range: the side is the Bias line's), 1h protected low 15647.25 (the origin of the last 1h break) holds on 1h closes. 15m pullback DOWN: CHoCH down 09:30, no 15m BOS down yet (not established); pullback low 15584; depth breached (1.31); price has not turned back up. Track only. Entry: none. Above: 4h structure DOWN (its break record; the Bias line reads the 4h range), 4h protected high 15907 holds on 4h closes; the 1h is pulling back UP against it (1h CHoCH up 05-12 11:00, BOS up 05-12 20:00).\n- MTF structure below: 15m > 3m (context): stage ESTABLISHED. 15m structure UP, 15m protected low 15665.75 (the origin of the last 15m break) holds on 15m closes (15m CHoCH down at 15665.75: a warning, not a reversal). 3m pullback DOWN: CHoCH down 09:00, BOS down 09:12; pullback low 15591.\nThe primary line says DEVELOPING. What does that stage mean?",
+   "rule": "DEVELOPING: a 15m CHoCH against; track only",
+   "anchor": "a 15m pullback forming: track its low; `Entry: none`",
+   "choices": [
+    "a 15m pullback forming: track its low; Entry: none",
+    "the 15m pullback is confirmed (CHoCH then BOS)",
+    "the pullback is over on the 15m",
+    "the 1h up structure is broken"
+   ],
+   "answer": "a 15m pullback forming: track its low; Entry: none"
+  },
+  {
+   "id": "ms4",
+   "layer": "setup",
+   "prompt": "lookup",
+   "lookup": [
+    "bos-vs-choch"
+   ],
+   "text": "Briefing lines (real, 2021-12-21 09:45 ET), flat:\n- Bias: short only (4h down, 1h range; long refused).\n- Market state (3m): forming (no RTH structure yet); 4h down, 1h range (not aligned); class unclear.\n- MTF structure 1h > 15m (primary): stage ESTABLISHED. 1h structure UP (its break record; the Bias line reads the 1h range: the side is the Bias line's), 1h protected low 18843 (the origin of the last 1h break) holds on 1h closes. 15m pullback DOWN: CHoCH down 08:15, BOS down 09:30; pullback low 19058.75; depth moderate (0.36); its protected high 19157.75. 3m: price has not turned back up (no 3m CHoCH or CISD up yet). Entry: none yet. Above: 4h structure DOWN, 4h protected high 19808 holds on 4h closes; the 1h is pulling back UP against it (1h CHoCH up 12-20 17:00).\n- MTF structure below: 15m > 3m (context): stage NONE. 15m structure DOWN, 15m protected high 19157.75 (the origin of the last 15m break) holds on 15m closes. No 3m pullback open (last: COMPLETED, 09:18).\nThe primary line says ESTABLISHED. What does it mean?",
+   "rule": "ESTABLISHED: a 15m CHoCH then BOS against the 1h, a pullback only while the 1h protected swing holds",
+   "anchor": "the 15m has turned against the 1h (CHoCH then BOS)",
+   "choices": [
+    "the 15m has turned against the 1h (CHoCH then BOS): a pullback while the 1h protected low holds; watch the 3m",
+    "price has turned back up with the 1h",
+    "the 1h structure has reversed",
+    "the balanced entry is ready"
+   ],
+   "answer": "the 15m has turned against the 1h (CHoCH then BOS): a pullback while the 1h protected low holds; watch the 3m"
+  },
+  {
+   "id": "ms5",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "bos-vs-choch"
+   ],
+   "text": "Briefing lines (real, 2021-08-24 09:48 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): range: the down leg's last break failed, LH 18699.75 holds, edges 18659-18699.75 (travel edge to edge); overlap 0.76, efficiency 0.07, 15m early; 4h+1h up; class trend-up.\n- MTF structure 1h > 15m (primary): stage WEAKENING. 1h structure UP, 1h protected low 18668.25 (the origin of the last 1h break) holds on 1h closes. 15m pullback DOWN: CHoCH down 05:45, BOS down 07:30; pullback low 18655.5; depth breached (1.21); its protected high 18703. 3m turning back UP with the 1h: CISD up 08:57. Entry: aggressive ready LONG since 08:57 (17 bars), structural stop 18655.25; balanced NOT ready (needs a 3m BOS up). Above: 4h structure UP, 4h protected low 18197 holds on 4h closes; the 1h is not pulling back against it.\n- MTF structure below: 15m > 3m (context): stage NONE. 15m structure DOWN, 15m protected high 18703 (the origin of the last 15m break) holds on 15m closes. No 3m pullback open (last: ended before ESTABLISHED, 09:33).\nThe primary line says WEAKENING. Which model's condition is met?",
+   "rule": "WEAKENING: the first 3m CHoCH or CISD back with the 1h; the aggressive model's condition",
+   "anchor": "the aggressive model's condition met",
+   "choices": [
+    "the aggressive model's",
+    "the balanced model's",
+    "the conservative model's",
+    "none"
+   ],
+   "answer": "the aggressive model's"
+  },
+  {
+   "id": "ms6",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "bos-vs-choch"
+   ],
+   "text": "Briefing lines (real, 2022-01-18 11:06 ET), flat:\n- Bias: short only (4h down, 1h down; long refused).\n- Market state (3m): trend down: LH 18738 holds, BOS down 9 min ago; overlap 0.6, efficiency 0.17, 15m overlapping; 4h+1h down; class trend-down.\n- MTF structure 1h > 15m (primary): stage REVERSING. 1h structure DOWN, 1h protected high 18811 (the origin of the last 1h break) holds on 1h closes. 15m pullback UP: CHoCH up 07:30, BOS up 10:15; pullback high 18785.75; depth deep (0.87); its protected low 18622.75. 3m turned back DOWN with the 1h: CHoCH down 10:33, then BOS down 10:57. Entry: balanced ready SHORT since 10:57 (3 bars), structural stop 18738.25 (aggressive structural stop 18776). Above: 4h structure UP (its break record; the Bias line reads the 4h down), 4h protected low 18503.5 holds on 4h closes; the 1h is pulling back DOWN against it (1h CHoCH down 01-17 23:00, BOS down 04:00).\n- MTF structure below: 15m > 3m (context): stage ESTABLISHED. 15m structure UP, 15m protected low 18622.75 (the origin of the last 15m break) holds on 15m closes. 3m pullback DOWN: CHoCH down 10:33, BOS down 10:57; pullback low 18648.\nThe primary line says REVERSING. Which model's condition is met?",
+   "rule": "REVERSING: a 3m BOS back with the 1h after WEAKENING; the balanced model",
+   "anchor": "the balanced model's condition met (the default)",
+   "choices": [
+    "the balanced model's (the default)",
+    "the aggressive model's only",
+    "the conservative model's",
+    "none: it is a reversal of the 1h"
+   ],
+   "answer": "the balanced model's (the default)"
+  },
+  {
+   "id": "ms7",
+   "layer": "setup",
+   "prompt": "lookup",
+   "lookup": [
+    "bos-vs-choch"
+   ],
+   "text": "Briefing lines (real, 2022-03-23 10:27 ET), flat:\n- Bias: long only (4h up, 1h range; short refused).\n- Market state (3m): transition up: LH 17913.5 broken by a displaced close 12 min ago, new protected low 17816.5, the new leg unconfirmed; behavior rotating (overlap 0.52, efficiency 0.15), 15m overlapping; 4h up, 1h range (not aligned); class unclear.\n- MTF structure 1h > 15m (primary): stage CONFIRMED REVERSAL. 1h structure UP (its break record; the Bias line reads the 1h range: the side is the Bias line's), 1h protected low 17716 (the origin of the last 1h break) holds on 1h closes (1h CHoCH down at 17979: a warning, not a reversal). The 15m pullback DOWN is over on the 15m: a 15m close 17917.75 above its protected high 17913.5 at 10:15; price back UP with the 1h; the 1h impulse high 18044.5 not yet broken. Entry: none yet: conservative NOT ready (needs a 3m CHoCH down, then a 3m BOS up). Above: 4h structure UP, 4h protected low 17537.5 holds on 4h closes; the 1h is pulling back DOWN against it (1h CHoCH down 06:00).\n- MTF structure below: 15m > 3m (context): stage NONE. 15m structure UP, 15m protected low 17814.5 (the origin of the last 15m break) holds on 15m closes. No 3m pullback open (last: INVALIDATED, 10:15).\nThe primary line says CONFIRMED REVERSAL. What is over, and what would the conservative model need now?",
+   "rule": "CONFIRMED REVERSAL: a 15m close through the pullback's protected swing; conservative needs a fresh 3m pullback and BOS",
+   "anchor": "the pullback is over on the 15m; conservative: a fresh 3m CHoCH down, then a 3m BOS up",
+   "choices": [
+    "the 15m pullback is over on the 15m; a fresh 3m CHoCH down, then a 3m BOS up",
+    "the 1h up trend is over; nothing more",
+    "the 1h impulse high is broken; a 3m BOS up",
+    "the 4h structure is reversed; a 15m BOS down"
+   ],
+   "answer": "the 15m pullback is over on the 15m; a fresh 3m CHoCH down, then a 3m BOS up"
+  },
+  {
+   "id": "ms8",
+   "layer": "setup",
+   "prompt": "lookup",
+   "lookup": [
+    "bos-vs-choch"
+   ],
+   "text": "Briefing lines (real, 2021-10-22 10:30 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): trend up: HL 18779.25 holds, CHoCH up 3 min ago; overlap 0.59, efficiency 0.25, 15m trending up; 4h+1h up; class trend-up.\n- MTF structure 1h > 15m (primary): stage COMPLETED. 1h structure UP, 1h protected low 18743.25 (the origin of the last 1h break) holds on 1h closes. A 15m close 18817.5 above the 1h impulse high 18814.25: the 1h up trend continued; this pullback is finished. Entry: none. Above: 4h structure UP, 4h protected low 18393.75 holds on 4h closes; the 1h is not pulling back against it.\n- MTF structure below: 15m > 3m (context): stage NONE. 15m structure UP, 15m protected low 18740.5 (the origin of the last 15m break) holds on 15m closes. No 3m pullback open (last: ended before ESTABLISHED, 10:27).\nThe primary line says COMPLETED. What happened?",
+   "rule": "COMPLETED: a 15m close beyond the 1h impulse extreme",
+   "anchor": "the 1h trend continued: this pullback is finished",
+   "choices": [
+    "a 15m close above the 1h impulse high: the 1h trend continued; this pullback is finished",
+    "the 1h structure broke",
+    "the 15m pullback was confirmed",
+    "a conservative entry became ready"
+   ],
+   "answer": "a 15m close above the 1h impulse high: the 1h trend continued; this pullback is finished"
+  },
+  {
+   "id": "ms9",
+   "layer": "setup",
+   "prompt": "lookup",
+   "lookup": [
+    "bos-vs-choch"
+   ],
+   "text": "Briefing lines (real, 2021-11-15 11:00 ET), flat:\n- Bias: long only (4h up, 1h range; short refused).\n- Market state (3m): in the down leg: LH 19588 holds, BOS down 45 min ago; displacement up 3 bars ago; overlap 0.68, efficiency 0.03, 15m trending down; 4h up, 1h range (not aligned); class unclear.\n- MTF structure 1h > 15m (primary): stage INVALIDATED. A 1h close 19525.75 below the 1h protected low 19575.25: the 1h structure, UP until now, is broken. 1h structure: none until the next 1h break. Setup cancelled. Entry: none. Above: 4h structure DOWN (its break record; the Bias line reads the 4h up), not broken, 4h protected high 19746.75 holds on 4h closes; the 1h pullback UP against it is over.\n- MTF structure below: 15m > 3m (context): stage NONE. 15m structure DOWN, 15m protected high 19631.5 (the origin of the last 15m break) holds on 15m closes. No 3m pullback open (last: INVALIDATED, 09:45).\nThe primary line says INVALIDATED. What broke, and does the 4h structure break with it?",
+   "rule": "INVALIDATED: a parent close through the parent's protected swing, on that line only",
+   "anchor": "that line's parent structure is broken: setup cancelled",
+   "choices": [
+    "the 1h structure (a 1h close below its protected low); the 4h is not broken",
+    "the 4h structure; the 1h holds",
+    "both the 1h and the 4h structures",
+    "nothing: INVALIDATED is a warning only"
+   ],
+   "answer": "the 1h structure (a 1h close below its protected low); the 4h is not broken"
+  },
+  {
+   "id": "ms10",
+   "layer": "setup",
+   "prompt": "lookup",
+   "lookup": [
+    "bos-vs-choch"
+   ],
+   "text": "Briefing lines (real, 2021-11-12 10:39 ET), flat:\n- Bias: short only (4h range, 1h down; long refused).\n- Market state (3m): rotation down: LH 19444.5 holds, no new low for 60 min; behavior failing (overlap 0.69, efficiency 0.13), 15m rotating; 4h range, 1h down (not aligned); class unclear.\n- MTF structure 1h > 15m (primary): stage NONE. 1h structure DOWN, 1h protected high 19444.5 (the origin of the last 1h break) holds on 1h closes. No 15m pullback open (last: INVALIDATED, 11-11 21:00). Entry: none. Above: 4h structure DOWN (its break record; the Bias line reads the 4h range), 4h protected high 19746.75 holds on 4h closes; the 1h pullback UP against it is over.\n- MTF structure below: 15m > 3m (context): stage ESTABLISHED. 15m structure DOWN, 15m protected high 19444.5 (the origin of the last 15m break) holds on 15m closes. 3m pullback UP: CHoCH up 09:57, BOS up 10:21; pullback high 19428.5.\nWhat does the below line (15m > 3m) say?",
+   "rule": "the below line is the 15m structure and a 3m pullback against it; read its stage off its own line",
+   "anchor": "copy it from its own line, never infer it",
+   "choices": [
+    "ESTABLISHED: a 3m pullback UP against the 15m down structure (CHoCH then BOS)",
+    "the 1h is pulling back up",
+    "the 15m structure is up",
+    "WEAKENING on the 3m"
+   ],
+   "answer": "ESTABLISHED: a 3m pullback UP against the 15m down structure (CHoCH then BOS)"
+  },
+  {
+   "id": "ms11",
+   "layer": "setup",
+   "prompt": "lookup",
+   "lookup": [
+    "bos-vs-choch"
+   ],
+   "text": "Briefing lines (real, 2022-05-16 09:42 ET), flat:\n- Bias: no side yet (15m range).\n- Market state (3m): range: the down leg's last break failed, LH 15688.75 holds, edges 15591-15705.25 (travel edge to edge); overlap 0.36, efficiency 0.01, 15m early; 4h range, 1h range (not aligned); class unclear.\n- MTF structure 1h > 15m (primary): stage DEVELOPING. 1h structure UP (its break record; the Bias line reads the 1h range: the side is the Bias line's), 1h protected low 15647.25 (the origin of the last 1h break) holds on 1h closes. 15m pullback DOWN: CHoCH down 09:30, no 15m BOS down yet (not established); pullback low 15584; depth breached (1.31); price has not turned back up. Track only. Entry: none. Above: 4h structure DOWN (its break record; the Bias line reads the 4h range), 4h protected high 15907 holds on 4h closes; the 1h is pulling back UP against it (1h CHoCH up 05-12 11:00, BOS up 05-12 20:00).\n- MTF structure below: 15m > 3m (context): stage ESTABLISHED. 15m structure UP, 15m protected low 15665.75 (the origin of the last 15m break) holds on 15m closes (15m CHoCH down at 15665.75: a warning, not a reversal). 3m pullback DOWN: CHoCH down 09:00, BOS down 09:12; pullback low 15591.\nWhich stage does the below line (15m > 3m) print, and which way does its 3m pullback run?",
+   "rule": "each line's stage is its own; never carried to another level",
+   "anchor": "never carry it to another level",
+   "choices": [
+    "ESTABLISHED; down",
+    "DEVELOPING; up",
+    "ESTABLISHED; up",
+    "NONE; none"
+   ],
+   "answer": "ESTABLISHED; down"
+  },
+  {
+   "id": "ms12",
+   "layer": "setup",
+   "prompt": "lookup",
+   "lookup": [
+    "bos-vs-choch"
+   ],
+   "text": "Briefing lines (real, 2022-11-09 09:45 ET), flat:\n- Bias: no side yet (15m down, declared short: no).\n- Market state (3m): in the down leg: LH 14302 holds; displacement up 1 bar ago, potential failed opening drive; overlap 0.85, efficiency 0.01, 15m early; 4h range, 1h range (not aligned); class unclear.\n- MTF structure 1h > 15m (primary): stage REVERSING. 1h structure UP (its break record; the Bias line reads the 1h range: the side is the Bias line's), 1h protected low 14256.5 (the origin of the last 1h break) holds on 1h closes (1h CHoCH down at 14325.25: a warning, not a reversal). 15m pullback DOWN: CHoCH down 11-08 22:15, BOS down 04:15; pullback low 14178.5; depth breached (1.35); its protected high 14350.75. 3m turned back UP with the 1h: CISD up 05:33, then BOS up 05:57. Entry: none: no side (4h and 1h not aligned). Above: 4h structure UP (its break record; the Bias line reads the 4h range), 4h protected low 13912.5 holds on 4h closes; the 1h is pulling back DOWN against it (1h CHoCH down 05:00).\n- MTF structure below: 15m > 3m (context): stage CONFIRMED REVERSAL. 15m structure DOWN, 15m protected high 14350.75 (the origin of the last 15m break) holds on 15m closes. The 3m pullback UP is over on the 3m: a 3m close 14265.5 below its protected low 14272.75 at 09:27; price back DOWN with the 15m.\nThe below line says CONFIRMED REVERSAL. What is over?",
+   "rule": "the level below reads its own pullback; CONFIRMED REVERSAL there is the 3m pullback over",
+   "anchor": "never carry it to another level",
+   "choices": [
+    "the 3m pullback UP against the 15m down structure, on the 3m",
+    "the 1h structure",
+    "the 15m pullback against the 1h",
+    "the 4h trend"
+   ],
+   "answer": "the 3m pullback UP against the 15m down structure, on the 3m"
+  },
+  {
+   "id": "ms13",
+   "layer": "setup",
+   "prompt": "lookup",
+   "lookup": [
+    "bos-vs-choch"
+   ],
+   "text": "Briefing lines (real, 2022-04-07 10:45 ET), flat:\n- Bias: short only (4h down, 1h range; long refused).\n- Market state (3m): transition down: HL 17815.75 broken by a displaced close 3 min ago, new protected high 17911.25, the new leg unconfirmed; behavior rotating (overlap 0.67, efficiency 0.27), 15m trending down; 4h down, 1h range (not aligned); class unclear.\n- MTF structure 1h > 15m (primary): stage CONFIRMED REVERSAL. 1h structure DOWN (its break record; the Bias line reads the 1h range: the side is the Bias line's), 1h protected high 18196.75 (the origin of the last 1h break) holds on 1h closes. The 15m pullback UP is over on the 15m: a 15m close 17904.75 below its protected low 17909.5 at 07:30; price back DOWN with the 1h; the 1h impulse low 17748.5 not yet broken. Entry: none yet: conservative NOT ready (3m CHoCH up 09:33 seen; needs a 3m BOS down). Above: 4h structure DOWN, 4h protected high 18551.75 holds on 4h closes; the 1h is not pulling back against it.\n- MTF structure below: 15m > 3m (context): stage COMPLETED. 15m structure DOWN, 15m protected high 17961.75 (the origin of the last 15m break) holds on 15m closes. A 3m close 17802.75 below the 15m impulse low 17805: the 15m down trend continued; this pullback is finished.\nThe below line says COMPLETED. What does that tell you about the primary?",
+   "rule": "each line's stage is computed for its own level",
+   "anchor": "copy it from its own line, never infer it",
+   "choices": [
+    "nothing by itself: the primary prints its own stage (here CONFIRMED REVERSAL)",
+    "the primary pullback is completed too",
+    "the 1h trend continued",
+    "an entry is ready"
+   ],
+   "answer": "nothing by itself: the primary prints its own stage (here CONFIRMED REVERSAL)"
+  },
+  {
+   "id": "ms14",
+   "layer": "setup",
+   "prompt": "lookup",
+   "lookup": [
+    "bos-vs-choch"
+   ],
+   "text": "Briefing lines (real, 2022-11-03 11:00 ET):\n- Bias: short only (4h down, 1h down; long refused).\n- Market state (3m): in the up leg: HL 10780.25 holds, BOS up 12 min ago (displaced), reversal confirmed; displacement down 2 bars ago; overlap 0.54, efficiency 0.09, 15m trending up; 4h+1h down; class unclear.\n- MTF structure 1h > 15m (primary): stage DEVELOPING. 1h structure DOWN, 1h protected high 10996 (the origin of the last 1h break) holds on 1h closes. 15m pullback UP: CHoCH up 11:00, no 15m BOS up yet (not established); pullback high 10882.5; depth moderate (0.61); price has not turned back down. Track only. Entry: none. Above: 4h structure DOWN, 4h protected high 11390 holds on 4h closes; the 1h is not pulling back against it.\n- MTF structure below: 15m > 3m (context): stage INVALIDATED. A 15m close 10867 above the 15m protected high 10859: the 15m structure, DOWN until now, is broken. 15m structure: none until the next 15m break.\nThe below line says INVALIDATED. What is the 15m structure now, and is the 1h structure broken by it?",
+   "rule": "INVALIDATED on the below line breaks the 15m structure only",
+   "anchor": "only `INVALIDATED` is, on its own line only",
+   "choices": [
+    "none until the next 15m break; the 1h is not broken by it",
+    "up; the 1h is broken too",
+    "down; nothing changed",
+    "none; the 1h is broken"
+   ],
+   "answer": "none until the next 15m break; the 1h is not broken by it"
+  },
+  {
+   "id": "ms15",
+   "layer": "bias",
+   "prompt": "lookup",
+   "lookup": [
+    "bos-vs-choch"
+   ],
+   "text": "Briefing lines (real, 2022-05-16 09:42 ET), flat:\n- Bias: no side yet (15m range).\n- Market state (3m): range: the down leg's last break failed, LH 15688.75 holds, edges 15591-15705.25 (travel edge to edge); overlap 0.36, efficiency 0.01, 15m early; 4h range, 1h range (not aligned); class unclear.\n- MTF structure 1h > 15m (primary): stage DEVELOPING. 1h structure UP (its break record; the Bias line reads the 1h range: the side is the Bias line's), 1h protected low 15647.25 (the origin of the last 1h break) holds on 1h closes. 15m pullback DOWN: CHoCH down 09:30, no 15m BOS down yet (not established); pullback low 15584; depth breached (1.31); price has not turned back up. Track only. Entry: none. Above: 4h structure DOWN (its break record; the Bias line reads the 4h range), 4h protected high 15907 holds on 4h closes; the 1h is pulling back UP against it (1h CHoCH up 05-12 11:00, BOS up 05-12 20:00).\n- MTF structure below: 15m > 3m (context): stage ESTABLISHED. 15m structure UP, 15m protected low 15665.75 (the origin of the last 15m break) holds on 15m closes (15m CHoCH down at 15665.75: a warning, not a reversal). 3m pullback DOWN: CHoCH down 09:00, BOS down 09:12; pullback low 15591.\nFrom the Above clause: which way is the 1h pulling back, and is the 4h structure broken?",
+   "rule": "the Above clause names the 4h structure and whether the 1h pulls back against it; no stage word",
+   "anchor": "the 4h structure and whether the 1h is pulling back against it",
+   "choices": [
+    "up, against the 4h down; the 4h is not broken",
+    "down, with the 4h; the 4h is broken",
+    "up; the 4h is broken",
+    "it is not pulling back"
+   ],
+   "answer": "up, against the 4h down; the 4h is not broken"
+  },
+  {
+   "id": "ms16",
+   "layer": "setup",
+   "prompt": "lookup",
+   "lookup": [
+    "bos-vs-choch"
+   ],
+   "text": "Briefing lines (real, 2021-12-21 09:45 ET), flat:\n- Bias: short only (4h down, 1h range; long refused).\n- Market state (3m): forming (no RTH structure yet); 4h down, 1h range (not aligned); class unclear.\n- MTF structure 1h > 15m (primary): stage ESTABLISHED. 1h structure UP (its break record; the Bias line reads the 1h range: the side is the Bias line's), 1h protected low 18843 (the origin of the last 1h break) holds on 1h closes. 15m pullback DOWN: CHoCH down 08:15, BOS down 09:30; pullback low 19058.75; depth moderate (0.36); its protected high 19157.75. 3m: price has not turned back up (no 3m CHoCH or CISD up yet). Entry: none yet. Above: 4h structure DOWN, 4h protected high 19808 holds on 4h closes; the 1h is pulling back UP against it (1h CHoCH up 12-20 17:00).\n- MTF structure below: 15m > 3m (context): stage NONE. 15m structure DOWN, 15m protected high 19157.75 (the origin of the last 15m break) holds on 15m closes. No 3m pullback open (last: COMPLETED, 09:18).\nWhich way does the 15m pullback run here?",
+   "rule": "the pullback runs against the parent",
+   "anchor": "the pullback runs AGAINST the parent",
+   "choices": [
+    "down, against the 1h up structure",
+    "up, with the 1h",
+    "down, with the 1h",
+    "there is no pullback"
+   ],
+   "answer": "down, against the 1h up structure"
+  },
+  {
+   "id": "ms17",
+   "layer": "setup",
+   "prompt": "lookup",
+   "lookup": [
+    "bos-vs-choch"
+   ],
+   "text": "Briefing lines (real, 2021-11-17 10:21 ET), flat:\n- Bias: long only (4h up, 1h range; short refused).\n- Market state (3m): range: the down leg's last break failed, LH 19676.75 holds, edges 19625-19682 (travel edge to edge); overlap 0.61, efficiency 0.09, 15m overlapping; 4h up, 1h range (not aligned); class unclear.\n- MTF structure 1h > 15m (primary): stage WEAKENING. 1h structure UP (its break record; the Bias line reads the 1h range: the side is the Bias line's), 1h protected low 19628.25 (the origin of the last 1h break) holds on 1h closes. 15m pullback DOWN: CHoCH down 08:15, BOS down 10:00; pullback low 19625; depth breached (1.05); its protected high 19677.5. 3m turning back UP with the 1h: CISD up 10:12. Entry: aggressive ready LONG since 10:12 (3 bars), structural stop 19624.75; balanced NOT ready (needs a 3m BOS up). Above: 4h structure UP, 4h protected low 19437.25 holds on 4h closes; the 1h is not pulling back against it.\n- MTF structure below: 15m > 3m (context): stage NONE. 15m structure DOWN, 15m protected high 19677.5 (the origin of the last 15m break) holds on 15m closes. No 3m pullback open (last: the 15m turned, 10:00).\nAt this WEAKENING, which way is price turning?",
+   "rule": "price has turned back with the parent only at WEAKENING, REVERSING, CONFIRMED REVERSAL",
+   "anchor": "Price has turned back WITH the parent only at `WEAKENING`, `REVERSING`, `CONFIRMED REVERSAL`",
+   "choices": [
+    "back up, with the 1h",
+    "down, against the 1h",
+    "sideways: no turn",
+    "down, with the 15m pullback"
+   ],
+   "answer": "back up, with the 1h"
+  },
+  {
+   "id": "ms18",
+   "layer": "setup",
+   "prompt": "lookup",
+   "lookup": [
+    "bos-vs-choch"
+   ],
+   "text": "Briefing lines (real, 2021-08-24 09:48 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): range: the down leg's last break failed, LH 18699.75 holds, edges 18659-18699.75 (travel edge to edge); overlap 0.76, efficiency 0.07, 15m early; 4h+1h up; class trend-up.\n- MTF structure 1h > 15m (primary): stage WEAKENING. 1h structure UP, 1h protected low 18668.25 (the origin of the last 1h break) holds on 1h closes. 15m pullback DOWN: CHoCH down 05:45, BOS down 07:30; pullback low 18655.5; depth breached (1.21); its protected high 18703. 3m turning back UP with the 1h: CISD up 08:57. Entry: aggressive ready LONG since 08:57 (17 bars), structural stop 18655.25; balanced NOT ready (needs a 3m BOS up). Above: 4h structure UP, 4h protected low 18197 holds on 4h closes; the 1h is not pulling back against it.\n- MTF structure below: 15m > 3m (context): stage NONE. 15m structure DOWN, 15m protected high 18703 (the origin of the last 15m break) holds on 15m closes. No 3m pullback open (last: ended before ESTABLISHED, 09:33).\nIs WEAKENING a reversal of the 1h structure?",
+   "rule": "no stage but INVALIDATED is a reversal of the parent",
+   "anchor": "None is a reversal of the parent",
+   "choices": [
+    "no: it is the first 3m sign back with the 1h; only INVALIDATED breaks the 1h",
+    "yes: the 1h has reversed",
+    "yes, once the balanced model is ready",
+    "only if the 4h agrees"
+   ],
+   "answer": "no: it is the first 3m sign back with the 1h; only INVALIDATED breaks the 1h"
+  },
+  {
+   "id": "ms19",
+   "layer": "setup",
+   "prompt": "lookup",
+   "lookup": [
+    "bos-vs-choch"
+   ],
+   "text": "Briefing lines (real, 2021-09-17 09:42 ET), flat:\n- Bias: long only (4h range, 1h up; short refused).\n- Market state (3m): trend down: LH 18861.5 holds; overlap 0.56, efficiency 0.4, 15m early; 4h range, 1h up (not aligned); class unclear.\n- MTF structure 1h > 15m (primary): stage ESTABLISHED. 1h structure UP, 1h protected low 18713.75 (the origin of the last 1h break) holds on 1h closes. 15m pullback DOWN: CHoCH down 03:15, BOS down 05:15; pullback low 18763; depth moderate (0.72); its protected high 18864.25. 3m: the turn up failed (a 3m close below the pullback low 18815 at 09:36: reset); price has not turned back up. Early weakening: a 15m close above the minor high 18841.75. Entry: none yet. Above: 4h structure DOWN (its break record; the Bias line reads the 4h range), 4h protected high 18912.5 holds on 4h closes; the 1h is pulling back UP against it (1h CHoCH up 09-16 16:00).\n- MTF structure below: 15m > 3m (context): stage NONE. 15m structure DOWN, 15m protected high 18864.25 (the origin of the last 15m break) holds on 15m closes (15m CHoCH up at 18841.75: a warning, not a reversal). No 3m pullback open (last: COMPLETED, 09:36).\nWhat did the 3m reset mean here?",
+   "rule": "reset: a 3m close beyond the pullback extreme after WEAKENING or REVERSING returns to ESTABLISHED",
+   "anchor": "the 3m turn is void",
+   "choices": [
+    "a 3m close below the pullback low after the turn: back to ESTABLISHED, the 3m turn void",
+    "the 1h structure broke",
+    "the 15m pullback is over",
+    "an entry became ready"
+   ],
+   "answer": "a 3m close below the pullback low after the turn: back to ESTABLISHED, the 3m turn void"
+  },
+  {
+   "id": "ms20",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "bos-vs-choch"
+   ],
+   "text": "Briefing lines (real, 2022-01-18 11:06 ET), flat:\n- Bias: short only (4h down, 1h down; long refused).\n- Market state (3m): trend down: LH 18738 holds, BOS down 9 min ago; overlap 0.6, efficiency 0.17, 15m overlapping; 4h+1h down; class trend-down.\n- MTF structure 1h > 15m (primary): stage REVERSING. 1h structure DOWN, 1h protected high 18811 (the origin of the last 1h break) holds on 1h closes. 15m pullback UP: CHoCH up 07:30, BOS up 10:15; pullback high 18785.75; depth deep (0.87); its protected low 18622.75. 3m turned back DOWN with the 1h: CHoCH down 10:33, then BOS down 10:57. Entry: balanced ready SHORT since 10:57 (3 bars), structural stop 18738.25 (aggressive structural stop 18776). Above: 4h structure UP (its break record; the Bias line reads the 4h down), 4h protected low 18503.5 holds on 4h closes; the 1h is pulling back DOWN against it (1h CHoCH down 01-17 23:00, BOS down 04:00).\n- MTF structure below: 15m > 3m (context): stage ESTABLISHED. 15m structure UP, 15m protected low 18622.75 (the origin of the last 15m break) holds on 15m closes. 3m pullback DOWN: CHoCH down 10:33, BOS down 10:57; pullback low 18648.\nWhat does the Entry clause name, and what is its structural stop?",
+   "rule": "ready names the model, since when, and the structural stop: a fact; the order's stop is the STOP line's",
+   "anchor": "an order's stop is the STOP line's",
+   "choices": [
+    "balanced SHORT, structural stop 18738.25 (a structure fact; an order's stop is the STOP line's)",
+    "aggressive SHORT, stop 18776",
+    "conservative SHORT, stop 18811",
+    "none"
+   ],
+   "answer": "balanced SHORT, structural stop 18738.25 (a structure fact; an order's stop is the STOP line's)"
+  },
+  {
+   "id": "ms21",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "bos-vs-choch"
+   ],
+   "text": "Briefing lines (real, 2022-05-03 10:36 ET), flat:\n- Bias: long only (4h range, 1h up; short refused).\n- Market state (3m): in the up leg: HL 16322.25 holds; displacement down 4 bars ago, no new high for 30 min; overlap 0.67, efficiency 0.1, 15m rotating; 4h range, 1h up (not aligned); class unclear.\n- MTF structure 1h > 15m (primary): stage DEVELOPING. 1h structure DOWN (its break record; the Bias line reads the 1h up: the side is the Bias line's), 1h protected high 16483.75 (the origin of the last 1h break) holds on 1h closes. 15m pullback UP: CHoCH up 08:45, no 15m BOS up yet (not established); pullback high 16506; depth breached (1.17); price has not turned back down. Track only. Entry: none. Above: 4h structure: none (its protected swing broke).\n- MTF structure below: 15m > 3m (context): stage NONE. 15m structure UP, 15m protected low 16356 (the origin of the last 15m break) holds on 15m closes. No 3m pullback open (last: ended before ESTABLISHED, 09:57).\nThe 1h break record says DOWN while the Bias line says long only. Whose side is it?",
+   "rule": "the side is the Bias line's; the 1h structure is the break record",
+   "anchor": "the side is the Bias line's",
+   "choices": [
+    "the Bias line's (long only); the MTF line is context",
+    "the 1h structure's (short)",
+    "neither: no side",
+    "both sides are open"
+   ],
+   "answer": "the Bias line's (long only); the MTF line is context"
+  },
+  {
+   "id": "ms22",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "bos-vs-choch"
+   ],
+   "text": "Briefing lines (real, 2022-07-21 10:36 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): trend down: LH 15798.75 holds, BOS down 9 min ago (displaced); overlap 0.71, efficiency 0.16, 15m trending down; 4h+1h up; class unclear.\n- MTF structure 1h > 15m (primary): stage DEVELOPING. 1h structure UP, 1h protected low 15729.25 (the origin of the last 1h break) not broken on a 1h close; WARNING: a 15m close 15720.25 below it at 10:30 (the 1h close decides). 15m pullback DOWN: CHoCH down 10:15, no 15m BOS down yet (not established); pullback low 15697.75; depth breached (1.2); price has not turned back up. Track only. Entry: none. Above: 4h structure UP, 4h protected low 15560 holds on 4h closes; the 1h is not pulling back against it.\n- MTF structure below: 15m > 3m (context): stage NONE. 15m structure DOWN, 15m protected high 15884.75 (the origin of the last 15m break) holds on 15m closes. No 3m pullback open (last: INVALIDATED, 10:15).\nA 15m close is through the 1h protected low but the 1h has not closed through it. Is the 1h structure broken, and is an entry ready?",
+   "rule": "the warning: a lower-frame close through the parent's protected swing withholds the entry; the parent close decides",
+   "anchor": "a warning, the stop already traded",
+   "choices": [
+    "not broken (the 1h close decides); no entry ready",
+    "broken; no entry",
+    "not broken; the aggressive entry is ready",
+    "broken; a short is ready"
+   ],
+   "answer": "not broken (the 1h close decides); no entry ready"
+  },
+  {
+   "id": "ms23",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "bos-vs-choch"
+   ],
+   "text": "Briefing lines (real, 2022-12-05 11:00 ET), flat:\n- Bias: no side yet (15m range).\n- Market state (3m): trend up: HL 15111.5 holds, CHoCH up 18 min ago (displaced); overlap 0.61, efficiency 0.21, 15m overlapping; 4h range, 1h range (not aligned); class unclear.\n- MTF structure 1h > 15m (primary): stage CONFIRMED REVERSAL. 1h structure DOWN (its break record; the Bias line reads the 1h range: the side is the Bias line's), 1h protected high 15248.25 (the origin of the last 1h break) holds on 1h closes. The 15m pullback UP is over on the 15m: a 15m close 15207 below its protected low 15211 at 07:45; price back DOWN with the 1h; the 1h impulse low 14990.25 not yet broken. Entry: none: no side (4h and 1h not aligned). Above: 4h structure DOWN (its break record; the Bias line reads the 4h range), 4h protected high 15348.75 holds on 4h closes; the 1h is not pulling back against it.\n- MTF structure below: 15m > 3m (context): stage DEVELOPING. 15m structure DOWN, 15m protected high 15248.25 (the origin of the last 15m break) holds on 15m closes. 3m pullback UP: CHoCH up 10:42, no 3m BOS up yet (not established); pullback high 15182.25; price has not turned back down.\nIs an entry ready on this primary line?",
+   "rule": "Entry: none: <why> is context only",
+   "anchor": "`Entry: none: <why>` -> context only",
+   "choices": [
+    "no: Entry: none",
+    "yes, conservative short",
+    "yes, balanced short",
+    "yes, aggressive short"
+   ],
+   "answer": "no: Entry: none"
+  },
+  {
+   "id": "ms24",
+   "layer": "setup",
+   "prompt": "lookup",
+   "lookup": [
+    "bos-vs-choch"
+   ],
+   "text": "Briefing lines (real, 2021-12-21 09:45 ET), flat:\n- Bias: short only (4h down, 1h range; long refused).\n- Market state (3m): forming (no RTH structure yet); 4h down, 1h range (not aligned); class unclear.\n- MTF structure 1h > 15m (primary): stage ESTABLISHED. 1h structure UP (its break record; the Bias line reads the 1h range: the side is the Bias line's), 1h protected low 18843 (the origin of the last 1h break) holds on 1h closes. 15m pullback DOWN: CHoCH down 08:15, BOS down 09:30; pullback low 19058.75; depth moderate (0.36); its protected high 19157.75. 3m: price has not turned back up (no 3m CHoCH or CISD up yet). Entry: none yet. Above: 4h structure DOWN, 4h protected high 19808 holds on 4h closes; the 1h is pulling back UP against it (1h CHoCH up 12-20 17:00).\n- MTF structure below: 15m > 3m (context): stage NONE. 15m structure DOWN, 15m protected high 19157.75 (the origin of the last 15m break) holds on 15m closes. No 3m pullback open (last: COMPLETED, 09:18).\nThe primary line says ESTABLISHED. Is the 1h more likely to resume up than to break?",
+   "rule": "no stage predicts the outcome",
+   "anchor": "No stage predicts the outcome",
+   "choices": [
+    "the line does not say: a stage is where the structure is, not where it goes",
+    "yes, resume is more likely",
+    "no, a break is more likely",
+    "yes, about 70% of the time"
+   ],
+   "answer": "the line does not say: a stage is where the structure is, not where it goes"
+  },
+  {
+   "id": "ms25",
+   "layer": "levels",
+   "prompt": "lookup",
+   "lookup": [
+    "bos-vs-choch"
+   ],
+   "text": "Briefing lines (real, 2021-08-04):\nAt 08:03 ET:\n- Bias: long only (4h range, 1h up; short refused).\n- MTF structure 1h > 15m (primary): stage WEAKENING. 1h structure UP, 1h protected low 18195 (the origin of the last 1h break) holds on 1h closes (1h CHoCH down at 18386.5: a warning, not a reversal). 15m pullback DOWN: CHoCH down 04:00, BOS down 07:45; pullback low 18375.75; depth shallow (0.2); its protected high 18409. 3m turning back UP with the 1h: CISD up 07:54. Entry: none: the aggressive structural stop 18379 traded through at 08:03. Above: 4h structure UP (its break record; the Bias line reads the 4h range), 4h protected low 18195 holds on 4h closes; the 1h is pulling back DOWN against it (1h CHoCH down 08:00).\nAt 10:03 ET:\n- MTF structure 1h > 15m (primary): stage WEAKENING. 1h structure UP, 1h protected low 18195 (the origin of the last 1h break) holds on 1h closes (1h CHoCH down at 18386.5: a warning, not a reversal). 15m pullback DOWN: CHoCH down 04:00, BOS down 07:45; pullback low 18361.75; depth shallow (0.26); its protected high 18409. 3m turning back UP with the 1h: CHoCH up 09:27. Entry: none: the aggressive structural stop 18367.25 traded through at 09:54. Above: 4h structure UP (its break record; the Bias line reads the 4h range), 4h protected low 18195 holds on 4h closes; the 1h is pulling back DOWN against it (1h CHoCH down 08:00).\nAt 13:03 ET:\n- MTF structure 1h > 15m (primary): stage CONFIRMED REVERSAL. 1h structure UP, 1h protected low 18195 (the origin of the last 1h break) holds on 1h closes. The 15m pullback DOWN is over on the 15m: a 15m close 18410.75 above its protected high 18409 at 13:00; price back UP with the 1h; the 1h impulse high 18419.75 not yet broken. Entry: none yet: conservative NOT ready (needs a 3m CHoCH down, then a 3m BOS up). Above: 4h structure UP (its break record; the Bias line reads the 4h range), 4h protected low 18195 holds on 4h closes; the 1h is pulling back DOWN against it (1h CHoCH down 08:00).\nThe 1h closes after the CHoCH: 10:00 close 18402.5 (above 18386.5, below 18409); 13:00 close 18410.75 (above 18409).\nWhen did the 1h CHoCH down at 18386.5 fail?",
+   "rule": "a CHoCH fails only on a close through its own protected swing; a close back through the broken level is a warning; a wick is not a failure",
+   "anchor": "a CHoCH holds until the low (high) that started the shift breaks. Only a close through it counts; a wick is not.",
+   "choices": [
+    "at 13:00, on the 1h close 18410.75 above its protected high 18409",
+    "at 10:00, on the 1h close 18402.5 back above 18386.5",
+    "at 08:03, when the aggressive structural stop traded",
+    "it has not failed"
+   ],
+   "answer": "at 13:00, on the 1h close 18410.75 above its protected high 18409"
+  }
+ ]
+}
