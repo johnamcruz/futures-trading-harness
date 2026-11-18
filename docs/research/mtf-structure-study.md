@@ -25,14 +25,16 @@ protected), averaged over the resolved events).
 | one stage word per line, two lines on every bar | 0 violations | 0 |
 | the record on the runner's window (10280 3m bars) equals the full pass | >= 99.5% of in-window bars; every differing bar partial | 100% (20200 of 20200); 0 differ without partial |
 | the independent oracle agrees with the module on every in-window bar (stage, the parent's way, the impulse extreme, the pullback's protected swing, the entry model) | every difference ruled on by the reviewer | 0 differences on 20200 bars x 3 levels |
-| SPEC v3: the printed `Above:` clause's 1h pullback way equals `aboveRelation(above, primary)`, at the configured budgets and at every cut | 0 violations | 0 on 20200 bars x 11 variants (NONE 14055, DOWN 3059, UP 3086) |
-| SPEC v3: each level with a structure prints its `pullback against the <parent>:` phrase exactly once, none without one (the printed lines) | 0 violations | 0 |
-| SPEC v3: the `Above:` clause recomputed from the oracle's own values (the 1h>15m parent way when it differs from the 4h>1h parent way; NONE when the primary is INVALIDATED or either has none) against the printed clause | 0 differences | 0 on 20200 bars; the v2 definition planted (the 4h level's own stage) shows 3042 |
+| SPEC v4: no `Above:` clause or 4h structure on either line, at the configured budgets and at every cut | 0 violations | 0 on 20200 bars x 10 variants |
+| SPEC v4: the primary prints `15m pullback against the 1h:` exactly once when the level has a 1h structure, none without one | 0 violations | 0 |
+| SPEC v4: the below line prints its named phrase `below 15m > 3m: 3m pullback against the 15m:` exactly once when the level has a 15m structure, none without one; the short form prints it whenever the level is not partial | 0 violations | 0; no bare `3m pullback against the 15m` on any variant |
+| SPEC v4, record only: `aboveRelation` (exported for scorers, not printed) against the oracle's own values (the 1h>15m parent way when it differs from the 4h>1h parent way; NONE when the primary is INVALIDATED or either has none) | 0 differences | 0 on 20200 bars (NONE 14055, DOWN 3059, UP 3086); the v2 definition planted (the 4h level's own stage) shows 3042 |
 
-The v3 rows were re-run on the v3 wording (the module's logic is unchanged; every other hard row was re-run and is
-unchanged). Forced to its shortest form (a cut no tune bar reaches at the budgets), the below line of a level with no 15m
-structure reads `15m structure none; 3m pullback against the 15m: NONE`: the phrase with NONE, on 6678 of the 222200
-checked variants.
+SPEC v4 prints no `Above:` clause (the 4h is the Bias line's), and the below line names its frame in its pullback
+phrase. The module's logic is unchanged: every other hard row was re-run and is unchanged, and v3's clause rows became
+the record-only row above. Forced to its shortest form (a cut no tune bar reaches at the budgets), the below line of a
+level with no 15m structure reads `15m structure none; below 15m > 3m: 3m pullback against the 15m: NONE` (SPEC's short
+form), on 5936 of the 202000 checked variants.
 
 ## Reported rows (tune; no pass or fail)
 
@@ -143,8 +145,8 @@ Instances (all hours):
 | 15m>3m | 4695 | 2113 | 743 (35.2%) | - | - / - | - / - | 321 | 0 | 0 / 0 |
 
 The 1h structure agrees with the entry rule's side on 76.7% of the sided in-window bars (12658 of 16510).
-Line bytes (the SPEC v3 wording): the primary at most 769, both lines at most 1153, 711 on average; cut on 0 bars at the
-configured budgets (807 and 1211). With the v2 wording they were 696, 1086 and 653.
+Line bytes (the SPEC v4 wording): the primary at most 622, both lines at most 1022, 584 on average; cut on 0 bars at the
+configured budgets (654 and 1074). With the v3 wording they were 769, 1153 and 711; with the v2 wording 696, 1086 and 653.
 
 ## The finding on the base rates
 
