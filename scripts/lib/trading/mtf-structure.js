@@ -555,7 +555,7 @@ const highLow = w => (w === 'up' ? 'high' : 'low');
 const belowAbove = w => (w === 'up' ? 'below' : 'above');
 const aboveBelow = w => (w === 'up' ? 'above' : 'below');
 /** The cut order (spec 4.3): cut level n leaves out the first n. Context goes first. */
-const CUTS = Object.freeze(['belowShort', 'aboveShort', 'origin', 'depth', 'last', 'early', 'protected', 'parentChoch', 'notReady']);
+const CUTS = Object.freeze(['belowShort', 'origin', 'depth', 'last', 'early', 'protected', 'parentChoch', 'notReady']);
 const cutOut = (cut, name) => CUTS.indexOf(name) < cut;
 const LAST_WORDS = { 'timing only': (S, T) => `a ${T}-only move, no ${S} break`, 'ended before established': () => 'ended before ESTABLISHED', completed: () => 'COMPLETED', invalidated: () => 'INVALIDATED', superseded: () => 'superseded by a new pullback', 'parent turned': (S, T, P) => `the ${P} turned` };
 
@@ -570,8 +570,18 @@ function headOf(lv, cut, L) {
   return `${P} structure ${UPW(w)}${differ}, ${P} protected ${lowHigh(w)} ${L(p.protected.level)}${origin} ${status}${ch}`;
 }
 
+/**
+ * A level's pullback phrase. The below line names its own frame in it (SPEC v4, the coordinator's addition): the model
+ * copied the primary's pullback word into the below line's answer when the two differ.
+ */
+const pbPhrase = (lv, primary) => {
+  const { parent: P, setup: S } = lv.frames;
+  return `${primary ? '' : `below ${P} > ${S}: `}${S} pullback against the ${P}`;
+};
+
 function bodyOf(lv, cut, L, primary, sideText) {
   const { parent: P, setup: S, timing: T } = lv.frames;
+  const PB = pbPhrase(lv, primary);
   const E = s => (primary ? ` Entry: ${s}.` : '');
   if (lv.partial) return `stage NONE. Not enough ${P} history.${E('none')}`;
   const i = lv.instance;
@@ -593,15 +603,15 @@ function bodyOf(lv, cut, L, primary, sideText) {
   const against = lv.setupAgainst ? `${S} last break: ${lv.setupAgainst.kind} ${lv.setupAgainst.direction}, against the ${P}; no CHoCH inside this structure` : null;
   if (lv.stage === 'NONE' || !i) {
     const parts = [...lastText(), ...(against ? [against] : [])];
-    return `stage NONE. ${head}. ${S} pullback against the ${P}: NONE${parts.length ? ` (${parts.join('; ')})` : ''}.${E('none')}`;
+    return `stage NONE. ${head}. ${PB}: NONE${parts.length ? ` (${parts.join('; ')})` : ''}.${E('none')}`;
   }
-  if (lv.stage === 'COMPLETED') return `stage COMPLETED. ${head}. ${S} pullback against the ${P}: NONE now (the last one, ${UPW(opp(w))}, is finished: a ${S} close ${L(i.closed.close)} ${aboveBelow(w)} the ${P} impulse ${highLow(w)} ${L(i.impulseExtreme)}; the ${P} ${w} trend continued).${E('none')}`;
+  if (lv.stage === 'COMPLETED') return `stage COMPLETED. ${head}. ${PB}: NONE now (the last one, ${UPW(opp(w))}, is finished: a ${S} close ${L(i.closed.close)} ${aboveBelow(w)} the ${P} impulse ${highLow(w)} ${L(i.impulseExtreme)}; the ${P} ${w} trend continued).${E('none')}`;
   if (lv.stage === 'POTENTIAL') {
     const no = against ? `no ${S} CHoCH ${opp(w)} yet (${against})` : `no ${S} break ${opp(w)} yet`;
-    return `stage POTENTIAL. ${head}. ${S} pullback against the ${P}: NONE yet (only a ${T} CHoCH ${opp(w)} ${i.potential.et} against the ${P}; ${no}).${primary ? ' Monitor only.' : ''}${E('none')}`;
+    return `stage POTENTIAL. ${head}. ${PB}: NONE yet (only a ${T} CHoCH ${opp(w)} ${i.potential.et} against the ${P}; ${no}).${primary ? ' Monitor only.' : ''}${E('none')}`;
   }
   const depth = primary && i.depth !== null && !cutOut(cut, 'depth') ? `; depth ${i.depthClass} (${i.depth})` : '';
-  const pb = `${S} pullback against the ${P}: ${UPW(opp(w))} (${S} CHoCH ${opp(w)} ${i.developing.et}`;
+  const pb = `${PB}: ${UPW(opp(w))} (${S} CHoCH ${opp(w)} ${i.developing.et}`;
   if (lv.stage === 'DEVELOPING') return `stage DEVELOPING. ${head}. ${pb}, no ${S} BOS ${opp(w)} yet: not established); pullback ${lowHigh(w)} ${L(i.extreme)}${depth}; price has not turned back ${w}.${primary ? ' Track only.' : ''}${E('none')}`;
   const prot = primary && Number.isFinite(i.protected) && !cutOut(cut, 'protected') ? `; its protected ${highLow(w)} ${L(i.protected)}` : '';
   const est = `${pb}, BOS ${opp(w)} ${i.established.et}); pullback ${lowHigh(w)} ${L(i.extreme)}${depth}${prot}`;
@@ -645,49 +655,33 @@ function bodyOf(lv, cut, L, primary, sideText) {
         entry = E(sideNo || notYet);
       }
     }
-    return `stage CONFIRMED REVERSAL. ${head}. ${S} pullback against the ${P}: ${UPW(opp(w))}, now over on the ${S}: a ${S} close ${L(c.close)} ${aboveBelow(w)} its protected ${highLow(w)} ${L(c.level)} at ${c.et}; price back ${UPW(w)} with the ${P}${primary ? `; the ${P} impulse ${highLow(w)} ${L(i.impulseExtreme)} not yet broken` : ''}.${entry}`;
+    return `stage CONFIRMED REVERSAL. ${head}. ${PB}: ${UPW(opp(w))}, now over on the ${S}: a ${S} close ${L(c.close)} ${aboveBelow(w)} its protected ${highLow(w)} ${L(c.level)} at ${c.et}; price back ${UPW(w)} with the ${P}${primary ? `; the ${P} impulse ${highLow(w)} ${L(i.impulseExtreme)} not yet broken` : ''}.${entry}`;
   }
   return `stage ${lv.stage}. ${head}.${E('none')}`;
 }
 
-/** The short below line (cut 1): `stage <WORD>. 15m structure <WAY>; 3m pullback <WAY|none>.` */
+/** The short below line (cut 1): `stage <WORD>. 15m structure <WAY>; below 15m > 3m: 3m pullback against the 15m: <WAY|NONE>.` */
 function belowShort(lv) {
   const { parent: P, setup: S } = lv.frames;
   if (lv.partial) return `stage NONE. Not enough ${P} history.`;
   const way = lv.stage === 'INVALIDATED' ? 'none' : lv.parent ? UPW(lv.parent.way) : 'none';
   const pb = ['DEVELOPING', 'ESTABLISHED', 'WEAKENING', 'REVERSING'].includes(lv.stage) && lv.parent ? UPW(opp(lv.parent.way)) : 'none';
   const last = lv.stage === 'NONE' && lv.last && (lv.last.why === 'completed' || lv.last.why === 'invalidated') ? ` (last: ${LAST_WORDS[lv.last.why]()}, ${lv.last.et})` : '';
-  return `stage ${lv.stage}. ${P} structure ${way}; ${S} pullback against the ${P}: ${pb === 'none' ? 'NONE' : pb}${last}.`;
+  return `stage ${lv.stage}. ${P} structure ${way}; ${pbPhrase(lv, false)}: ${pb === 'none' ? 'NONE' : pb}${last}.`;
 }
 
 /**
- * The `Above:` clause (no stage word): the level above's parent structure, and the PRIMARY's own parent structure against
- * it. One definition of the 1h on the line (SPEC v3): the 1h is pulling back against the 4h exactly when the primary's
- * 1h structure (its break record, the clean CHoCH rule) runs against the 4h structure. A 1h CHoCH against the 1h
- * structure is the primary head's warning, never a 1h pullback here; the level above's own instance stays in the record.
+ * The level above against the primary, for scorers only (SPEC v4: no `Above:` clause is printed; the model reads the 4h
+ * from the Bias line). The 1h is pulling back against the 4h exactly when the primary's 1h structure (its break record,
+ * the clean CHoCH rule) runs against the 4h structure; the level above's own instance stays in the record.
  */
 function aboveRelation(lv, primary) {
   if (!lv || lv.partial || !lv.parent) return null;
   const pw = primary && !primary.partial && primary.stage !== 'INVALIDATED' && primary.parent ? primary.parent.way : null;
   return { way: lv.parent.way, setupWay: pw, pullback: pw && pw !== lv.parent.way ? pw : null };
 }
-function aboveClause(lv, primary, cut, L) {
-  if (!lv) return '';
-  const { parent: P, setup: S } = lv.frames;
-  if (lv.partial) return ` Above: ${P} structure: not enough history.`;
-  if (!lv.parent) return ` Above: ${P} structure: none (its protected swing broke); ${S} pullback against the ${P}: NONE.`;
-  const w = lv.parent.way;
-  const r = aboveRelation(lv, primary);
-  const pbw = r.pullback ? UPW(r.pullback) : 'NONE';
-  if (cutOut(cut, 'aboveShort')) return ` Above: ${P} structure ${UPW(w)}; ${S} pullback against the ${P}: ${pbw}.`;
-  const differ = lv.parent.differs ? ` (its break record; the Bias line reads the ${P} ${lv.parent.biasRead})` : '';
-  const nb = primary && primary.stage === 'INVALIDATED' ? ', not broken' : '';
-  const whyText = !r.setupWay ? `no ${S} structure${primary && primary.stage === 'INVALIDATED' ? ` until the next ${S} break` : ''}` : r.pullback ? `the ${S} structure is ${UPW(r.setupWay)}, against the ${P} ${UPW(w)}` : `the ${S} structure is ${UPW(r.setupWay)}, with the ${P}`;
-  return ` Above: ${P} structure ${UPW(w)}${differ}${nb}, ${P} protected ${lowHigh(w)} ${L(lv.parent.protected.level)} holds on ${P} closes; ${S} pullback against the ${P}: ${pbw} (${whyText}).`;
-}
-
 /**
- * The two summary lines (spec 4.2): the primary with its entry clause and the `Above:` clause, then `below:`. Over the
+ * The two summary lines (spec 4.2; v4: no `Above:` clause): the primary with its entry clause, then `below:`. Over the
  * budget (the primary over primaryBytes, or both over lineBytes) the parts are cut in CUTS order; never a line, a stage
  * word, a structure's way or protected swing, the Bias disagreement, the pullback's way, the WARNING, a ready entry with
  * its age and stop, the reason after `Entry: none:`, or `(last: COMPLETED|INVALIDATED ...)`.
@@ -696,13 +690,12 @@ function mtfLines(rec, { lineBytes = Infinity, primaryBytes = Infinity, level = 
   if (!isObj(rec) || !Array.isArray(rec.levels)) return [];
   const L = x => level(x);
   const primary = rec.levels.find(l => l.role === 'primary');
-  const above = rec.levels.find(l => l.role === 'above');
   const below = rec.levels.find(l => l.role === 'below');
   if (!primary || !below) return [];
   const sideText = rec.side || 'no';
   const sp = n => n.replace('>', ' > ');
   const build = cut => {
-    const one = `- MTF structure ${sp(primary.name)} (primary): ${bodyOf(primary, cut, L, true, sideText)}${aboveClause(above, primary, cut, L)}`;
+    const one = `- MTF structure ${sp(primary.name)} (primary): ${bodyOf(primary, cut, L, true, sideText)}`;
     const two = `- MTF structure below: ${sp(below.name)} (context): ${cutOut(cut, 'belowShort') ? belowShort(below) : bodyOf(below, cut, L, false, sideText)}`;
     return [one, two];
   };

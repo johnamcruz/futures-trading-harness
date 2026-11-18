@@ -60,7 +60,8 @@ test('briefing (real): the two lines sit directly under the Market state line, t
       const i = lines.findIndex(IS_MTF);
       assert.ok(i > 0, `${day} ${hm}: the lines`);
       assert.match(lines[i - 1], /^- Market state \(3m\): /, `${day} ${hm}`);
-      assert.match(lines[i], /^- MTF structure 1h > 15m \(primary\): stage [A-Z ]+\. .* Above: /);
+      assert.match(lines[i], /^- MTF structure 1h > 15m \(primary\): stage [A-Z ]+\. .* Entry: [^]*$/);
+      assert.doesNotMatch(lines[i], /Above:|4h structure/, `${day} ${hm}: no Above clause (SPEC v4)`);
       assert.match(lines[i + 1], /^- MTF structure below: 15m > 3m \(context\): stage [A-Z ]+\./);
       assert.equal(lines.filter(IS_MTF).length, 2);
       const rec = b.sections.m3.data.mtfStructure;

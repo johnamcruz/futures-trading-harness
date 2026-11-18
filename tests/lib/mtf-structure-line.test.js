@@ -1,9 +1,9 @@
 'use strict';
 
-// The two `MTF structure` lines (mtf-structure.js mtfLines), spec v2 section 4: every stage's line both ways, every
-// `Above:` form, every `Entry: none:` reason, the age forms, truthfulness (every price and time on a line is in the
-// record), no ready entry with a traded stop, the byte budget and the cut order step by step, one stage word per line and
-// always two lines.
+// The two `MTF structure` lines (mtf-structure.js mtfLines), spec v2 section 4: every stage's line both ways, no
+// `Above:` clause (SPEC v4), the below line's frame named in its pullback phrase, every `Entry: none:` reason, the age
+// forms, truthfulness (every price and time on a line is in the record), no ready entry with a traded stop, the byte
+// budget and the cut order step by step, one stage word per line and always two lines.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -80,7 +80,8 @@ test('every stage both ways: the mirrored world prints the same lines with up an
     seen.add(RA[j].levels[0].stage);
     seen.add(RA[j].levels[1].stage);
     const strip = s => s.replace(/\((0\.\d+|1)\)/g, '(D)').replace(/\d\d:\d\d/g, 'T').replace(/\(\d+ bars?\)/g, '(n)');
-    const hdr = s => s.replace(/^- MTF structure (below: )?[^:]*: /, '');
+    // the header and the below line's frame name (`below 15m > 3m: `) are names, not ways: not swapped
+    const hdr = s => s.replace(/^- MTF structure (below: )?[^:]*: /, '').replace(/below 15m > 3m: /g, '');
     assert.equal(strip(hdr(pm)), strip(swap(hdr(p))), `primary bar ${j}`);
     assert.equal(strip(hdr(bm)), strip(swap(hdr(b))), `below bar ${j}`);
   }
@@ -127,38 +128,58 @@ test('every Entry: none: reason, and the entry\'s ages (new this bar, n bars, 1 
   assert.match(one(rec), /stage ESTABLISHED\. .*15m pullback against the 1h: UP \(15m CHoCH up 03-06 22:30, BOS up 00:00\);/);
 });
 
-test('every Above: form (SPEC v3: the primary\'s own 1h structure against the 4h): with, against, not broken (the primary INVALIDATED), no 1h structure, none, not enough history, the short form, the Bias disagreement; the 4h level\'s own instance never changes it', () => {
+test('no Above: clause (SPEC v4): with a 4h level of any stage in the record, neither line prints the 4h structure or a 1h pullback against it; the lines equal the record without the level', () => {
   const base = clone(RA[A.at(25, 1)]);
-  const lv4 = patch => ({ name: '4h>1h', role: 'above', frames: { parent: '4h', setup: '1h', timing: '15m' }, partial: false, parent: { way: 'down', protected: { side: 'high', level: 14060.25 }, differs: false, biasRead: null }, stage: 'NONE', instance: null, ...patch });
-  const above = (patch, primary) => {
-    const r = clone(base);
-    if (primary) r.levels[0] = { ...r.levels[0], ...primary };
-    r.levels.unshift(lv4(patch));
-    return one(r).replace(/^.* Above: /, 'Above: ');
-  };
-  const up = { parent: { way: 'up', protected: { side: 'low', level: 11836.5 }, differs: false } };
-  // The primary's 1h structure is UP (the world's), so a 4h DOWN reads a 1h pullback UP, a 4h UP reads NONE.
-  assert.equal(base.levels[0].parent.way, 'up');
-  assert.equal(above(up), 'Above: 4h structure UP, 4h protected low 11836.5 holds on 4h closes; 1h pullback against the 4h: NONE (the 1h structure is UP, with the 4h).');
-  assert.equal(above({}), 'Above: 4h structure DOWN, 4h protected high 14060.25 holds on 4h closes; 1h pullback against the 4h: UP (the 1h structure is UP, against the 4h DOWN).');
-  // The 4h level's own stage and instance stay in the record and never print: the 2021-08-04 case (a 1h CHoCH against the
-  // 1h structure is the primary head's warning, not a 1h pullback).
+  const lv4 = patch => ({ name: '4h>1h', role: 'above', frames: { parent: '4h', setup: '1h', timing: '15m' }, partial: false, parent: { way: 'down', protected: { side: 'high', level: 14060.25 }, differs: true, biasRead: 'range' }, stage: 'NONE', instance: null, ...patch });
+  const without = M.mtfLines(base);
+  const FOURH = /Above:|4h structure|4h protected|against the 4h|\b1h pullback\b/;
   const dev = { developing: { et: '08:00' }, established: { et: '10:00' } };
-  for (const stage of ['POTENTIAL', 'DEVELOPING', 'ESTABLISHED', 'WEAKENING', 'REVERSING', 'CONFIRMED REVERSAL', 'COMPLETED']) {
-    assert.equal(above({ ...up, stage, instance: dev }), above(up), stage);
-    assert.equal(above({ stage, instance: dev }), above({}), stage);
+  const patches = [{}, { parent: { way: 'up', protected: { side: 'low', level: 11836.5 }, differs: false } }, { parent: null }, { partial: true }];
+  for (const stage of ['NONE', 'POTENTIAL', 'DEVELOPING', 'ESTABLISHED', 'WEAKENING', 'REVERSING', 'CONFIRMED REVERSAL', 'COMPLETED']) patches.push({ stage, instance: dev });
+  for (const patch of patches) {
+    for (let cut = 0; cut <= M.CUTS.length; cut += 1) {
+      const r = clone(base);
+      r.levels.unshift(lv4(patch));
+      const ls = M.mtfLines(r, { cut });
+      for (const l of ls) assert.doesNotMatch(l, FOURH, `${JSON.stringify(patch)} cut ${cut}: ${l}`);
+      assert.deepEqual(ls, M.mtfLines(base, { cut }), `${JSON.stringify(patch)} cut ${cut}`);
+    }
   }
-  const inv = { stage: 'INVALIDATED', invalidated: { close: 99, level: 100, way: 'up' } };
-  assert.equal(above({ parent: { way: 'down', protected: { side: 'high', level: 13781 }, differs: false } }, inv), 'Above: 4h structure DOWN, not broken, 4h protected high 13781 holds on 4h closes; 1h pullback against the 4h: NONE (no 1h structure until the next 1h break).');
-  assert.equal(above(up, { parent: null, stage: 'NONE' }), 'Above: 4h structure UP, 4h protected low 11836.5 holds on 4h closes; 1h pullback against the 4h: NONE (no 1h structure).');
-  assert.equal(above(up, { partial: true }), 'Above: 4h structure UP, 4h protected low 11836.5 holds on 4h closes; 1h pullback against the 4h: NONE (no 1h structure).');
-  assert.equal(above({ parent: null }), 'Above: 4h structure: none (its protected swing broke); 1h pullback against the 4h: NONE.');
-  assert.equal(above({ partial: true }), 'Above: 4h structure: not enough history.');
-  assert.equal(above({ parent: { way: 'down', protected: { side: 'high', level: 14060.25 }, differs: true, biasRead: 'range' } }), 'Above: 4h structure DOWN (its break record; the Bias line reads the 4h range), 4h protected high 14060.25 holds on 4h closes; 1h pullback against the 4h: UP (the 1h structure is UP, against the 4h DOWN).');
-  // The short form (cut aboveShort).
-  const short = (patch) => { const r = clone(base); r.levels.unshift(lv4(patch)); return M.mtfLines(r, { cut: M.CUTS.indexOf('aboveShort') + 1 })[0].replace(/^.* Above: /, 'Above: '); };
-  assert.equal(short(up), 'Above: 4h structure UP; 1h pullback against the 4h: NONE.');
-  assert.equal(short({}), 'Above: 4h structure DOWN; 1h pullback against the 4h: UP.');
+  assert.ok(without[0].endsWith('balanced NOT ready (needs a 3m BOS up).'), without[0]);
+  assert.ok(!M.CUTS.includes('aboveShort'));
+});
+
+test('the below line names its own frame in its pullback phrase (`below 15m > 3m: 3m pullback against the 15m: ...`), at every stage and the short form; the primary never does', () => {
+  const PHRASE = /below 15m > 3m: 3m pullback against the 15m: (UP|DOWN|NONE)/g;
+  const seen = new Set();
+  // The world's own below level, and its primary level re-framed as the below level (15m > 3m, no timing frame), so every
+  // stage reaches the below line.
+  const recs = [];
+  for (let j = 0; j < A.n; j += 1) {
+    if (!RA[j]) continue;
+    recs.push(RA[j]);
+    const r = clone(RA[j]);
+    r.levels[1] = { ...clone(r.levels[0]), name: '15m>3m', role: 'below', frames: { parent: '15m', setup: '3m', timing: null }, entry: null };
+    recs.push(r);
+  }
+  for (const [j, rec] of recs.entries()) {
+    const b = rec.levels[1];
+    for (const cut of [0, 1]) {
+      const [p, l] = M.mtfLines(rec, { cut });
+      assert.doesNotMatch(p, /below 15m > 3m:/, `bar ${j}: ${p}`);
+      // the long line prints the phrase when the level has a 15m structure; the short line always (SPEC's short form)
+      const has = !b.partial && (cut === 1 || (!!b.parent && b.stage !== 'INVALIDATED'));
+      assert.equal((l.match(PHRASE) || []).length, has ? 1 : 0, `bar ${j} cut ${cut}: ${l}`);
+      // never the bare phrase: every `3m pullback against the 15m` on the line is the named one
+      assert.equal((l.match(/3m pullback against the 15m/g) || []).length, (l.match(/below 15m > 3m: 3m pullback against the 15m/g) || []).length, `bar ${j}: ${l}`);
+      if (has) seen.add(`${b.stage}/${cut}`);
+    }
+  }
+  for (const s of ['NONE', 'DEVELOPING', 'ESTABLISHED', 'WEAKENING', 'REVERSING', 'CONFIRMED REVERSAL', 'COMPLETED']) assert.ok(seen.has(`${s}/0`) && seen.has(`${s}/1`), s);
+  // The exact forms: the long ESTABLISHED and the short line.
+  const j = A.at(25, 1);
+  assert.match(M.mtfLines(RA[j])[1], /^- MTF structure below: 15m > 3m \(context\): stage \w[\w ]*\. 15m structure (UP|DOWN)[^;]*\. below 15m > 3m: 3m pullback against the 15m: /);
+  assert.match(M.mtfLines(RA[j], { cut: 1 })[1], /^- MTF structure below: 15m > 3m \(context\): stage [A-Z ]+\. 15m structure (UP|DOWN|none); below 15m > 3m: 3m pullback against the 15m: (UP|DOWN|NONE)( \(last: [^)]*\))?\.$/);
 });
 
 test('aboveRelation: with, against, no 1h structure, the primary INVALIDATED, the level above partial or without a structure', () => {
@@ -191,7 +212,7 @@ test('the 1h head: the Bias disagreement at every stage, the parent CHoCH warnin
 
 test('the cut order, step by step: each step leaves out its part and keeps every later one; the never-cut parts survive the last cut', () => {
   // A record holding every cuttable part: WEAKENING with a minor high, a parent CHoCH, a ready entry with its NOT ready
-  // words, the Above clause, and a NONE below line with its last closure.
+  // words, a NONE below line with its last closure, and a 4h level in the record (never printed: no `Above:` clause).
   const r = clone(RA[A.at(25, 1)]);
   const p = r.levels[0];
   p.instance.minor = { level: 141.5, et: '04:00' };
@@ -199,7 +220,7 @@ test('the cut order, step by step: each step leaves out its part and keeps every
   p.parent.differs = true; p.parent.biasRead = 'range';
   r.levels[1] = { ...r.levels[1], stage: 'NONE', instance: null, last: { why: 'ended before established', et: '04:00' }, parent: { way: 'up', protected: { side: 'low', level: 125 }, differs: false } };
   r.levels.unshift({ name: '4h>1h', role: 'above', frames: { parent: '4h', setup: '1h', timing: '15m' }, partial: false, parent: { way: 'up', protected: { side: 'low', level: 90 }, differs: false }, stage: 'NONE', instance: null });
-  const MARK = { belowShort: /3m pullback against the 15m: NONE \(last: ended before ESTABLISHED/, aboveShort: /Above: 4h structure UP, 4h protected low 90 holds on 4h closes/, origin: /\(the origin of the last 1h break\)/, depth: /; depth moderate \(0\.4\)/,
+  const MARK = { belowShort: /below 15m > 3m: 3m pullback against the 15m: NONE \(last: ended before ESTABLISHED/, origin: /\(the origin of the last 1h break\)/, depth: /; depth moderate \(0\.4\)/,
     last: /\(last: ended before ESTABLISHED/, early: /Early weakening/, protected: /its protected high 145/, parentChoch: /a warning, not a reversal/, notReady: /balanced NOT ready/ };
   assert.deepEqual(Object.keys(MARK), [...M.CUTS]);
   // `last` lives on the below line, which the first cut shortens: its own check uses a NONE primary.
@@ -216,6 +237,7 @@ test('the cut order, step by step: each step leaves out its part and keeps every
     });
     for (const keep of [/stage WEAKENING\./, /1h structure UP \(its break record; the Bias line reads the 1h range: the side is the Bias line's\), 1h protected low 100/, /15m pullback against the 1h: DOWN/, /aggressive ready LONG new this bar, structural stop 129\.75 \(a structure level, not an order stop\)/, /stage NONE\./]) assert.match(text, keep, `cut ${cut}`);
     assert.equal(M.mtfLines(r, { cut }).length, 2);
+    assert.doesNotMatch(text, /Above:|4h structure/, `cut ${cut}`);
   }
   // The `last` step (5) on a NONE primary: other closures cut there, COMPLETED and INVALIDATED never.
   for (const [why, word, kept] of [['ended before established', 'ended before ESTABLISHED', false], ['completed', 'COMPLETED', true], ['invalidated', 'INVALIDATED', true]]) {
@@ -252,9 +274,9 @@ test('the byte budget: the lines are cut only as far as needed; the budget is me
   }
 });
 
-test('real bars: exactly one stage word per line, always two lines, every price and time on a line is in the record, and no ready entry whose structural stop has traded; each level\'s pullback phrase once; the Above clause\'s way is aboveRelation\'s', () => {
+test('real bars: exactly one stage word per line, always two lines, every price and time on a line is in the record, and no ready entry whose structural stop has traded; each printed level\'s pullback phrase once (the below line\'s with its frame named); no Above clause', () => {
   let n = 0;
-  const nAbove = { pb: 0, none: 0 };
+  let nAbove = 0;
   for (const d of DAYS) {
     for (const { r: rec, j } of realRecs(d)) {
       const ls = M.mtfLines(rec, BUDGET);
@@ -278,20 +300,14 @@ test('real bars: exactly one stage word per line, always two lines, every price 
       const a = rec.levels.find(x => x.role === 'above');
       const has = lv => !lv.partial && !!lv.parent && lv.stage !== 'INVALIDATED';
       assert.equal(count(ls[0], /15m pullback against the 1h: (UP|DOWN|NONE)/g), has(p) ? 1 : 0, `${d} ${j}: ${ls[0]}`);
-      assert.equal(count(ls[1], /3m pullback against the 15m: (UP|DOWN|NONE)/g), has(b) ? 1 : 0, `${d} ${j}: ${ls[1]}`);
-      assert.equal(count(ls[0], /1h pullback against the 4h: (UP|DOWN|NONE)/g), a && !a.partial ? 1 : 0, `${d} ${j}: ${ls[0]}`);
+      assert.equal(count(ls[1], /below 15m > 3m: 3m pullback against the 15m: (UP|DOWN|NONE)/g), has(b) ? 1 : 0, `${d} ${j}: ${ls[1]}`);
+      assert.equal(count(ls[1], /3m pullback against the 15m/g), count(ls[1], /below 15m > 3m: 3m pullback against the 15m/g), `${d} ${j}: ${ls[1]}`);
+      assert.equal(count(text, /pullback against the 4h|Above:|4h structure/g), 0, `${d} ${j}: ${ls[0]}`);
       assert.equal(count(text, /pullback against the/g), count(text, /pullback against the \w+: (UP|DOWN|NONE)/g), `${d} ${j}`);
-      // The Above clause's way is aboveRelation's.
-      if (a && !a.partial) {
-        const r = M.aboveRelation(a, p);
-        const got = ls[0].match(/1h pullback against the 4h: (UP|DOWN|NONE)/)[1];
-        assert.equal(got, r && r.pullback ? r.pullback.toUpperCase() : 'NONE', `${d} ${j}: ${ls[0]}`);
-        if (r) nAbove[r.pullback ? 'pb' : 'none'] += 1;
-      }
+      if (a && !a.partial) nAbove += 1;
       n += 1;
     }
   }
   assert.ok(n > 150, `in-window bars read: ${n}`);
-  // The four fixtures' 1h runs with the 4h on every window bar; the against way is the Above test's and gate 1's.
-  assert.ok(nAbove.pb + nAbove.none > 150, `the Above clause checked: ${JSON.stringify(nAbove)}`);
+  assert.ok(nAbove > 150, `bars with a 4h structure in the record, none printed: ${nAbove}`);
 });
