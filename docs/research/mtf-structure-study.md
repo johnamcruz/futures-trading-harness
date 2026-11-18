@@ -25,6 +25,14 @@ protected), averaged over the resolved events).
 | one stage word per line, two lines on every bar | 0 violations | 0 |
 | the record on the runner's window (10280 3m bars) equals the full pass | >= 99.5% of in-window bars; every differing bar partial | 100% (20200 of 20200); 0 differ without partial |
 | the independent oracle agrees with the module on every in-window bar (stage, the parent's way, the impulse extreme, the pullback's protected swing, the entry model) | every difference ruled on by the reviewer | 0 differences on 20200 bars x 3 levels |
+| SPEC v3: the printed `Above:` clause's 1h pullback way equals `aboveRelation(above, primary)`, at the configured budgets and at every cut | 0 violations | 0 on 20200 bars x 11 variants (NONE 14055, DOWN 3059, UP 3086) |
+| SPEC v3: each level with a structure prints its `pullback against the <parent>:` phrase exactly once, none without one (the printed lines) | 0 violations | 0 |
+| SPEC v3: the `Above:` clause recomputed from the oracle's own values (the 1h>15m parent way when it differs from the 4h>1h parent way; NONE when the primary is INVALIDATED or either has none) against the printed clause | 0 differences | 0 on 20200 bars; the v2 definition planted (the 4h level's own stage) shows 3042 |
+
+The v3 rows were re-run on the v3 wording (the module's logic is unchanged; every other hard row was re-run and is
+unchanged). Forced to its shortest form (a cut no tune bar reaches at the budgets), the below line of a level with no 15m
+structure reads `15m structure none; 3m pullback against the 15m: NONE`: the phrase with NONE, on 6678 of the 222200
+checked variants.
 
 ## Reported rows (tune; no pass or fail)
 
@@ -135,7 +143,8 @@ Instances (all hours):
 | 15m>3m | 4695 | 2113 | 743 (35.2%) | - | - / - | - / - | 321 | 0 | 0 / 0 |
 
 The 1h structure agrees with the entry rule's side on 76.7% of the sided in-window bars (12658 of 16510).
-Line bytes: the primary at most 696, both lines at most 1086, 653 on average; cut on 18 bars at the configured budgets.
+Line bytes (the SPEC v3 wording): the primary at most 769, both lines at most 1153, 711 on average; cut on 0 bars at the
+configured budgets (807 and 1211). With the v2 wording they were 696, 1086 and 653.
 
 ## The finding on the base rates
 
