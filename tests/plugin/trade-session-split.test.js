@@ -605,9 +605,12 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // role falls or stays.
 // Then the entry/exit PR (feat/entry-exit, the measured need): gate-refusals-positions' [modify-stop] row (the hook's new
 // tighten-only refusal of a model's stop move), the trade-executor 30670 -> 30768 full, 30659 -> 30757 index.
+// Then swing-holds (fix/protected-status: bos-vs-choch's two broken-word lines, the failed break and the new protected
+// swing, the measured need, +324 bytes): the market-structure analyst 118394 -> 118718 full, 48429 -> 48753 index; the
+// trend-momentum analyst 77016 -> 77340 full, 44560 -> 44884 index; every other role falls or stays.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 118394, 'news-calendar-analyst': 10868, 'risk-manager': 95294, 'strategy-researcher': 25728, 'trade-executor': 30768, 'trade-reviewer': 9400, 'trend-momentum-analyst': 77016, 'volume-liquidity-analyst': 50521 },
-  index: { 'market-structure-analyst': 48429, 'news-calendar-analyst': 10868, 'risk-manager': 81182, 'strategy-researcher': 25728, 'trade-executor': 30757, 'trade-reviewer': 9400, 'trend-momentum-analyst': 44560, 'volume-liquidity-analyst': 35153 },
+  full: { 'market-structure-analyst': 118718, 'news-calendar-analyst': 10868, 'risk-manager': 95294, 'strategy-researcher': 25728, 'trade-executor': 30768, 'trade-reviewer': 9400, 'trend-momentum-analyst': 77340, 'volume-liquidity-analyst': 50521 },
+  index: { 'market-structure-analyst': 48753, 'news-calendar-analyst': 10868, 'risk-manager': 81182, 'strategy-researcher': 25728, 'trade-executor': 30757, 'trade-reviewer': 9400, 'trend-momentum-analyst': 44884, 'volume-liquidity-analyst': 35153 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

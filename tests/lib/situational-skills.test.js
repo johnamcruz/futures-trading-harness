@@ -107,8 +107,9 @@ test('choose: stage order under the budget, nothing the prompt already holds, th
   // protected swings and the current 15m BOS, pvr's strong 15m CISD, at the measured need; 77163 with its Depth row's
   // Market state clause, Fable round 16; 78204 with round 20: bos-vs-choch's three layers, at the measured need; 78389 with
   // the follow-up to #340: bos-vs-choch's CHoCH-then-BOS transition and reversal wording, at the measured need; 78402 with
-  // feat/displacement: bos-vs-choch's Fields name the last break's `quality` and the 15m last break's `protected`).
-  assert.strictEqual(require('../../scripts/lib/tunables').runner().prompt.situationalSkillBytes, 78402);
+  // feat/displacement: bos-vs-choch's Fields name the last break's `quality` and the 15m last break's `protected`; 78726
+  // with swing-holds: bos-vs-choch's two broken-word lines, +324 bytes, the measured need).
+  assert.strictEqual(require('../../scripts/lib/tunables').runner().prompt.situationalSkillBytes, 78726);
 });
 
 test('the Setups-to-check line: a compression break on an allowed side (at its key level when its box sits at one) and a tradeable 15m or 1h CISD, the stronger first; nothing against the trend rule, on the 3m or 5m, or outside the window', () => {

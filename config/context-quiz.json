@@ -2082,7 +2082,7 @@
       "text": "Briefing lines (synthetic, 10:06 ET), flat:\n- Bias: short only (4h down, 1h down; long refused).\n- Market state (3m): in the down leg: LH 14178 broken by a close 18 min ago, closed back below, the break's high 14197; overlap 0.67, efficiency 0.01, 15m overlapping; 4h+1h down; class trend-down.\n- Price 14131.75.\n- m3.lastBreak: last CHoCH up at 14178.00 (barsAgo 6; protected low 14099.00), previous BOS down at 14152.00 (barsAgo 11).\nPrice is back below 14178 after a 3m close went above it 18 min ago. Is LH 14178 holding?",
       "layers": { "rthBars": 13, "structure": { "side": "down", "level": 14178, "status": "intact", "legOK": true, "resumed": true, "levelBroken": true, "flip": { "oldSide": "down", "oldLevel": 14178, "barsAgo": 6, "byRule": "close", "held": false, "extreme": 14197, "inside": true } }, "behavior": { "word": "overlapping", "word15": "overlapping", "overlap": 0.67, "eff": 0.01 } },
       "rule": "a level a close went through is broken, never holding: the 3m close through LH 14178 came back below within 3 bars, so the break failed and the line keeps the down leg's read; 14178 is no longer protection",
-      "anchor": "the break failed within 3 bars and the line keeps the leg's read",
+      "anchor": "the break failed within 3 bars, the line keeps the leg's read",
       "choices": [
         "yes: price is below it",
         "no: a 3m close went through it; it closed back below, so the break failed and the line still reads the down leg",

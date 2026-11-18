@@ -1383,6 +1383,11 @@ overlapping, consolidating, or repeatedly failing to continue."
 - A BOS stays labelled BOS after its protected swing breaks; the Market
   state line's status (`holds` or `broken by a close`) decides what it
   means now: a broken protected swing ends that BOS's trend read.
+  - `LH X broken by a close`, `range: no leg holds` or `transition` ->
+    the new side's swing is `new protected low Y`.
+  - `LH X broken by a close ..., closed back below` in a leg state -> the
+    break failed within 3 bars, the line keeps the leg's read; X no longer
+    protects; `the break's high` is the swing above.
 - Momentum (owner: "Displacement detects emerging pressure.
   Failed
   continuation detects loss of directional control."): the line's
@@ -2855,6 +2860,11 @@ overlapping, consolidating, or repeatedly failing to continue."
 - A BOS stays labelled BOS after its protected swing breaks; the Market
   state line's status (`holds` or `broken by a close`) decides what it
   means now: a broken protected swing ends that BOS's trend read.
+  - `LH X broken by a close`, `range: no leg holds` or `transition` ->
+    the new side's swing is `new protected low Y`.
+  - `LH X broken by a close ..., closed back below` in a leg state -> the
+    break failed within 3 bars, the line keeps the leg's read; X no longer
+    protects; `the break's high` is the swing above.
 - Momentum (owner: "Displacement detects emerging pressure.
   Failed
   continuation detects loss of directional control."): the line's
