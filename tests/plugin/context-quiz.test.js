@@ -125,8 +125,15 @@ test('context quiz: every layer asked, ids unique, the bar the whole quiz at K 5
   // and three recorded holds (a 3m pullback, a 67% giveback at the lock, a warning past the price); the managed
   // situation's prompt; closed choices). A drafted synthetic item (a 15m CHoCH against with a placeable level ->
   // choch-against) failed 0/3 on main and on the branch and was deferred to the "what is a WARNING" study:
-  // the taught warning stop is not a validated right answer (it cost R in the exit study).
+  // the taught warning stop is not a validated right answer (it cost R in the exit study). swing-holds: q147 (a level a
+  // 3m close went through that closed back within 3 bars is not holding; the line keeps the leg's read) and q148 (the
+  // failed break's extreme is the swing above) added from the real 2022-04-11 10:06 moment; at 115 the gate's Monte Carlo
+  // misses its flaky bound (6.7%) and at 114 its caught-broken bound (seed 3, 538 of 600) under maxSlips 11, so q140 (a
+  // weak close still breaks the protected swing: q131 and q147 ask a close through it) and q138 (a displaced CHoCH is a
+  // potential reversal a BOS confirms: q127 and q133 ask it) retired; the quiz stays at 113.
   assert.strictEqual(QUIZ.questions.length, 113);
+  assert.ok(['q147', 'q148'].every(id => QUIZ.questions.some(x => x.id === id)), 'q147 and q148 added');
+  assert.ok(!QUIZ.questions.some(x => ['q138', 'q140'].includes(x.id)), 'q138 and q140 retired');
   assert.deepStrictEqual(QUIZ.questions.filter(x => x.layer === 'manage').map(x => x.id), ['q141', 'q142', 'q143', 'q144', 'q145', 'q146']);
   assert.ok(!QUIZ.questions.some(x => ['q55', 'q59', 'q94', 'q108', 'q113'].includes(x.id)), 'q55, q59, q94, q108 and q113 retired');
   assert.ok(QUIZ.questions.some(x => x.id === 'q118a'), 'q118a added');

@@ -56,9 +56,12 @@ overlapping, consolidating, or repeatedly failing to continue."
   low (lower high) breaks; a CHoCH holds until the low (high) that started
   the shift breaks. Only a close through it counts; a wick is not.
 - Behavior: `behavior` (rotation/weakening/transition), 15m words.
-- A BOS stays labelled BOS after its protected swing breaks; the Market
-  state line's status (`holds` or `broken by a close`) decides what it
-  means now: a broken protected swing ends that BOS's trend read.
+- `LH X broken by a close ...` under `range: no leg holds` or
+  `transition` -> that BOS's trend read ended; the new side's swing is
+  `new protected low Y`.
+- `LH X broken by a close ..., closed back below` under a leg state -> the
+  break failed within 3 bars and the line keeps the leg's read; X is no
+  longer protection; `the break's high` is the swing above.
 - Momentum (owner: "Displacement detects emerging pressure. Failed
   continuation detects loss of directional control."): the line's
   warnings (`displacement down 2 bars ago broke internal low ...`, `no
@@ -69,7 +72,8 @@ under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
 a 5m lane's briefing has it in its `bar` part. Each: `kind` (`BOS` or
 `CHoCH`), `direction` (`up` or `down`), `level`, `barsAgo` (that
 timeframe's candles); the 3m ones and the 15m `last` also `protected`
-(`level`, `brokenAt`); the 3m and 15m `last` also `quality`, its
+(`level`, `brokenAt`: the first close past the tie; a tie holds); the 3m
+and 15m `last` also `quality`, its
 strength (`displacement`). The 4h has swings only (`h1.h4.swingPattern`).
 
 **By timeframe.** No one timeframe is the signal; read them top-down.

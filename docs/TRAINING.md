@@ -1811,7 +1811,15 @@ Frozen definitions:
   `marketState.equalAtr` x ATR(14), is the only invalidation of the leg; a
   CHoCH then BOS against the leg confirms a transition, printed `CHoCH then
   BOS: transition confirmed` while the old level is unbroken and `reversal
-  confirmed` once a close goes through it); and price behavior
+  confirmed` once a close goes through it; one rule, the hand-back: a
+  protected break whose close comes back through the level within
+  `marketState.followBars` failed, and the old side keeps the read, its
+  level printed `LH X broken by a close N min ago, closed back below, the
+  break's high E`, never `holds`; a broken level with no leg restored
+  prints `broken by a close`, `closed back` while the latest close is back
+  past it, and `new protected low Y` from the break record. Every printer
+  of a protected swing's status reads one predicate, protected-status.js: a
+  close past the tie breaks it, and it stays broken); and price behavior
   (market-behavior.js: overlap, efficiency, displacement, failed
   continuation; the 3m and 15m words). The precedence, once: `forming` (no
   RTH break yet); `pullback` (an open `Pullback` line, pullback-read.js

@@ -46,7 +46,12 @@
  *                       trend, leg, transition the 4h + 1h way -> that trend class, against -> unclear
  *   marketStateLine(s)  "Market state (3m): <state>: <structure>; <momentum>; behavior <word> (...), 15m <word>;
  *                       <alignment>; class <c>", the class last (round 18); the behavior word only under rotation,
- *                       weakening and transition (round 20b; elsewhere "overlap x, efficiency y, 15m <word>"); null for null
+ *                       weakening and transition (round 20b; elsewhere "overlap x, efficiency y, 15m <word>"); null for null.
+ *                       A protected level is `holds` only while no close past the tie went through it (protected-status.js
+ *                       R2, swing-holds): a level the 3m machine handed back (levelBroken) prints `broken by a close N min
+ *                       ago, closed back below, the break's high E`; a broken level with no leg restored prints `broken by
+ *                       a close`, `closed back` while the latest close is back past it (flip.inside), and the new side's
+ *                       protected swing from the break record (`new protected low Y`)
  */
 
 const { trendOf } = require('./entry-rule');
