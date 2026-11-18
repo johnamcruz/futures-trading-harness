@@ -86,6 +86,10 @@ test('the machine (swing-holds): levelBroken stays through the restored leg and 
   assert.deepStrictEqual([series[36].level, series[36].levelBroken, series[36].levelAgo], [98, false, 0], 'the CHoCH up at 36: its protected low 98, never closed through');
   assert.strictEqual(series[37].levelAgo, 1);
   assert.strictEqual(series[30].levelAgo, 30 - 24, 'the level set by the BOS at 24');
+  // The extreme is the failed break's own, flip bar to close-back bar: a deeper wick earlier in the leg (96 at bar 27, the
+  // close above 103) is not it.
+  const wick = setup(HANDBACK, P, bars => { bars[27] = { ...bars[27], l: 96 }; return bars; }).series;
+  assert.deepStrictEqual([wick[32].levelBroken, wick[32].flip.extreme], [true, 98], 'the break\'s low 98, not the leg\'s 96');
 });
 
 test('the machine (swing-holds): restored, then a second close through the same level flips again; a close back after followBars restores nothing (flip.inside says it)', () => {
