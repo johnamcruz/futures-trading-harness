@@ -10,8 +10,11 @@
  *                                 when it continues the previous break's direction and CHoCH when it reverses it;
  *                                 { last, previous } each { kind, direction, level, swingAt, at, barsAgo } or null
  *   breaksOf(bars, k)            every such break, oldest first: [{ kind, direction, level, swingAt, at, i }]
- *   protectedOf(bars, brk)       a break's protected swing (the origin of the leg that made it) and the first close
- *                                 beyond it since: { side, level, at, brokenAt } or null
+ *   protectedLevel(bars, brk)    a break's protected swing (the origin of the leg that made it): { side, level, at }
+ *                                 or null (the geometry alone)
+ *   protectedOf(bars, brk, { atr, equalAtr })   that swing and the first close through it since the break past the tie
+ *                                 (protected-status.js: equalAtr x ATR(14) at that candle; a tie holds; once broken,
+ *                                 broken): { side, level, at, brokenAt } or null; throws without atr and equalAtr
  *   swingLevels(bars, k, n)      the last n confirmed swing highs and lows, each with when a close first went through
  *                                 it after its confirmation (`brokenAt`, null while it holds)
  *   sweeps(bars, levels, n)      in the last n bars, a high level traded above and closed back below within 1-3
@@ -22,6 +25,7 @@
  */
 
 const AN = require('../tunables').analysis(); // config/analysis.json: the swing confirmation and the scan sizes
+const PS = require('./protected-status');
 
 /** Confirmed fractal swings, oldest first. */
 function pivots(bars, k = AN.indicators.swingK) {
@@ -70,10 +74,9 @@ function breaksOf(bars, k = AN.indicators.swingK) {
  * up) or highest high (down) from the bar after the broken swing's to the break's bar (the swing formed after the broken
  * one; the broken swing bar's own low is not a higher low). A BOS up holds until a close below it (the
  * protected higher low); a CHoCH up holds until a close below it (the low that started the shift); the mirrors down.
- * { side, level, at, brokenAt }: brokenAt the first close beyond it after the break (null while it holds); null without
- * a break or when the break is not in the bars. Reads only the bars given (causal).
+ * { side, level, at }; null without a break or when the break is not in the bars. Reads only the bars given (causal).
  */
-function protectedOf(bars, brk) {
+function protectedLevel(bars, brk) {
   if (!brk || !['up', 'down'].includes(brk.direction)) return null;
   const from = Date.parse(brk.swingAt);
   const to = Date.parse(brk.at);
@@ -95,8 +98,24 @@ function protectedOf(bars, brk) {
     if (!o) return null;
     level = o.c;
   }
-  const hit = bars.find(x => Date.parse(x.t) > to && (up ? x.c < level : x.c > level));
-  return { side: up ? 'low' : 'high', level, at: o.t, brokenAt: hit ? hit.t : null };
+  return { side: up ? 'low' : 'high', level, at: o.t };
+}
+
+/**
+ * The protected swing with its status (swing-holds: one predicate, protected-status.js): brokenAt the first close after
+ * the break through the level past the tie, equalAtr x atr[j] at that candle (null while it holds; a tie holds). `atr` is
+ * the bars' own ATR(14) series and `equalAtr` the config's (marketState.equalAtr), both required: no caller can get an
+ * unbanded brokenAt.
+ */
+function protectedOf(bars, brk, { atr, equalAtr } = {}) {
+  if (!Array.isArray(atr)) throw new Error('structure-events: protectedOf needs the bars\' atr series (the tie, protected-status.js)');
+  if (!Number.isFinite(equalAtr)) throw new Error('structure-events: protectedOf needs equalAtr (config/analysis.json marketState, never a literal)');
+  const p = protectedLevel(bars, brk);
+  if (!p) return null;
+  const to = Date.parse(brk.at);
+  const after = bars.findIndex(x => Date.parse(x.t) === to);
+  const j = PS.firstCloseThrough(bars, { level: p.level, legSide: brk.direction, after, atr, equalAtr });
+  return { ...p, brokenAt: j >= 0 ? bars[j].t : null };
 }
 
 /** The latest structure breaks (breaksOf): the last and the one before it. */
@@ -174,4 +193,4 @@ function swingLevels(bars, k = AN.indicators.swingK, n = AN.structure.swingLevel
   return [...pick('high'), ...pick('low')];
 }
 
-module.exports = { pivots, breaksOf, lastBreaks, sweeps, untestedSwings, swingLevels, protectedOf };
+module.exports = { pivots, breaksOf, lastBreaks, sweeps, untestedSwings, swingLevels, protectedLevel, protectedOf };

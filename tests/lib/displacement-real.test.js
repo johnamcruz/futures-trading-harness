@@ -32,7 +32,7 @@ function morning(date) {
     prev = b;
     const text = B.renderBriefing(b, { now: new Date(Date.parse(b.closedAt)) });
     const line = l => text.split('\n').find(x => x.startsWith(l)) || null;
-    out.push({ hm: et(bars[j].t).hm, b, m3: b.sections.m3.data, m15: b.sections.m15.data, state: line('- Market state'), bq: line('- Break quality'), detail: text.split('Detail by timeframe:')[1] });
+    out.push({ hm: et(bars[j].t).hm, w, b, m3: b.sections.m3.data, m15: b.sections.m15.data, state: line('- Market state'), bq: line('- Break quality'), detail: text.split('Detail by timeframe:')[1] });
   }
   return out;
 }
@@ -96,4 +96,36 @@ test('real: the Break quality line prints only while a break is recent (recentEn
     assert.match(r.bq, /: (displaced|weak \((?:opposite colour|wicks|closed mid|small)(?:, (?:wicks|closed mid|small))*\)), (holding|closed back (above|below) )/);
   }
   assert.ok(printed > 20 && printed < RUNS.length, `${printed} of ${RUNS.length} bars print the line`);
+});
+
+// swing-holds: one predicate for every protected status. On every RTH bar the record's brokenAt, last and previous, is the
+// first close after the break past equalAtr x ATR(14) at that candle (computed here from the closes, not by protectedOf),
+// and the Break quality line's invalidating close (quality.closedAt) is that same candle: the override qualityOf used to
+// apply changes nothing, so it is gone.
+test('real: last and previous protected brokenAt follow the tie on every RTH bar; the invalidating close is brokenAt\'s candle', () => {
+  const ind = require('../../scripts/lib/trading/indicators');
+  const EQ = require('../../scripts/lib/tunables').analysis().marketState.equalAtr;
+  const tied = { last: 0, previous: 0 };
+  let invalidations = 0;
+  for (const r of RUNS) {
+    const atr = ind.atr(r.w);
+    for (const k of ['last', 'previous']) {
+      const x = r.m3.lastBreak[k];
+      if (!x || !x.protected) continue;
+      const s = x.direction === 'up' ? 1 : -1;
+      const from = r.w.findIndex(c => c.t === x.at);
+      const j = r.w.findIndex((c, i) => i > from && s * (x.protected.level - c.c) > EQ * (Number.isFinite(atr[i]) ? atr[i] : 0));
+      assert.strictEqual(x.protected.brokenAt, j >= 0 ? r.w[j].t : null, `${r.hm} ${k} ${x.kind} ${x.direction} ${x.protected.level}`);
+      const raw = r.w.findIndex((c, i) => i > from && s * (x.protected.level - c.c) > 0);
+      if (raw >= 0 && raw !== j) tied[k] += 1;
+      const q = x.protected.quality;
+      if (k === 'last' && q && !q.tie) {
+        invalidations += 1;
+        assert.strictEqual(Date.parse(q.closedAt) - 180000, Date.parse(x.protected.brokenAt), `${r.hm}: the Break quality line's close is brokenAt's`);
+      }
+      if (k === 'last' && q && q.tie) assert.strictEqual(x.protected.brokenAt, null, `${r.hm}: a tie holds`);
+    }
+  }
+  assert.ok(invalidations > 5, `${invalidations} invalidations compared`);
+  assert.deepStrictEqual(tied, { last: 0, previous: 0 }, 'no tie on these two mornings: the tie cases are pinned on 2022-08-24 10:18 (market-state-real.test.js) and in the unit tests');
 });

@@ -46,14 +46,14 @@ test('failedAt: a close back through the level within followBars, as of the bar 
   assert.strictEqual(L.failedAt(bars, b, 27, { ...P, followBars: 2 }), false, 'a close back after followBars is no failure');
 });
 
-test('the machine: the first RTH break sets the leg and its protected level (protectedOf); a continuation moves it; legOK follows the follow-through', () => {
+test('the machine: the first RTH break sets the leg and its protected level (protectedLevel); a continuation moves it; legOK follows the follow-through', () => {
   const { bars, breaks, series } = setup(UP);
   assert.strictEqual(series[23], null, 'no RTH break yet');
-  assert.deepStrictEqual([series[24].side, series[24].status, series[24].level], ['up', 'intact', SE.protectedOf(bars, SE.breaksOf(bars)[0]).level]);
+  assert.deepStrictEqual([series[24].side, series[24].status, series[24].level], ['up', 'intact', SE.protectedLevel(bars, SE.breaksOf(bars)[0]).level]);
   assert.strictEqual(series[26].legOK, true, 'undecided counts as held');
   assert.strictEqual(series[27].legOK, false, 'the leg\'s only break failed: not established');
   assert.strictEqual(series[30].legOK, true, 'a new break its way holds');
-  assert.strictEqual(series[30].level, SE.protectedOf(bars, SE.breaksOf(bars)[1]).level, 'the level trails to the last break\'s origin');
+  assert.strictEqual(series[30].level, SE.protectedLevel(bars, SE.breaksOf(bars)[1]).level, 'the level trails to the last break\'s origin');
   assert.notStrictEqual(series[30].level, series[24].level);
   assert.deepStrictEqual([series[29].sinceProgress, series[30].sinceProgress], [4, 0], 'bars since a new high by close');
   assert.strictEqual(breaks.length, 2);

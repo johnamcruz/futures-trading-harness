@@ -173,14 +173,31 @@ test('protected swings (real): each printed 3m break carries protectedOf on the 
     const plain = lastBreaks(w);
     for (const k of ['last', 'previous']) {
       if (!plain[k]) continue;
-      assert.deepStrictEqual(lb[k].protected, protectedOf(w, plain[k]), `${date} ${hm} ${k}`);
+      const band = { atr: ind.atr(w), equalAtr: AN.marketState.equalAtr };
+      const { side, level, at, brokenAt } = lb[k].protected;
+      assert.deepStrictEqual({ side, level, at, brokenAt }, protectedOf(w, plain[k], band), `${date} ${hm} ${k}: last and previous both banded (swing-holds)`);
       const cut = w.filter(x => Date.parse(x.t) <= Date.parse(plain[k].at));
-      assert.strictEqual(protectedOf(cut, plain[k]).level, lb[k].protected.level, 'causal: known at the break');
+      assert.strictEqual(protectedOf(cut, plain[k], { atr: ind.atr(cut), equalAtr: AN.marketState.equalAtr }).level, lb[k].protected.level, 'causal: known at the break');
       const p = lb[k].protected;
       const span = w.filter(x => Date.parse(x.t) > Date.parse(plain[k].swingAt) && Date.parse(x.t) <= Date.parse(plain[k].at));
       assert.strictEqual(p.level, plain[k].direction === 'up' ? Math.min(...span.map(x => x.l)) : Math.max(...span.map(x => x.h)));
     }
   }
+});
+
+// swing-holds: the previous break's protected swing follows the tie too (one predicate for last and previous). 2022-08-11
+// 11:33: the previous break, a BOS down, has its protected high 16756.75; this bar closes past it inside the tie (a tie:
+// holds, brokenAt null), where the unbanded record said broken.
+test('previous.protected (real): brokenAt follows the tie, as last.protected does (2022-08-11 11:33)', () => {
+  const w = window('2022-08-11', '11:33');
+  const b = B.buildBriefing({ symbol: 'NQ', bars: w, minutes: 3, now: new Date(Date.parse(w[w.length - 1].t) + 180000) });
+  const prev = b.sections.m3.data.lastBreak.previous;
+  assert.deepStrictEqual([prev.kind, prev.direction, prev.protected.level], ['BOS', 'down', 16756.75]);
+  const atr = ind.atr(w);
+  const z = w.length - 1;
+  assert.ok(w[z].c > 16756.75 && w[z].c - 16756.75 <= AN.marketState.equalAtr * atr[z], `11:33 closes ${w[z].c}: past the level, inside the tie`);
+  assert.ok(w.every((x, k) => Date.parse(x.t) <= Date.parse(prev.at) || k === z || x.c <= 16756.75), 'no other close past it since the break');
+  assert.strictEqual(prev.protected.brokenAt, null, 'a tie holds');
 });
 
 // The owner's BOS/CHoCH invalidation cases, each on a real briefing (the CI goal fixture's bars): the per-break protected

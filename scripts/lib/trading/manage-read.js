@@ -19,7 +19,6 @@
  */
 
 const { breaksOf, protectedOf } = require('./structure-events');
-const PS = require('./protected-status');
 const ind = require('./indicators');
 const { completedCandlesAt } = require('./candle-facts');
 const { snapStop } = require('./trail');
@@ -62,10 +61,10 @@ function manageRead({ side, entry, risk, stop, openedAt, bars, base, tick, exit 
   let bos = null;
   const lastWay = [...breaks].reverse().find(x => x.direction === way && x.kind === 'BOS');
   if (lastWay) {
-    const p = protectedOf(cs, lastWay);
+    // Broken by the one predicate (swing-holds D2): a 15m close past the swing by more than the tie at that candle.
+    const p = protectedOf(cs, lastWay, { atr: ind.atr(cs), equalAtr: EQUAL_ATR });
     if (p) {
-      // Broken by the one predicate (swing-holds D2): a 15m close past the swing by more than the tie at that candle.
-      const broken = PS.firstCloseThrough(cs, { level: p.level, legSide: way, after: lastWay.i, atr: ind.atr(cs), equalAtr: EQUAL_ATR }) >= 0;
+      const broken = Boolean(p.brokenAt);
       const at = snapStop(p.level - s * tick, s, tick);
       bos = { level: p.level, broken, stop: at, tighter: !broken && tighter(at) && !past(at), past: past(at) };
     }

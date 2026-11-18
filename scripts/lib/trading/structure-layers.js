@@ -72,9 +72,9 @@ function failedAt(bars, b, z, p) {
   return false;
 }
 
-/** The break's protected level (structure-events.js protectedOf on the bars from its swing to it: the same level, read once). */
+/** The break's protected level (structure-events.js protectedLevel on the bars from its swing to it: the same level, read once). */
 function levelOf(bars, b) {
-  const pr = SE.protectedOf(b.swingI === null ? bars.slice(0, b.i + 1) : bars.slice(b.swingI, b.i + 1), { direction: b.direction, swingAt: b.swingI === null ? null : bars[b.swingI].t, at: b.at });
+  const pr = SE.protectedLevel(b.swingI === null ? bars.slice(0, b.i + 1) : bars.slice(b.swingI, b.i + 1), { direction: b.direction, swingAt: b.swingI === null ? null : bars[b.swingI].t, at: b.at });
   return pr ? pr.level : null;
 }
 
