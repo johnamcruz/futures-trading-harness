@@ -662,7 +662,7 @@ function bodyOf(lv, cut, L, primary, sideText) {
 
 /** The short below line (cut 1): `stage <WORD>. 15m structure <WAY>; below 15m > 3m: 3m pullback against the 15m: <WAY|NONE>.` */
 function belowShort(lv) {
-  const { parent: P, setup: S } = lv.frames;
+  const { parent: P } = lv.frames;
   if (lv.partial) return `stage NONE. Not enough ${P} history.`;
   const way = lv.stage === 'INVALIDATED' ? 'none' : lv.parent ? UPW(lv.parent.way) : 'none';
   const pb = ['DEVELOPING', 'ESTABLISHED', 'WEAKENING', 'REVERSING'].includes(lv.stage) && lv.parent ? UPW(opp(lv.parent.way)) : 'none';
