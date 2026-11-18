@@ -62,10 +62,16 @@ test('fixture days (real): state parity: side, status, level, legOK, resumed, fl
 
 test('fixture days (real): every state word the precedence makes is reached from the bars; the guard never prints chop; the line stays short', () => {
   const all = DAYS.flatMap(d => RUNS[d]);
-  for (const re of [/: transition (up|down): /, /: weakening (up|down): /, /: rotation: pullback \(/, /: rotation (up|down): /, /reversal confirmed/, /potential failed opening drive/, /: chop: the (up|down) leg's last break failed, (HL|LH) [\d.]+ holds/, /: pullback \((long|short) leg/, /: in the (up|down) leg: /, /: trend (up|down): /, /: range: no leg holds/, /: range: the (up|down) leg's last break failed, (HL|LH) [\d.]+ holds/, /: forming /, /, CHoCH then BOS/]) {
+  for (const re of [/: transition (up|down): /, /: weakening (up|down): /, /: rotation: pullback \(/, /: rotation (up|down): /, /reversal confirmed/, /potential failed opening drive/, /: chop: the (up|down) leg's last break failed, (HL|LH) [\d.]+ (holds|broken by a close, closed back (above|below))/, /: pullback \((long|short) leg/, /: in the (up|down) leg: /, /: trend (up|down): /, /: range: no leg holds/, /: range: the (up|down) leg's last break failed, (HL|LH) [\d.]+ (holds|broken by a close, closed back (above|below))/, /: forming /, /, CHoCH then BOS/]) {
     assert.ok(all.some(r => re.test(r.line)), `${re} reached`);
   }
   for (const r of all) if (r.s.pullback) assert.notStrictEqual(r.s.state, 'chop', r.line);
+  // swing-holds: no line says a level holds that a close went through (the machine's hand-back, levelBroken) or that is broken.
+  for (const r of all) {
+    const P = r.s.layers && r.s.layers.structure;
+    if (P && (P.levelBroken || P.status === 'broken')) assert.doesNotMatch(r.line, new RegExp(`\\b${P.level} holds|\\b${P.flip ? P.flip.oldLevel : P.level} holds`), r.line);
+  }
+  assert.ok(all.some(r => r.s.layers && r.s.layers.structure && r.s.layers.structure.levelBroken), 'the mornings reach a handed-back leg');
   // Round 20c: "no leg holds" only when no protected level holds; one 15m word per line under the early read.
   for (const r of all) if (/no leg holds/.test(r.line)) assert.ok(!r.s.layers || !r.s.layers.structure || r.s.layers.structure.status !== 'intact', r.line);
   for (const r of all) if (r.s.early) assert.doesNotMatch(r.line, /\b15m (trending|overlapping|rotating|mixed|early)\b/, r.line);

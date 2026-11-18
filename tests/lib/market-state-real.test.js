@@ -93,6 +93,32 @@ test('2022-04-11 (real): state parity: the machine\'s fields, the state and the 
   assertGolden('market-state-parity-0411.txt', `${ROWS_0411.map(row).join('\n')}\n`);
 });
 
+test('2022-04-11 (real): a close through LH 14178 at 09:48 and back within 3 bars: the machine hands the down leg back, and no line says 14178 holds (swing-holds)', () => {
+  const at = hm => ROWS_0411.find(r => r.hm === hm);
+  const b = at('09:48');
+  assert.deepStrictEqual([b.P.side, b.P.status, b.P.flip.oldLevel], ['up', 'broken', 14178]);
+  for (const r of ROWS_0411.filter(x => x.hm >= '09:54' && x.hm <= '10:18')) {
+    assert.deepStrictEqual([r.P.status, r.P.level, r.P.levelBroken, r.P.flip.extreme], ['intact', 14178, true, 14197], r.hm);
+    assert.doesNotMatch(r.line, /14178 holds/, `${r.hm} ${r.line}`);
+    assert.match(r.line, /LH 14178 broken by a close \d+ min ago, closed back below, the break's high 14197/, r.hm);
+  }
+  const n = at('10:21');
+  assert.deepStrictEqual([n.P.status, n.P.level, n.P.levelBroken], ['intact', 14181, false]);
+  assert.match(n.line, /LH 14181 holds/);
+  for (const r of ROWS_0411) if (r.P.levelBroken || r.P.status === 'broken') assert.doesNotMatch(r.line, new RegExp(`${r.P.level} holds`), `${r.hm} ${r.line}`);
+});
+
+test('2022-04-11 (real): the five lines of the design, exact', () => {
+  const want = {
+    '09:45': 'Market state (3m): in the down leg: LH 14178 holds; displacement up this bar; overlap 0.55, efficiency 0.01, 15m early; 4h+1h down; class trend-down',
+    '09:48': 'Market state (3m): range: no leg holds, LH 14178 broken by a close this bar, new protected low 14099, edges 14099-14189.25 (travel edge to edge); overlap 0.56, efficiency 0.08, 15m early; 4h+1h down; class trend-down',
+    '09:54': 'Market state (3m): weakening down: LH 14178 broken by a close 6 min ago, closed back below, the break\'s high 14197; displacement up 2 bars ago; behavior rotating (overlap 0.57, efficiency 0.01), 15m early; 4h+1h down; class unclear',
+    '10:06': 'Market state (3m): in the down leg: LH 14178 broken by a close 18 min ago, closed back below, the break\'s high 14197; overlap 0.67, efficiency 0.01, 15m overlapping; 4h+1h down; class trend-down',
+    '10:21': 'Market state (3m): trend down: LH 14181 holds, CHoCH down this bar; overlap 0.75, efficiency 0.16, 15m overlapping; 4h+1h down; class trend-down',
+  };
+  for (const [hm, line] of Object.entries(want)) assert.strictEqual(ROWS_0411.find(r => r.hm === hm).line, line, hm);
+});
+
 // Round 20: the two pinned real tests the design review names, rewritten with the reason. Before, the 3m CHoCH pair was
 // chop there; the owner's refinement ("Don't classify a market as chop simply because you see two opposing CHoCHs") makes
 // the layers decide: structural AND behavioral evidence.
@@ -251,7 +277,8 @@ test('real: a clean range reads range, not chop: edge to edge (2022-09-01 10:27)
   const { s, line, m3 } = stateAt('2022-09-01', '10:27');
   assert.strictEqual(s.state, 'range', line);
   assert.strictEqual(m3.layers.edges.interior, 0);
-  assert.match(line, /range: no leg holds, HL [\d.]+ broken \d+ min ago, edges [\d.]+-[\d.]+ \(travel edge to edge\)/, 'the undisplaced protected break printed (review finding 2)');
+  assert.match(line, /range: no leg holds, HL [\d.]+ broken by a close \d+ min ago, closed back above, edges [\d.]+-[\d.]+ \(travel edge to edge\)/, 'the undisplaced protected break printed (review finding 2); the close back above it after followBars restores nothing (swing-holds: flip.inside)');
+  assert.deepStrictEqual([m3.layers.structure.status, m3.layers.structure.flip.held, m3.layers.structure.flip.inside], ['broken', false, true]);
 });
 
 // The owner's five-case test on real fixture days (cases chosen by the review's section-4 rules, tools/chop-read r20-build).

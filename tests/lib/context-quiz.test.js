@@ -829,7 +829,7 @@ test('marketStateOfText with an item\'s layer facts: the layered line, the same 
   const L = Q.layersOf(chop);
   assert.deepStrictEqual([L.transition, L.stale, L.pbRotation, L.momentum.trigger, L.chop.facts.nd, L.chop.evidence.flip, L.structure.status, L.structure.origin], [false, false, false, false, false, false, 'intact', 21526.5], 'the facts not stated: absent');
   const brk = { rthBars: 24, structure: { side: 'down', level: 21495, status: 'broken', flip: { barsAgo: 1, disp: false, oldSide: 'up', oldLevel: 21480.25 } } };
-  assert.strictEqual(Q.marketStateOfText(text, brk), 'Market state (3m): range: no leg holds, HL 21480.25 broken 3 min ago; 4h+1h up; class trend-up', 'a broken protected level: the flip\'s facts not stated filled (undisplaced, by a close)');
+  assert.strictEqual(Q.marketStateOfText(text, brk), 'Market state (3m): range: no leg holds, HL 21480.25 broken by a close 3 min ago; 4h+1h up; class trend-up', 'a broken protected level: the flip\'s facts not stated filled (undisplaced, by a close)');
   assert.throws(() => Q.layersOf({ behavior: {} }), /structure/);
   const QUIZ0 = QUIZ;
   const one = QUIZ0.questions.find(x => x.id === 'q119');
