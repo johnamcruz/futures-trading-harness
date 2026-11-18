@@ -5,7 +5,7 @@
  * strength. Structure determines confirmation. Protected swings determine structural invalidation." So this module
  * reads STRENGTH only: a candle is `displaced` or `weak` (with why, from the rule's own parts). It never confirms (a
  * break confirms by structure: bos-vs-choch) and never invalidates (a close through the protected swing does:
- * structure-events.js protectedOf, close only); it says how strongly a break, or the close that broke a protected
+ * structure-events.js protectedOf, a close past the tie: protected-status.js); it says how strongly a break, or the close that broke a protected
  * swing, moved. A read the briefing prints, never a setup or a wait: no gate, hook, compose, entry-rule or decision code
  * reads it (tests/plugin/displacement-readers.test.js). Pure and causal: a fact as of candle `at` reads candles 0..at
  * only. Every number is config's (config/analysis.json cisd.minBody, cisd.minRangeAtr and displacement).
@@ -37,7 +37,7 @@
  *   breakQuality({ candles, brk, atr, at, minutes, levels, p })   a structure-events break's facts as of candle `at`
  *                                            (null before the break): { displaced, why, cleared (close past the level in
  *                                            ATR), bodyX (body over the mean body of the bodyPrior candles before), leg {
- *                                            bars, eff, overlap } (the leg protectedOf defines: from the protected swing
+ *                                            bars, eff, overlap } (the leg protectedLevel defines: from the protected swing
  *                                            to the break), origin { side, price, at, sweep } (the protected swing; sweep:
  *                                            structure-events sweeps of `levels` whose close back is in the leg, key
  *                                            levels first), fvg (the latest FVG the break's way, market-snapshot fvgAt,
@@ -48,13 +48,14 @@
  *                                            | { closedBack { at, closedAt, barsAgo }, reclaimed } (the latest close back
  *                                            through the level; reclaimed: the last close is past the level again) }
  *   invalidationQuality(candles, brk, prot, atr, p)   the strength of the close that broke the break's protected swing
- *                                            (the first close from prot.brokenAt past the Market state's tie, equalAtr x
- *                                            ATR of its candle), the break's opposite way: { displaced, why, barsAgo }; {
- *                                            tie: true } when every close through it is within the tie (printed `holds
- *                                            (tested, a tie)`, as the state says holds); or null
+ *                                            (protected-status.js: the first close after the break past the tie,
+ *                                            equalAtr x ATR of its candle; the record's brokenAt), the break's opposite
+ *                                            way: { displaced, why, barsAgo }; { tie: true } when every close through it
+ *                                            is within the tie (printed `holds (tested, a tie)`, as the state says
+ *                                            holds); or null
  *   qualityOf(candles, lb, { minutes, levels, atr, p })   lastBreaks' { last, previous } with `quality` on last (and on
- *                                            last.protected once a close goes through it; its brokenAt then the first
- *                                            close past the tie, null on a tie)
+ *                                            last.protected once a close goes through it; its brokenAt is the record's,
+ *                                            banded by the same predicate: structure-events.js protectedOf)
  *   breakLine({ entry, setup }, { p, et })   the summary's Break quality line (entry: { tf, brk, minutes }, setup the same
  *                                            with brk.knownAt), each printed while its break is at most recentEntry /
  *                                            recentSetup candles old; cut to lineBytes: body, then leg, then the setup
@@ -63,6 +64,7 @@
 
 const cisd = require('./cisd');
 const SE = require('./structure-events');
+const PS = require('./protected-status');
 const ind = require('./indicators');
 const { fvgAt } = require('./market-snapshot');
 
@@ -131,8 +133,8 @@ function breakQuality({ candles, brk, atr = ind.atr(candles), at = candles.lengt
   const s = strengthAt(cs, i, dir, atr, p);
   const prior = cs.slice(Math.max(0, i - p.bodyPrior), i).map(c => Math.abs(c.c - c.o));
   const mean = prior.length ? prior.reduce((x, y) => x + y, 0) / prior.length : 0;
-  // The origin as known at the break: the protected swing (protectedOf on the candles up to it).
-  const prot = SE.protectedOf(cs.slice(0, i + 1), brk);
+  // The origin as known at the break: the protected swing (protectedLevel on the candles up to it).
+  const prot = SE.protectedLevel(cs.slice(0, i + 1), brk);
   const o = prot ? cs.findIndex(c => c.t === prot.at) : -1;
   const side = dir > 0 ? 'low' : 'high';
   const swept = o >= 0 ? SE.sweeps(cs.slice(0, i + 1), levels.filter(x => x.side === side), i + 1)
@@ -156,15 +158,19 @@ function breakQuality({ candles, brk, atr = ind.atr(candles), at = candles.lengt
 }
 
 function invalidationQuality(candles, brk, prot, atr, p = PARAMS, minutes = null) {
-  if (!brk || !prot || !prot.brokenAt) return null;
-  const first = candles.findIndex(c => c.t === prot.brokenAt);
-  if (first < 1) return null;
-  // The Market state's tie (structure-layers.js): a close through the level by no more than equalAtr x ATR(14) of its
-  // candle is a tie, not a break, so the line says `holds` as the state does; the invalidating close is the first past it.
-  const past = k => -sgn(brk.direction) * (candles[k].c - prot.level) > p.equalAtr * (atr && Number.isFinite(atr[k]) ? atr[k] : 0);
-  let j = first;
-  while (j < candles.length && !past(j)) j += 1;
-  if (j >= candles.length) return { tie: true };
+  if (!brk || !prot || !Number.isFinite(prot.level) || !['up', 'down'].includes(brk.direction)) return null;
+  // The one predicate (protected-status.js, the Market state's and the record's): a close through the level by no more
+  // than equalAtr x ATR(14) of its candle is a tie, not a break, so the line says `holds` as the state does; the
+  // invalidating close is the first past it, after the break. Without the break's candle the scan starts at the record's
+  // brokenAt (main's rule), never earlier, so no close before the break can read as its invalidation. A record whose
+  // brokenAt is null reads a tie or nothing (main's contract: no invalidation without a broken record).
+  const after = brk.at ? candles.findIndex(c => c.t === brk.at) : prot.brokenAt ? candles.findIndex(c => c.t === prot.brokenAt) - 1 : -2;
+  if (after < -1 || (brk.at && after < 0)) return null;
+  const st = PS.statusOf(candles, { level: prot.level, legSide: brk.direction, after, atr: Array.isArray(atr) ? atr : [], equalAtr: p.equalAtr });
+  if (!st.broken) return st.tied ? { tie: true } : null;
+  if (!prot.brokenAt) return null;
+  const j = st.brokenI;
+  if (j < 1) return null;
   const closedAt = minutes ? new Date(Date.parse(candles[j].t) + minutes * 60000).toISOString() : null;
   return { ...strengthAt(candles, j, -sgn(brk.direction), atr, p), barsAgo: candles.length - 1 - j, closedAt };
 }
@@ -173,11 +179,10 @@ function qualityOf(candles, lb, { minutes = cisd.stepMinutes(candles), levels = 
   if (!lb || !lb.last) return lb;
   const last = lb.last;
   const quality = breakQuality({ candles, brk: last, atr, minutes, levels, p });
+  // The record's brokenAt is already the first close past the tie (structure-events.js protectedOf, protected-status.js),
+  // the same candle this read's close is (tests/lib/displacement-real.test.js): the detail's field says what the line says.
   const inv = last.protected ? invalidationQuality(candles, last, last.protected, atr, p, minutes) : null;
-  // brokenAt follows the tie too, so the detail's field says what the line says: the first close past the tie, or null
-  // (still holding) when every close through the level is a tie.
-  const at = inv && !inv.tie ? candles[candles.length - 1 - inv.barsAgo].t : null;
-  return { ...lb, last: { ...last, ...(quality ? { quality } : {}), ...(inv ? { protected: { ...last.protected, brokenAt: at, quality: inv } } : {}) } };
+  return { ...lb, last: { ...last, ...(quality ? { quality } : {}), ...(inv ? { protected: { ...last.protected, quality: inv } } : {}) } };
 }
 
 const minsAgo = (n, m) => (n === 0 ? 'this bar' : `${n * m} min ago`);

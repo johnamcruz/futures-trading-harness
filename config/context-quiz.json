@@ -648,35 +648,6 @@
       ]
     },
     {
-      "id": "q33",
-      "layer": "setup",
-      "prompt": "lookup",
-      "lookup": [
-        "candle-reading"
-      ],
-      "text": "Two 15m long-wick rejections of a low (lower wick through it, closed back above): one at a pullback level with the 4h and 1h up, one with the 4h and 1h down. What side is each, and which can be taken?",
-      "rule": "the side is the candle's: both are the long side (a rejection of a low); only the first, with the 4h and 1h, can be taken; against the 4h + 1h the trend rule refuses the second (never counter)",
-      "anchor": "Side first, from the candle",
-      "required": [
-        "\\blongs?\\b(?!-wick)",
-        "\\b(refus\\w*|no trade|not a trade|counter\\w*|never counter|trend rule|not allowed|can'?t be taken|cannot be taken)\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\b(can|may) be taken\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\bis (tradeable|tradable|a setup|the trade)\\b|\\b(may|can) ?not( be taken)?\\b|\\bcannot be taken\\b",
-        "(?<!\\b(?:neither|nor|none|not|never|no|cannot|can't|isn't|aren't|won't)\\b[^.;,:()]*)\\b(?:(?:can|may) be (?:taken|a setup|a long|a short)|take?able|tradeable|tradable|taken|allowed|take|is (?:the|a) (?:trade|setup)|with the trend|trend-with|with-trend|(?:long|short) setup|in the bias direction|usable|continuation (?:long|short))\\b|^[\\W_]*(?:long|short)\\s+on\\b|^(?!.*\\b(?:neither|none|either)\\b)(?!.*\\b(?:refus\\w*|cannot|can't|may not|not)\\b.*\\b(?:refus\\w*|cannot|can't|may not|not)\\b).*\\b(?:(?:cannot|can't|may not) be taken|no entry)\\b"
-      ],
-      "forbidden": [
-        "\\bshort[- ](setup|side|read|entry|trade)\\b",
-        "\\b(a|is a|as a) short\\b(?![- ]only (bias|trend)\\b|\\s+bias\\b)",
-        "\\b(with-trend|with the trend|counter-trend) short\\b",
-        "\\b(on )?the (other|opposite) side\\b",
-        "\\b(take|trade) it (small|smaller|light|anyway)\\b",
-        "\\bcounter[- ]trend (short|long|one)\\b[^.;]*\\b(i'?d|i would|can|could|to) take\\b",
-        "\\bstill a (short|long) to take\\b",
-        "\\b(both|either)\\b(?![^.;]*\\bonly the (first|one|pullback)\\b)[^.;]*\\b(taken|tradeable|tradable|can be taken|valid trades?|allowed)\\b",
-        "\\b(take|trade|short|long|buy|sell) (them )?(both|either)\\b",
-        "\\bboth (are )?(valid|tradeable|tradable|taken)\\b",
-        "\\b(neither (is|are|one is) refused|nothing (is )?refused|no refusal)\\b", "\\bnone (is |are )?refused\\b|\\bnot refused\\b|\\b(counter|counter-trend) but allowed\\b|\\bonly lowers size\\b|\\bthe second too\\b|\\b(at )?(full|a smaller|smaller|reduced|half|lower) size\\b|\\b(cannot|can'?t|can not|may not)\\s+be taken (at|with)\\b"
-      ]
-    },
-    {
       "id": "q34",
       "layer": "setup",
       "prompt": "lookup",
@@ -1791,24 +1762,6 @@
       "answer": "invalidated: the close below the protected HL ended the up trend (a potential reversal, unconfirmed)"
     },
     {
-      "id": "q132",
-      "layer": "bias",
-      "prompt": "lookup",
-      "lookup": [
-        "bos-vs-choch"
-      ],
-      "text": "Briefing lines (synthetic, 10:42 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): range: 3m BOS down then CHoCH up (failed: a close below its origin 21462.5); 4h+1h up; class trend-up.\n- Price 21460.75.\n- m3.lastBreak: last CHoCH up at 21478.00 (barsAgo 3; protected low 21462.50, broken at 10:39), previous BOS down at 21471.25 (barsAgo 10).\n- Day so far (24 3m bars; `day-context`): mixed up: efficiency 0.12 (x sqrt(bars) 0.59), RTH VWAP crosses 4, range 3 x 3m ATR(14), net up (its size: Trend declared? day's move).\nThe 3m closed at 21460.75, below the low 21462.50 that started the CHoCH up. What is the CHoCH now?",
-      "rule": "a CHoCH fails on a close through the low (high) that started the shift: the potential reversal is invalidated",
-      "anchor": "a CHoCH holds until the low (high) that started the shift breaks",
-      "choices": [
-        "chop ends: the CHoCH turned into a trend",
-        "failed: the potential reversal up is invalidated",
-        "the reversal up is confirmed",
-        "a BOS up: continuation"
-      ],
-      "answer": "failed: the potential reversal up is invalidated"
-    },
-    {
       "id": "q133",
       "layer": "bias",
       "prompt": "lookup",
@@ -2107,6 +2060,44 @@
         "STOP 15662.25: weakening"
       ],
       "answer": "STOP hold: hold"
+    },
+    {
+      "id": "q147",
+      "layer": "bias",
+      "prompt": "lookup",
+      "lookup": [
+        "bos-vs-choch"
+      ],
+      "text": "Briefing lines (synthetic, 10:06 ET), flat:\n- Bias: short only (4h down, 1h down; long refused).\n- Market state (3m): in the down leg: LH 14178 broken by a close 18 min ago, closed back below, the break's high 14197; overlap 0.67, efficiency 0.01, 15m overlapping; 4h+1h down; class trend-down.\n- Price 14131.75.\n- m3.lastBreak: last CHoCH up at 14178.00 (barsAgo 6; protected low 14099.00), previous BOS down at 14152.00 (barsAgo 11).\nBy the 3m state line above, what happened at LH 14178?",
+      "layers": { "rthBars": 13, "structure": { "side": "down", "level": 14178, "status": "intact", "legOK": true, "resumed": true, "levelBroken": true, "flip": { "oldSide": "down", "oldLevel": 14178, "barsAgo": 6, "byRule": "close", "held": false, "extreme": 14197, "inside": true } }, "behavior": { "word": "overlapping", "word15": "overlapping", "overlap": 0.67, "eff": 0.01 } },
+      "rule": "the line's words `LH 14178 broken by a close 18 min ago, closed back below`: a 3m close went through the level, then a close came back below it; the level was closed through, so it no longer protects (it is not holding)",
+      "anchor": "a close went through X, then one came back",
+      "choices": [
+        "it holds: no close has gone through it",
+        "only a wick went through it; the close stayed below",
+        "a 3m close went through it 18 min ago, then a close came back below it: broken, no longer protection",
+        "a close went through it and price stayed above it"
+      ],
+      "answer": "a 3m close went through it 18 min ago, then a close came back below it: broken, no longer protection"
+    },
+    {
+      "id": "q148",
+      "layer": "levels",
+      "prompt": "lookup",
+      "lookup": [
+        "bos-vs-choch"
+      ],
+      "text": "Briefing lines (synthetic, 10:06 ET), flat:\n- Bias: short only (4h down, 1h down; long refused).\n- Market state (3m): in the down leg: LH 14178 broken by a close 18 min ago, closed back below, the break's high 14197; overlap 0.67, efficiency 0.01, 15m overlapping; 4h+1h down; class trend-down.\n- Price 14131.75.\n- m3.lastBreak: last CHoCH up at 14178.00 (barsAgo 6; protected low 14099.00), previous BOS down at 14152.00 (barsAgo 11).\nWhich swing did the failed break leave above price?",
+      "layers": { "rthBars": 13, "structure": { "side": "down", "level": 14178, "status": "intact", "legOK": true, "resumed": true, "levelBroken": true, "flip": { "oldSide": "down", "oldLevel": 14178, "barsAgo": 6, "byRule": "close", "held": false, "extreme": 14197, "inside": true } }, "behavior": { "word": "overlapping", "word15": "overlapping", "overlap": 0.67, "eff": 0.01 } },
+      "rule": "after a failed protected break the line names the failed break's extreme (`the break's high`): the swing the resumed move left above price, not the broken level",
+      "anchor": "`the break's high` is the swing above",
+      "choices": [
+        "14197, the break's high",
+        "14178, the LH",
+        "14099, the protected low",
+        "14181"
+      ],
+      "answer": "14197, the break's high"
     }
   ],
   "partB": [

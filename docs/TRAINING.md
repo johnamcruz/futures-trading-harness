@@ -1811,7 +1811,14 @@ Frozen definitions:
   `marketState.equalAtr` x ATR(14), is the only invalidation of the leg; a
   CHoCH then BOS against the leg confirms a transition, printed `CHoCH then
   BOS: transition confirmed` while the old level is unbroken and `reversal
-  confirmed` once a close goes through it); and price behavior
+  confirmed` once a close goes through it; a level a close went through
+  past the tie is never printed `holds`: the Market state line, the break
+  record (`last` and `previous`), the Break quality line and the Manage
+  read read one predicate, protected-status.js, a close past the tie
+  breaks it and it stays broken (the Pullback line's `15m X holds` and
+  `m3.htfLevels` are other objects with their own rules); a broken level
+  prints `broken by a close`, `closed back` while the latest close is back
+  past it, and `new protected low Y` from the break record); and price behavior
   (market-behavior.js: overlap, efficiency, displacement, failed
   continuation; the 3m and 15m words). The precedence, once: `forming` (no
   RTH break yet); `pullback` (an open `Pullback` line, pullback-read.js
@@ -1916,6 +1923,15 @@ Frozen definitions:
   `atrPeriod` (14). It uses no briefing word, but path efficiency is the
   same family of idea as the day so far's efficiency, so their agreement
   is a diagnostic, not independence.
+
+The 3m machine's hand-back (structure-layers.js; a rule of the Market
+state, not one of the frozen definitions above): a protected break whose
+close comes back through the level within `marketState.followBars` failed,
+and the old side keeps the read; its level then prints `LH X broken by a
+close N min ago, closed back below, the break's high E`, never `holds`.
+Kept (decided 2026-11-17, swing-holds D1: removing it measured worse on the
+round-20 hold-out, false chop 6 -> 25, missed chop 215 -> 235, trend recall
+87.5% -> 84.0%).
 
 The report aggregates only trend vs chop, with n and the cases listed:
 recall (cases recognised within the margin) with the coded read's beside

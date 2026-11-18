@@ -17,6 +17,7 @@ const PR = require('../../scripts/lib/trading/pullback-read');
 const { protectedOf, lastBreaks } = require('../../scripts/lib/trading/structure-events');
 const ind = require('../../scripts/lib/trading/indicators');
 const { analysis } = require('../../scripts/lib/tunables');
+const { assertGolden } = require('../golden');
 
 const AN = analysis();
 const TH = { crossesChop: AN.regime.rangeCrosses, maxPullbackDepth: AN.pullbackRead.maxStateDepth, lineBytes: AN.marketState.lineBytes }; // the briefing's
@@ -56,6 +57,67 @@ const stateAt = (date, hm) => {
   assert.ok(Buffer.byteLength(line) <= TH.lineBytes, `${date} ${hm}: ${Buffer.byteLength(line)} bytes`);
   return { b, s, line, cls: M.classWordOf(s), m3: b.sections.m3.data };
 };
+
+// 2022-04-11, the morning of the failed protected break (swing-holds): 61 real 3m bars, 07:30-10:33 ET
+// (tests/fixtures/market-state/2022-04-11-open.json, t o h l c v only; on this slice the structure snapshots equal the full
+// history's on every close 09:33-10:33). The 4h + 1h lie outside the slice: stated as the recorded prompt's (down, down).
+// No pullback read was open on those closes in the recorded prompts, so none is passed: the layers decide, as they did.
+const { marketLayers } = require('../../scripts/lib/trading/market-layers');
+const { qualityOf } = require('../../scripts/lib/trading/displacement');
+const SE = require('../../scripts/lib/trading/structure-events');
+const BARS_0411 = require('../fixtures/market-state/2022-04-11-open.json');
+const etHm = t => new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(t));
+const recordOf = bars => {
+  const atr = ind.atr(bars);
+  const lb = SE.lastBreaks(bars);
+  const w = Object.fromEntries(Object.entries(lb).map(([k, x]) => [k, x ? { ...x, protected: SE.protectedOf(bars, x, { atr, equalAtr: AN.marketState.equalAtr }) } : x]));
+  return qualityOf(bars, w, { minutes: 3, levels: [] });
+};
+const open0411 = () => {
+  const open = BARS_0411.findIndex(b => b.t === '2022-04-11T13:30:00.000Z');
+  const rows = [];
+  for (let z = open; z < BARS_0411.length; z += 1) {
+    const bars = BARS_0411.slice(0, z + 1);
+    const closedAt = new Date(Date.parse(bars[z].t) + 180000).toISOString();
+    const layers = marketLayers({ bars, minutes: 3, setupMinutes: 15, closedAt, pullback: null, p: AN.marketState, floor: AN.daySoFar.minBars, ibBars: AN.dayContext.ibMinutes / 3 });
+    const b = { minutes: 3, closedAt, sections: { h1: { data: { h4: { trend: 'down' }, h1: { trend: 'down' } } }, m3: { data: { layers, price: bars[z].c, lastBreak: recordOf(bars) } } } };
+    const s = M.readState(b, TH);
+    rows.push({ hm: etHm(closedAt), P: layers.structure, s, cls: M.classWordOf(s), line: M.marketStateLine(s), record: b.sections.m3.data.lastBreak });
+  }
+  return rows;
+};
+const ROWS_0411 = open0411();
+
+test('2022-04-11 (real): state parity: the machine\'s fields, the state and the class on every close 09:33-10:33, pinned (Build 1 changes no transition)', () => {
+  const row = r => `${r.hm} ${[r.P.side, r.P.status, r.P.level, r.P.legOK, r.P.resumed, r.P.flip ? r.P.flip.held : '-', r.P.flipsIn].join(' ')} | ${r.s.state} ${r.cls}`;
+  assertGolden('market-state-parity-0411.txt', `${ROWS_0411.map(row).join('\n')}\n`);
+});
+
+test('2022-04-11 (real): a close through LH 14178 at 09:48 and back within 3 bars: the machine hands the down leg back, and no line says 14178 holds (swing-holds)', () => {
+  const at = hm => ROWS_0411.find(r => r.hm === hm);
+  const b = at('09:48');
+  assert.deepStrictEqual([b.P.side, b.P.status, b.P.flip.oldLevel], ['up', 'broken', 14178]);
+  for (const r of ROWS_0411.filter(x => x.hm >= '09:54' && x.hm <= '10:18')) {
+    assert.deepStrictEqual([r.P.status, r.P.level, r.P.levelBroken, r.P.flip.extreme], ['intact', 14178, true, 14197], r.hm);
+    assert.doesNotMatch(r.line, /14178 holds/, `${r.hm} ${r.line}`);
+    assert.match(r.line, /LH 14178 broken by a close \d+ min ago, closed back below, the break's high 14197/, r.hm);
+  }
+  const n = at('10:21');
+  assert.deepStrictEqual([n.P.status, n.P.level, n.P.levelBroken], ['intact', 14181, false]);
+  assert.match(n.line, /LH 14181 holds/);
+  for (const r of ROWS_0411) if (r.P.levelBroken || r.P.status === 'broken') assert.doesNotMatch(r.line, new RegExp(`${r.P.level} holds`), `${r.hm} ${r.line}`);
+});
+
+test('2022-04-11 (real): the five lines of the design, exact', () => {
+  const want = {
+    '09:45': 'Market state (3m): in the down leg: LH 14178 holds; displacement up this bar; overlap 0.55, efficiency 0.01, 15m early; 4h+1h down; class trend-down',
+    '09:48': 'Market state (3m): range: no leg holds, LH 14178 broken by a close this bar, new protected low 14099, edges 14099-14189.25 (travel edge to edge); overlap 0.56, efficiency 0.08, 15m early; 4h+1h down; class trend-down',
+    '09:54': 'Market state (3m): weakening down: LH 14178 broken by a close 6 min ago, closed back below, the break\'s high 14197; displacement up 2 bars ago; behavior rotating (overlap 0.57, efficiency 0.01), 15m early; 4h+1h down; class unclear',
+    '10:06': 'Market state (3m): in the down leg: LH 14178 broken by a close 18 min ago, closed back below, the break\'s high 14197; overlap 0.67, efficiency 0.01, 15m overlapping; 4h+1h down; class trend-down',
+    '10:21': 'Market state (3m): trend down: LH 14181 holds, CHoCH down this bar; overlap 0.75, efficiency 0.16, 15m overlapping; 4h+1h down; class trend-down',
+  };
+  for (const [hm, line] of Object.entries(want)) assert.strictEqual(ROWS_0411.find(r => r.hm === hm).line, line, hm);
+});
 
 // Round 20: the two pinned real tests the design review names, rewritten with the reason. Before, the 3m CHoCH pair was
 // chop there; the owner's refinement ("Don't classify a market as chop simply because you see two opposing CHoCHs") makes
@@ -111,14 +173,31 @@ test('protected swings (real): each printed 3m break carries protectedOf on the 
     const plain = lastBreaks(w);
     for (const k of ['last', 'previous']) {
       if (!plain[k]) continue;
-      assert.deepStrictEqual(lb[k].protected, protectedOf(w, plain[k]), `${date} ${hm} ${k}`);
+      const band = { atr: ind.atr(w), equalAtr: AN.marketState.equalAtr };
+      const { side, level, at, brokenAt } = lb[k].protected;
+      assert.deepStrictEqual({ side, level, at, brokenAt }, protectedOf(w, plain[k], band), `${date} ${hm} ${k}: last and previous both banded (swing-holds)`);
       const cut = w.filter(x => Date.parse(x.t) <= Date.parse(plain[k].at));
-      assert.strictEqual(protectedOf(cut, plain[k]).level, lb[k].protected.level, 'causal: known at the break');
+      assert.strictEqual(protectedOf(cut, plain[k], { atr: ind.atr(cut), equalAtr: AN.marketState.equalAtr }).level, lb[k].protected.level, 'causal: known at the break');
       const p = lb[k].protected;
       const span = w.filter(x => Date.parse(x.t) > Date.parse(plain[k].swingAt) && Date.parse(x.t) <= Date.parse(plain[k].at));
       assert.strictEqual(p.level, plain[k].direction === 'up' ? Math.min(...span.map(x => x.l)) : Math.max(...span.map(x => x.h)));
     }
   }
+});
+
+// swing-holds: the previous break's protected swing follows the tie too (one predicate for last and previous). 2022-08-11
+// 11:33: the previous break, a BOS down, has its protected high 16756.75; this bar closes past it inside the tie (a tie:
+// holds, brokenAt null), where the unbanded record said broken.
+test('previous.protected (real): brokenAt follows the tie, as last.protected does (2022-08-11 11:33)', () => {
+  const w = window('2022-08-11', '11:33');
+  const b = B.buildBriefing({ symbol: 'NQ', bars: w, minutes: 3, now: new Date(Date.parse(w[w.length - 1].t) + 180000) });
+  const prev = b.sections.m3.data.lastBreak.previous;
+  assert.deepStrictEqual([prev.kind, prev.direction, prev.protected.level], ['BOS', 'down', 16756.75]);
+  const atr = ind.atr(w);
+  const z = w.length - 1;
+  assert.ok(w[z].c > 16756.75 && w[z].c - 16756.75 <= AN.marketState.equalAtr * atr[z], `11:33 closes ${w[z].c}: past the level, inside the tie`);
+  assert.ok(w.every((x, k) => Date.parse(x.t) <= Date.parse(prev.at) || k === z || x.c <= 16756.75), 'no other close past it since the break');
+  assert.strictEqual(prev.protected.brokenAt, null, 'a tie holds');
 });
 
 // The owner's BOS/CHoCH invalidation cases, each on a real briefing (the CI goal fixture's bars): the per-break protected
@@ -215,7 +294,8 @@ test('real: a clean range reads range, not chop: edge to edge (2022-09-01 10:27)
   const { s, line, m3 } = stateAt('2022-09-01', '10:27');
   assert.strictEqual(s.state, 'range', line);
   assert.strictEqual(m3.layers.edges.interior, 0);
-  assert.match(line, /range: no leg holds, HL [\d.]+ broken \d+ min ago, edges [\d.]+-[\d.]+ \(travel edge to edge\)/, 'the undisplaced protected break printed (review finding 2)');
+  assert.match(line, /range: no leg holds, HL [\d.]+ broken by a close \d+ min ago, closed back above, edges [\d.]+-[\d.]+ \(travel edge to edge\)/, 'the undisplaced protected break printed (review finding 2); the close back above it after followBars restores nothing (swing-holds: flip.inside)');
+  assert.deepStrictEqual([m3.layers.structure.status, m3.layers.structure.flip.held, m3.layers.structure.flip.inside], ['broken', false, true]);
 });
 
 // The owner's five-case test on real fixture days (cases chosen by the review's section-4 rules, tools/chop-read r20-build).

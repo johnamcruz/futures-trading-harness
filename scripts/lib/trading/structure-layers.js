@@ -21,11 +21,18 @@
  *                     it), the old level kept as `flip.oldLevel`, `flip.oldBroken` false until a close goes through it
  *                     (the owner's table: CHoCH then BOS, a confirmed transition). After a close-through the new side is `broken`
  *                     (unconfirmed) until a break its way confirms it; a break the old way, or a close back through the
- *                     old level within followBars, hands the leg back. Snapshot: { side, level, origin, status, legOK
- *                     (intact and a break its way not failed), sinceProgress (bars since a new extreme by close),
- *                     internal, lastInternal (the last break against: { direction, level, barsAgo }), lastWay (the last
- *                     break its way: { kind, direction, level, barsAgo, strong }), resumed, flip { barsAgo, strong,
- *                     disp (its candle or one within dispBars strong the new way), held, oldSide, oldLevel, byRule, oldBroken }, flipsIn }
+ *                     old level within followBars, hands the leg back (the hand-back: the protected break failed and the
+ *                     old side keeps the read; the machine's rule, not the owner's text, kept as D1 of swing-holds). The
+ *                     handed-back level was closed through: `levelBroken` true until a break the leg's way sets a new
+ *                     level, so no printer says it holds (protected-status.js R2). Every close-through and tie test is
+ *                     protected-status.js through / tieAt. Snapshot: { side, level, origin, status, levelBroken, levelAgo
+ *                     (bars since the level was set), legOK (intact and a break its way not failed), sinceProgress (bars
+ *                     since a new extreme by close), internal, lastInternal (the last break against: { direction, level,
+ *                     barsAgo }), lastWay (the last break its way: { kind, direction, level, barsAgo, strong }), resumed,
+ *                     flip { barsAgo, strong, disp (its candle or one within dispBars strong the new way), held, oldSide,
+ *                     oldLevel, byRule, oldBroken, extreme (a failed break's extreme, flip bar to the close back: fixed at
+ *                     the hand-back; else null), inside (the latest close back on the old side of oldLevel past the tie) },
+ *                     flipsIn }
  *   momentumAt(bars, breaks, snap, z, from, atr, p)   the momentum condition around an intact leg (the owner: "Displacement
  *                     detects emerging pressure. Failed continuation detects loss of directional control."):
  *                     dispAgainst (a strong candle against the leg in the last pressBars RTH bars), breakAgainst (a k=2
@@ -36,6 +43,7 @@
  */
 
 const SE = require('./structure-events');
+const PS = require('./protected-status');
 const { strongCandle } = require('./cisd');
 
 const opp = d => (d === 'up' ? 'down' : 'up');
@@ -64,9 +72,9 @@ function failedAt(bars, b, z, p) {
   return false;
 }
 
-/** The break's protected level (structure-events.js protectedOf on the bars from its swing to it: the same level, read once). */
+/** The break's protected level (structure-events.js protectedLevel on the bars from its swing to it: the same level, read once). */
 function levelOf(bars, b) {
-  const pr = SE.protectedOf(b.swingI === null ? bars.slice(0, b.i + 1) : bars.slice(b.swingI, b.i + 1), { direction: b.direction, swingAt: b.swingI === null ? null : bars[b.swingI].t, at: b.at });
+  const pr = SE.protectedLevel(b.swingI === null ? bars.slice(0, b.i + 1) : bars.slice(b.swingI, b.i + 1), { direction: b.direction, swingAt: b.swingI === null ? null : bars[b.swingI].t, at: b.at });
   return pr ? pr.level : null;
 }
 
@@ -79,7 +87,7 @@ function structureSeries(bars, breaks, from, atr, p) {
   const levels = new Map(breaks.map(b => [b, levelOf(bars, b)]));
   const flips = [];
   const extremeOf = (side, a, z) => { let e = null; for (let k = a; k <= z; k += 1) e = e === null ? (side === 'up' ? bars[k].h : bars[k].l) : side === 'up' ? Math.max(e, bars[k].h) : Math.min(e, bars[k].l); return e; };
-  const leg = (b, i, extra = {}) => ({ side: b.direction, level: levels.get(b), origin: levels.get(b), status: 'intact', lastProgress: i, legStart: i, internal: 0, lastInternal: null, ext: sgn(b.direction) * bars[i].c, legBreaks: [b], ...extra });
+  const leg = (b, i, extra = {}) => ({ side: b.direction, level: levels.get(b), origin: levels.get(b), status: 'intact', lastProgress: i, legStart: i, internal: 0, lastInternal: null, ext: sgn(b.direction) * bars[i].c, legBreaks: [b], levelAt: i, levelBroken: false, ...extra });
   let P = null;
   let lastAgainst = null; // the last RTH break against the intact leg (the CHoCH-then-BOS rule)
   let lastWay = null;
@@ -89,7 +97,11 @@ function structureSeries(bars, breaks, from, atr, p) {
       if (!P) { P = leg(b, i); lastAgainst = null; continue; }
       if (b.direction === P.side) {
         if (P.status === 'broken') P = { ...leg(b, i), origin: P.level, legStart: P.flipAt, flipAt: P.flipAt, flip: P.flip };
-        else { P.level = lvl === null ? P.level : lvl; P.legBreaks.push(b); }
+        else {
+          // A break the leg's way sets the level to its protected swing: a new level, never closed through (levelBroken clears).
+          if (lvl !== null && lvl !== P.level) { P.level = lvl; P.levelAt = i; P.levelBroken = false; }
+          P.legBreaks.push(b);
+        }
         lastAgainst = null;
       } else if (P.status === 'broken') {
         // The new leg never confirmed: the old side resumes with this break as its continuation.
@@ -107,18 +119,24 @@ function structureSeries(bars, breaks, from, atr, p) {
     }
     if (P) {
       if (P.status === 'intact') { const v = sgn(P.side) * bars[i].c; if (v > P.ext) { P.ext = v; P.lastProgress = i; } }
-      const tol = p.equalAtr * (Number.isFinite(atr[i]) ? atr[i] : 0);
-      if (P.status === 'intact' && Number.isFinite(P.level) && sgn(P.side) * (P.level - bars[i].c) > tol) {
+      const tol = PS.tieAt(atr, i, p.equalAtr);
+      if (P.status === 'intact' && PS.through(bars[i].c, P.level, P.side, tol)) {
         // The protected break: a close through the level against the leg by more than the tie tolerance.
         const flip = { i, oldSide: P.side, oldLevel: P.level, oldOrigin: P.origin, strong: strongCandle(bars[i], bars[i - 1], -sgn(P.side), atr[i - 1]).strong, failed: false, old: P, byRule: 'close' };
         flips.push(flip);
         const ext = extremeOf(P.side, P.legStart, i);
-        P = { side: opp(P.side), level: ext, origin: ext, status: 'broken', lastProgress: null, legStart: null, internal: 0, lastInternal: null, flipAt: i, flip, ext: -sgn(P.side) * bars[i].c, legBreaks: [] };
+        P = { side: opp(P.side), level: ext, origin: ext, status: 'broken', lastProgress: null, legStart: null, internal: 0, lastInternal: null, flipAt: i, flip, ext: -sgn(P.side) * bars[i].c, legBreaks: [], levelAt: i, levelBroken: false };
         lastAgainst = null;
-      } else if (P.status === 'broken' && P.flip && sgn(P.flip.oldSide) * (bars[i].c - P.flip.oldLevel) > tol && i > P.flipAt) {
-        // A close back through the broken level the old way: the protected break failed; within followBars the old leg resumes.
+      } else if (P.status === 'broken' && P.flip && PS.through(bars[i].c, P.flip.oldLevel, opp(P.flip.oldSide), tol) && i > P.flipAt) {
+        // A close back through the broken level the old way: the protected break failed; within followBars the old leg resumes
+        // (the hand-back, D1 of swing-holds: the machine's rule, kept). Its level was closed through: levelBroken, so no line
+        // says it holds, and the failed break's extreme (flip bar to this bar) is fixed as the swing the resumed move left.
         P.flip.failed = true;
-        if (i - P.flipAt <= p.followBars) { const o = P.flip.old; P = { ...o, status: 'intact', resumed: true, internal: o.internal + 1, lastInternal: o.lastInternal, ext: Math.max(o.ext, sgn(o.side) * bars[i].c) }; }
+        if (i - P.flipAt <= p.followBars) {
+          const o = P.flip.old;
+          P.flip.extreme = extremeOf(opp(o.side), P.flipAt, i);
+          P = { ...o, status: 'intact', resumed: true, internal: o.internal + 1, lastInternal: o.lastInternal, ext: Math.max(o.ext, sgn(o.side) * bars[i].c), levelBroken: true };
+        }
       }
     }
     if (i >= from && P) out[i] = snapshot(bars, P, flips, lastWay, i, atr, p);
@@ -133,16 +151,18 @@ function snapshot(bars, P, flips, lastWay, z, atr, p) {
   // The old protected level after a flip: broken once a close went through it past the tie (a close-through flip by
   // definition); a CHoCH-then-BOS flip leaves it unbroken until then (round 20c: a transition confirmed, not a reversal).
   let oldBroken = Boolean(f && f.byRule === 'close');
-  if (f && !oldBroken) for (let j = f.i; j <= z && !oldBroken; j += 1) if (sgn(f.oldSide) * (f.oldLevel - bars[j].c) > p.equalAtr * (Number.isFinite(atr[j]) ? atr[j] : 0)) oldBroken = true;
+  if (f && !oldBroken) for (let j = f.i; j <= z && !oldBroken; j += 1) if (PS.through(bars[j].c, f.oldLevel, f.oldSide, PS.tieAt(atr, j, p.equalAtr))) oldBroken = true;
   const way = lastWay && lastWay.direction === P.side ? lastWay : null;
   return {
-    side: P.side, level: P.level, origin: P.origin, status: P.status,
+    side: P.side, level: P.level, origin: P.origin, status: P.status, levelBroken: Boolean(P.levelBroken),
+    levelAgo: Number.isInteger(P.levelAt) ? z - P.levelAt : null,
     legOK: P.status === 'intact' && P.legBreaks.some(b => !failedAt(bars, b, z, p)),
     sinceProgress: Number.isInteger(P.lastProgress) ? z - P.lastProgress : null,
     internal: P.internal, resumed: Boolean(P.resumed),
     lastInternal: P.lastInternal ? { direction: P.lastInternal.direction, level: P.lastInternal.level, barsAgo: z - P.lastInternal.i } : null,
     lastWay: way ? { kind: way.kind, direction: way.direction, level: way.level, barsAgo: z - way.i, strong: way.strong, failed: failedAt(bars, way, z, p) } : null,
-    flip: f ? { barsAgo: z - f.i, strong: f.strong, disp, held: !f.failed, oldSide: f.oldSide, oldLevel: f.oldLevel, byRule: f.byRule, oldBroken } : null,
+    flip: f ? { barsAgo: z - f.i, strong: f.strong, disp, held: !f.failed, oldSide: f.oldSide, oldLevel: f.oldLevel, byRule: f.byRule, oldBroken,
+      extreme: Number.isFinite(f.extreme) ? f.extreme : null, inside: PS.through(bars[z].c, f.oldLevel, opp(f.oldSide), PS.tieAt(atr, z, p.equalAtr)) } : null,
     flipsIn: flips.filter(x => z - x.i < p.structBars).length,
   };
 }

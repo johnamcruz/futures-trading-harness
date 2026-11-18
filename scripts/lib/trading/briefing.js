@@ -97,8 +97,12 @@ const { candidateTrendRule } = require('./signal-state');
 const { sideTarget } = require('./order-plan');
 const { roundStepFor, roundStepError } = require('./round-numbers');
 const { pivots, lastBreaks, breaksOf, sweeps, untestedSwings, swingLevels, protectedOf } = require('./structure-events');
-// The 3m breaks with their protected swings (the owner's invalidation rule; the Market state reads them).
-const withProtected = (bars, lb) => Object.fromEntries(Object.entries(lb).map(([k, x]) => [k, x ? { ...x, protected: protectedOf(bars, x) } : x]));
+// The breaks with their protected swings (the owner's invalidation rule; the Market state reads them), last and previous
+// both broken only by a close past the tie on the frame's own candles (protected-status.js, swing-holds: one predicate).
+const withProtected = (bars, lb) => {
+  const pr = { atr: atrOf(bars), equalAtr: AN_STATE.marketState.equalAtr };
+  return Object.fromEntries(Object.entries(lb).map(([k, x]) => [k, x ? { ...x, protected: protectedOf(bars, x, pr) } : x]));
+};
 // The last break's displacement read (displacement.js: strength only; the summary's Break quality line says it, the detail
 // leaves it out); no gate, hook, compose or decision code reads it (tests/plugin/displacement-readers.test.js).
 const { qualityOf, breakLine } = require('./displacement');

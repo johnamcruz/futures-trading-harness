@@ -124,33 +124,35 @@ test('the line: one exact string per state, structure then momentum then behavio
   assert.strictEqual(line({ layers: lay({ stale: true, structure: leg({ sinceProgress: 22 }) }) }), 'Market state (3m): rotation up: HL 21380.5 holds, no new high for 66 min; behavior trending (overlap 0.52, efficiency 0.41), 15m trending up; 4h+1h up; class unclear');
   const rev = lay({ reversal: true, structure: leg({ flip: { barsAgo: 6, strong: true, disp: true, held: true, oldSide: 'down', oldLevel: 21420, byRule: 'close' } }) });
   assert.match(line({ layers: rev }), /HL 21380\.5 holds, BOS up 6 min ago \(displaced\), reversal confirmed;/, 'Reversal: printed on the leg');
-  const back = lay({ momentum: { ...lay().momentum, trigger: true, dispAgainst: { barsAgo: 3 }, breakAgainst: { direction: 'down', level: 21380.5, barsAgo: 3, strong: true } }, structure: leg({ resumed: true, flip: { barsAgo: 3, strong: true, disp: false, held: false, oldSide: 'up', oldLevel: 21380.5, byRule: 'close' } }) });
-  assert.match(line({ layers: back }), /^Market state \(3m\): weakening up: HL 21380\.5 holds[^;]*; displacement down 3 bars ago through the HL, closed back;/, 'a break at the protected level itself is no internal break (review round 20, finding 1)');
-  assert.doesNotMatch(line({ layers: back }), /broke internal low 21380\.5/);
+  // swing-holds Build 1: a level a close went through (the machine's hand-back: levelBroken) is never printed as holding;
+  // the line says it was broken by a close, that the close came back, and where the failed break turned (flip.extreme).
+  const back = lay({ momentum: { ...lay().momentum, trigger: true, dispAgainst: { barsAgo: 3 }, breakAgainst: { direction: 'down', level: 21380.5, barsAgo: 3, strong: true } }, structure: leg({ resumed: true, levelBroken: true, flip: { barsAgo: 3, strong: true, disp: false, held: false, oldSide: 'up', oldLevel: 21380.5, byRule: 'close', extreme: 21371.25, inside: true } }) });
+  assert.match(line({ layers: back }), /^Market state \(3m\): weakening up: HL 21380\.5 broken by a close 9 min ago, closed back above, the break's low 21371\.25[^;]*; displacement down 3 bars ago;/, 'the failed break\'s own clause drops its level words (the structure clause names it)');
+  assert.doesNotMatch(line({ layers: back }), /21380\.5 holds|broke internal low 21380\.5|through the HL, closed back/);
   const tie = lay({ momentum: { ...lay().momentum, trigger: true, dispAgainst: { barsAgo: 0 }, breakAgainst: { direction: 'down', level: 21380.5, barsAgo: 0, strong: true } } });
   assert.match(line({ layers: tie }), /; displacement down this bar tested the HL \(a tie\);/, 'a close within the tie tolerance (decision 8): no break, not resumed');
-  const kept = lay({ structure: leg({ resumed: true, flip: { barsAgo: 12, strong: false, disp: false, held: false, oldSide: 'up', oldLevel: 21380.5, byRule: 'close' }, lastWay: { kind: 'BOS', direction: 'up', level: 21412.25, barsAgo: 20, strong: false, failed: false }, lastInternal: { direction: 'down', level: 21380.5, barsAgo: 12 } }), behavior: { ...lay().behavior, word: 'overlapping' } });
-  assert.match(line({ layers: kept }), /: HL 21380\.5 holds, through the HL, closed back;/, 'the structure clause too: never "internal low X broken" beside "X holds"');
+  const kept = lay({ structure: leg({ resumed: true, levelBroken: true, flip: { barsAgo: 12, strong: false, disp: false, held: false, oldSide: 'up', oldLevel: 21380.5, byRule: 'close', extreme: 21371.25, inside: true }, lastWay: { kind: 'BOS', direction: 'up', level: 21412.25, barsAgo: 20, strong: false, failed: false }, lastInternal: { direction: 'down', level: 21380.5, barsAgo: 12 } }), behavior: { ...lay().behavior, word: 'overlapping' } });
+  assert.match(line({ layers: kept }), /: in the up leg: HL 21380\.5 broken by a close 36 min ago, closed back above, the break's low 21371\.25; overlap/, 'the structure clause too: the failed break named once, never "internal low X broken"');
   assert.match(line({ layers: lay({ structure: leg({ lastWay: null, lastInternal: { direction: 'down', level: 21380.5, barsAgo: 1 } }), behavior: { ...lay().behavior, word: 'mixed' } }) }), /: HL 21380\.5 holds, tested the HL \(a tie\);/);
-  // "closed back" is this break's fact, not the leg's (re-review of fe35c98b8, finding 1): a leg resumed earlier at another
-  // level or bar, then a tie at its current level, prints the tie.
-  const oldResume = { barsAgo: 15, strong: false, disp: false, held: false, oldSide: 'up', oldLevel: 21361.25, byRule: 'close' };
-  const laterTie = lay({ momentum: { ...lay().momentum, trigger: true, dispAgainst: { barsAgo: 1 }, breakAgainst: { direction: 'down', level: 21380.5, barsAgo: 1, strong: true } }, structure: leg({ resumed: true, flip: oldResume }) });
-  assert.match(line({ layers: laterTie }), /; displacement down 1 bar ago tested the HL \(a tie\);/, 'resumed at another level: this break is a tie');
-  const sameLevelOtherBar = lay({ structure: leg({ resumed: true, flip: { ...oldResume, oldLevel: 21380.5 }, lastWay: null, lastInternal: { direction: 'down', level: 21380.5, barsAgo: 2 } }), behavior: { ...lay().behavior, word: 'mixed' } });
-  assert.match(line({ layers: sameLevelOtherBar }), /: HL 21380\.5 holds, tested the HL \(a tie\);/, 'the resume was at another bar: this break is a tie');
-  const heldFlip = lay({ structure: leg({ resumed: true, flip: { ...oldResume, oldLevel: 21380.5, barsAgo: 2, held: true }, lastWay: null, lastInternal: { direction: 'down', level: 21380.5, barsAgo: 2 } }), behavior: { ...lay().behavior, word: 'mixed' } });
-  assert.match(line({ layers: heldFlip }), /tested the HL \(a tie\);/, 'a held flip never printed as closed back');
-  // Each clause of closedBack decides on its own (20b review: a mutation dropping any one fails here).
-  const atBar = { ...oldResume, oldLevel: 21380.5, barsAgo: 2 };
-  const tieWith = (P, msg) => assert.match(line({ layers: lay({ structure: leg({ lastWay: null, lastInternal: { direction: 'down', level: 21380.5, barsAgo: 2 }, ...P }), behavior: { ...lay().behavior, word: 'mixed' } }) }), /: HL 21380\.5 holds, tested the HL \(a tie\);/, msg);
-  assert.match(line({ layers: lay({ structure: leg({ resumed: true, flip: atBar, lastWay: null, lastInternal: { direction: 'down', level: 21380.5, barsAgo: 2 } }), behavior: { ...lay().behavior, word: 'mixed' } }) }), /: HL 21380\.5 holds, through the HL, closed back;/, 'every clause true: closed back');
-  tieWith({ resumed: true, flip: { ...atBar, oldLevel: 21390 } }, 'the flip at another level, same bar: a tie');
-  tieWith({ resumed: true, flip: { ...atBar, byRule: 'choch-bos' } }, 'a CHoCH-then-BOS flip: a tie');
-  tieWith({ resumed: false, flip: atBar }, 'not resumed: a tie');
+  // The broken words are the snapshot's levelBroken, not an inference from the flip: a leg resumed earlier at another level
+  // (its level since set by a break its way) holds; a later tie at a broken level prints the tie beside the broken words.
+  const oldResume = { barsAgo: 15, strong: false, disp: false, held: false, oldSide: 'up', oldLevel: 21361.25, byRule: 'close', extreme: 21350, inside: true };
+  const laterTie = lay({ momentum: { ...lay().momentum, trigger: true, dispAgainst: { barsAgo: 1 }, breakAgainst: { direction: 'down', level: 21380.5, barsAgo: 1, strong: true } }, structure: leg({ resumed: true, levelBroken: false, flip: oldResume }) });
+  assert.match(line({ layers: laterTie }), /: HL 21380\.5 holds[^;]*; displacement down 1 bar ago tested the HL \(a tie\);/, 'resumed at another level: this level holds, this break is a tie');
+  const sameLevelOtherBar = lay({ structure: leg({ resumed: true, levelBroken: true, flip: { ...oldResume, oldLevel: 21380.5 }, lastWay: null, lastInternal: { direction: 'down', level: 21380.5, barsAgo: 2 } }), behavior: { ...lay().behavior, word: 'mixed' } });
+  assert.match(line({ layers: sameLevelOtherBar }), /: HL 21380\.5 broken by a close 45 min ago, closed back above, the break's low 21350, tested the HL \(a tie\);/, 'the failed break 15 bars ago, a tie 2 bars ago: both said');
+  const unmarked = lay({ structure: leg({ resumed: true, flip: { ...oldResume, oldLevel: 21380.5, barsAgo: 2 }, lastWay: null, lastInternal: { direction: 'down', level: 21380.5, barsAgo: 2 } }), behavior: { ...lay().behavior, word: 'mixed' } });
+  assert.match(line({ layers: unmarked }), /: HL 21380\.5 holds, tested the HL \(a tie\);/, 'no levelBroken (an older record): the flip infers nothing');
+  const noExtreme = lay({ structure: leg({ resumed: true, levelBroken: true, flip: { ...oldResume, oldLevel: 21380.5, extreme: null }, lastWay: null }), behavior: { ...lay().behavior, word: 'mixed' } });
+  assert.match(line({ layers: noExtreme }), /: HL 21380\.5 broken by a close 45 min ago, closed back above; /, 'no extreme known: the clause left out');
+  // levelText brief (a range, a chop, a pullback): no age, no extreme.
+  const pbBroken = lay({ structure: leg({ resumed: true, levelBroken: true, flip: { ...oldResume, oldLevel: 21380.5 } }) });
+  assert.match(line({ layers: pbBroken, pullback: pb() }), /: 3m up leg, HL 21380\.5 broken by a close, closed back above; overlap/);
+  const dnBroken = lay({ structure: leg({ side: 'down', level: 21440.25, legOK: false, resumed: true, levelBroken: true, flip: { ...oldResume, oldSide: 'down', oldLevel: 21440.25, extreme: 21447 } }), behavior: { ...lay().behavior, word: 'rotating' } });
+  assert.match(line({ layers: dnBroken }), /: range: the down leg's last break failed, LH 21440\.25 broken by a close, closed back below, edges /);
   const brokenRange = lay({ structure: leg({ status: 'broken', legOK: false, side: 'down', level: 21437.5, flip: { barsAgo: 2, strong: false, disp: false, held: true, oldSide: 'up', oldLevel: 21380.5, byRule: 'close' } }), behavior: { ...lay().behavior, word: 'mixed' } });
   assert.deepStrictEqual([st({ layers: brokenRange }), word({ layers: brokenRange })], ['range', 'trend-up'], 'an undisplaced protected break: range (no transition), the alignment default');
-  assert.match(line({ layers: brokenRange }), /^Market state \(3m\): range: no leg holds, HL 21380\.5 broken 6 min ago, edges/, 'the broken protected level printed (finding 2)');
+  assert.match(line({ layers: brokenRange }), /^Market state \(3m\): range: no leg holds, HL 21380\.5 broken by a close 6 min ago, edges/, 'the broken protected level printed (finding 2)');
   const internal = lay({ structure: leg({ lastInternal: { direction: 'down', level: 21402.25, barsAgo: 1 } }), behavior: { ...lay().behavior, word: 'overlapping' } });
   assert.match(line({ layers: internal }), /^Market state \(3m\): in the up leg: HL 21380\.5 holds, internal low 21402\.25 broken; overlap 0\.52, efficiency 0\.41, 15m trending up;/, 'an internal break against while the HL holds');
   const d1 = lay({ momentum: { ...lay().momentum, dispAgainst: { barsAgo: 1 } } });
@@ -175,6 +177,48 @@ test('the line: one exact string per state, structure then momentum then behavio
   assert.strictEqual(M.marketStateLine(M.stateOf(b({ ...wo, soFar: { status: 'read', read: 'rotational', vwapCrosses: null } }), { ...TH, lineBytes: 10 })).includes('Day so far'), false, 'the day-so-far word alone drops too');
   assert.strictEqual(M.marketStateLine(M.stateOf(b({ layers: ch, h4: 'range', soFar: { status: 'read', read: 'rotational', vwapCrosses: 7 } }), { ...TH, lineBytes: LINE_BYTES })), line({ layers: ch, h4: 'range', soFar: { status: 'read', read: 'rotational', vwapCrosses: 7 } }), 'under the budget: unchanged');
 
+});
+
+// swing-holds Build 1: a broken level with no leg restored (status broken). The words: broken by a close, whether the latest
+// close is back inside (flip.inside, present tense: never the flip's `held`), and the new side's protected swing from the
+// break record (never the machine's own level), left out when the record's swing is already broken or another way.
+test('swing-holds: brokenText: broken by a close; closed back from flip.inside; new protected from the break record only', () => {
+  const flip = { barsAgo: 2, strong: false, disp: false, held: true, oldSide: 'up', oldLevel: 21380.5, byRule: 'close', inside: false };
+  const P0 = { status: 'broken', legOK: false, side: 'down', level: 21437.5 };
+  const rg = (f, o = {}) => ({ layers: lay({ structure: leg({ ...P0, flip: { ...flip, ...f } }), behavior: { ...lay().behavior, word: 'mixed' } }), ...o });
+  const rec = (level, brokenAt = null, direction = 'down') => ({ last: { kind: 'CHoCH', direction, level: 21390, at: T(24), protected: { side: direction === 'down' ? 'high' : 'low', level, at: T(12), brokenAt } }, previous: null });
+  assert.match(line(rg({})), /: range: no leg holds, HL 21380\.5 broken by a close 6 min ago, edges /);
+  assert.match(line(rg({ inside: true })), /: range: no leg holds, HL 21380\.5 broken by a close 6 min ago, closed back above, edges /);
+  assert.match(line(rg({ held: false, inside: false })), /HL 21380\.5 broken by a close 6 min ago, edges /, 'closed back then through again (held false, inside false): no "closed back" (M6)');
+  assert.match(line(rg({}, { lastBreak: rec(21441) })), /HL 21380\.5 broken by a close 6 min ago, new protected high 21441, edges /, 'the record\'s swing, not the machine\'s 21437.5 (M7)');
+  assert.doesNotMatch(line(rg({}, { lastBreak: rec(21441) })), /21437\.5/);
+  assert.match(line(rg({}, { lastBreak: rec(21441, T(27)) })), /broken by a close 6 min ago, edges /, 'the record\'s swing already broken: left out (M8)');
+  assert.match(line(rg({}, { lastBreak: rec(21300, null, 'up') })), /broken by a close 6 min ago, edges /, 'the record\'s last break the other way: left out');
+  assert.match(line(rg({ disp: true, inside: true }, { lastBreak: rec(21441) })), /HL 21380\.5 broken by a displaced close 6 min ago, closed back above, new protected high 21441, edges /);
+  const tr = { layers: lay({ transition: true, structure: leg({ ...P0, flip: { ...flip, disp: true } }), behavior: { ...lay().behavior, word: 'mixed' } }), lastBreak: rec(21441) };
+  assert.match(line(tr), /: transition down: HL 21380\.5 broken by a displaced close 6 min ago, new protected high 21441, the new leg unconfirmed; /);
+  const ch = { layers: lay({ chop: CHOP, structure: leg({ ...P0, flip }) }), lastBreak: rec(21441) };
+  assert.match(line(ch), /: chop: no leg holds \(/, 'chop on a broken level: unchanged');
+});
+
+test('swing-holds: over the budget the two new clauses are cut, the break\'s extreme first, then the new protected swing; the rest as before', () => {
+  const flip = { barsAgo: 12, strong: false, disp: false, held: false, oldSide: 'up', oldLevel: 21380.5, byRule: 'close', extreme: 21371.25, inside: true };
+  const m = { ...lay().momentum, trigger: true, loss: true, dispAgainst: { barsAgo: 2 }, breakAgainst: { direction: 'down', level: 21412.25, barsAgo: 2, strong: false } };
+  const o = { layers: lay({ momentum: m, structure: leg({ resumed: true, levelBroken: true, flip, sinceProgress: 9, lastWay: null }), behavior: { ...lay().behavior, word: 'failing', word15: 'trending down' } }), h4: 'range' };
+  const full = M.marketStateLine(M.stateOf(b(o), TH));
+  assert.match(full, /, the break's low 21371\.25; /);
+  const lines = [];
+  for (let n = Buffer.byteLength(full); n > 100; n -= 1) lines.push(M.marketStateLine(M.stateOf(b(o), { ...TH, lineBytes: n })));
+  const firstCut = lines.find(l => !/the break's low/.test(l));
+  assert.ok(firstCut, 'the extreme is cut at some budget');
+  assert.doesNotMatch(firstCut, /\(overlap/, 'the behavior numbers go first, as before');
+  const rec = { last: { kind: 'CHoCH', direction: 'down', level: 21390, at: T(24), protected: { side: 'high', level: 21441, at: T(12), brokenAt: null } }, previous: null };
+  const br = { layers: lay({ chop: { ...NO_CHOP }, structure: leg({ status: 'broken', legOK: false, side: 'down', level: 21437.5, flip: { ...flip, held: true, barsAgo: 2 } }), behavior: { ...lay().behavior, word: 'mixed' } }), lastBreak: rec, h4: 'range', h1: 'down' };
+  const bfull = M.marketStateLine(M.stateOf(b(br), TH));
+  assert.match(bfull, /, new protected high 21441, /);
+  let cut = null;
+  for (let n = Buffer.byteLength(bfull); n > 100 && !cut; n -= 1) { const l = M.marketStateLine(M.stateOf(b(br), { ...TH, lineBytes: n })); if (!/new protected/.test(l)) cut = l; }
+  assert.ok(cut && /HL 21380\.5 broken by a close 6 min ago, closed back above, edges /.test(cut), String(cut));
 });
 
 test('the behavior word (round 20b): printed only where it is the state\'s evidence (rotation, weakening, transition; chop names its facts); never under trend, in the leg, pullback or range', () => {
@@ -252,13 +296,13 @@ test('round 20c: chop and range print "no leg holds" only when no protected leve
   const rg = lay({ structure: leg({ legOK: false }), behavior: { ...lay().behavior, word: 'rotating' } });
   assert.match(line({ layers: rg }), /^Market state \(3m\): range: the up leg's last break failed, HL 21380\.5 holds, edges 21402-21431\.25 /);
   const brokenRange = lay({ structure: leg({ status: 'broken', legOK: false, side: 'down', level: 21437.5, flip }), behavior: { ...lay().behavior, word: 'mixed' } });
-  assert.match(line({ layers: brokenRange }), /: range: no leg holds, HL 21380\.5 broken 6 min ago, edges/);
+  assert.match(line({ layers: brokenRange }), /: range: no leg holds, HL 21380\.5 broken by a close 6 min ago, edges/);
   for (const L of [ch, dn, rg]) assert.doesNotMatch(line({ layers: L }), /no leg holds/, 'an intact protected level: never "no leg holds"');
   // A protected break the leg took back (a close back through within followBars: the leg resumed, its level holds) is
   // named as failed beside "holds"; a held one stays "a protected break".
   const back = { barsAgo: 4, strong: false, disp: false, held: false, oldSide: 'up', oldLevel: 21380.5, byRule: 'close' };
-  const tb = line({ layers: lay({ chop: { ...CHOP, evidence: { bothWays: false, flip: true, failed: true } }, structure: leg({ legOK: false, resumed: true, flip: back }) }) });
-  assert.match(tb, /: chop: the up leg's last break failed, HL 21380\.5 holds \(a failed protected break, a failed break\); /, tb);
+  const tb = line({ layers: lay({ chop: { ...CHOP, evidence: { bothWays: false, flip: true, failed: true } }, structure: leg({ legOK: false, resumed: true, levelBroken: true, flip: back }) }) });
+  assert.match(tb, /: chop: the up leg's last break failed, HL 21380\.5 broken by a close, closed back above \(a failed protected break, a failed break\); /, tb);
   const kept = line({ layers: lay({ chop: { ...CHOP, evidence: { bothWays: false, flip: true, failed: false } }, structure: leg({ status: 'broken', legOK: false, side: 'down', level: 21437.5, flip: { ...back, held: true } }) }) });
   assert.match(kept, /: chop: no leg holds \(a protected break\); /, kept);
   const cbFlip = line({ layers: lay({ chop: { ...CHOP, evidence: { bothWays: true, flip: true, failed: true } }, structure: leg({ legOK: false, flip: { ...back, held: true, byRule: 'choch-bos', oldSide: 'down', oldLevel: 21450 } }) }) });

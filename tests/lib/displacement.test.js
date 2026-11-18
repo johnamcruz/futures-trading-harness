@@ -220,7 +220,7 @@ test('breakQuality is causal: candles after `at` change nothing; a break not yet
 
 test('qualityOf: the field `quality` on lastBreak.last, and on its protected status once a close breaks the protected swing (strength only; the close decides)', () => {
   const { candles } = setup();
-  const lb = cut => { const c = candles.slice(0, cut + 1); const l = SE.lastBreaks(c); return { c, l: { last: l.last ? { ...l.last, protected: SE.protectedOf(c, l.last) } : null, previous: l.previous } }; };
+  const lb = cut => { const c = candles.slice(0, cut + 1); const l = SE.lastBreaks(c); return { c, l: { last: l.last ? { ...l.last, protected: SE.protectedOf(c, l.last, { atr: flatAtr(c.length), equalAtr: D.PARAMS.equalAtr }) } : null, previous: l.previous } }; };
   const { c: c11, l: l11 } = lb(11);
   const w11 = D.qualityOf(c11, l11, { minutes: 3, atr: flatAtr(12) });
   assert.strictEqual(w11.last.quality.displaced, true);
@@ -230,13 +230,13 @@ test('qualityOf: the field `quality` on lastBreak.last, and on its protected sta
   // the BOS up, the last break before bar 12's own break down.
   const c12 = candles;
   const bos = SE.breaksOf(c12).find(b => b.direction === 'up');
-  const prot = SE.protectedOf(c12, bos);
+  const prot = SE.protectedOf(c12, bos, { atr: flatAtr(13), equalAtr: D.PARAMS.equalAtr });
   assert.strictEqual(prot.brokenAt, c12[12].t);
   assert.deepStrictEqual(D.invalidationQuality(c12, bos, prot, flatAtr(13), D.PARAMS, 3), { displaced: true, why: [], barsAgo: 0, closedAt: new Date(T0 + 13 * 180000).toISOString() });
   // A weak close through it: body 1.5 of 3.75 (wicks). Still broken: the close decides, displacement says how strongly.
   const weakRows = ROWS.map((r, i) => (i === 12 ? [101.5, 103.5, 99.75, 100] : r));
   const w = mk(weakRows);
-  const pw = SE.protectedOf(w, bos);
+  const pw = SE.protectedOf(w, bos, { atr: flatAtr(13), equalAtr: D.PARAMS.equalAtr });
   assert.strictEqual(pw.brokenAt, w[12].t, 'broken by the close, weak or not');
   assert.deepStrictEqual(D.invalidationQuality(w, bos, pw, flatAtr(13)), { displaced: false, why: ['wicks'], barsAgo: 0, closedAt: null });
   assert.strictEqual(D.invalidationQuality(w, bos, { ...pw, brokenAt: null }, flatAtr(13)), null);
@@ -250,8 +250,8 @@ test('the tie at the protected level (the Market state\'s, structure-layers.js):
   const c = mk(ROWS);
   const atr = new Array(13).fill(6);
   const bos = SE.breaksOf(c).find(b => b.direction === 'up');
-  const prot = SE.protectedOf(c, bos);
-  assert.strictEqual(prot.brokenAt, c[12].t, 'protectedOf counts any close beyond');
+  const prot = SE.protectedOf(c, bos, { atr, equalAtr: MS.equalAtr });
+  assert.strictEqual(prot.brokenAt, null, 'protectedOf follows the tie (swing-holds: the record banded, one predicate)');
   assert.deepStrictEqual(D.invalidationQuality(c, bos, prot, atr, D.PARAMS, 3), { tie: true });
   const state = SL.structureSeries(c, SL.rthBreaks(c, 0, atr, MS), 0, atr, MS)[12];
   assert.deepStrictEqual([state.status, state.level], ['intact', 100.25], 'the state: the level holds');
@@ -261,16 +261,18 @@ test('the tie at the protected level (the Market state\'s, structure-layers.js):
   // The tie reads the closing candle's own ATR (atr[k], as structure-layers.js): 6 at bar 12 alone is a tie, 1 at bar 12
   // alone (0.05 < 0.25) is a break.
   const own = v => Array.from({ length: 13 }, (_, i) => (i === 12 ? v : 7 - v));
-  assert.deepStrictEqual(D.invalidationQuality(c, bos, prot, own(6), D.PARAMS), { tie: true });
-  assert.strictEqual(D.invalidationQuality(c, bos, prot, own(1), D.PARAMS).tie, undefined);
+  // Read on main's record for these bars (brokenAt the first close beyond, unbanded): the ATR handed in decides.
+  const raw = { ...prot, brokenAt: c[12].t };
+  assert.deepStrictEqual(D.invalidationQuality(c, bos, raw, own(6), D.PARAMS), { tie: true });
+  assert.strictEqual(D.invalidationQuality(c, bos, raw, own(1), D.PARAMS).tie, undefined);
   // Scope: here the BOS is handed in as the last break. On these bars alone the tied close is also a k=2 close under the
   // swing low 100.25, so lastBreaks' last is a CHoCH down (k=2 breaks have no tie, as on main); the tie governs the
   // protected status this line prints, not which break is the last.
   // Bar 13 closes at 99.5, 0.75 under it: past the tie. The state flips; the line reads that close (body 0.5 of 1.0: wicks; range 1 < 6: small).
   const c2 = mk([...ROWS, [100, 100.25, 99.25, 99.5]]);
   const a2 = new Array(14).fill(6);
-  const p2 = SE.protectedOf(c2, bos);
-  assert.strictEqual(p2.brokenAt, c2[12].t);
+  const p2 = SE.protectedOf(c2, bos, { atr: a2, equalAtr: MS.equalAtr });
+  assert.strictEqual(p2.brokenAt, c2[13].t, 'the first close past the tie');
   assert.deepStrictEqual(D.invalidationQuality(c2, bos, p2, a2, D.PARAMS, 3), { displaced: false, why: ['wicks', 'small'], barsAgo: 0, closedAt: new Date(T0 + 14 * 180000).toISOString() });
   assert.strictEqual(D.qualityOf(c2, { last: { ...bos, protected: p2 }, previous: null }, { minutes: 3, atr: a2 }).last.protected.brokenAt, c2[13].t, 'brokenAt: the first close past the tie');
   assert.strictEqual(SL.structureSeries(c2, SL.rthBreaks(c2, 0, a2, MS), 0, a2, MS)[13].status, 'broken', 'the state: broken at the same close');

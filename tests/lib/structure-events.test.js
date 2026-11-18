@@ -145,8 +145,14 @@ test('swingLevels: the last confirmed swings with the first close through each',
 // low; a CHoCH up holds until a close below the low that started the shift; the mirrors down. protectedOf(bars, brk)
 // gives { side, level, at, brokenAt } (brokenAt: the first close beyond it after the break, null while it holds), or
 // null without a break. Causal: only the bars given (closed by the last one).
+// swing-holds: brokenAt follows the one predicate (protected-status.js): the first close past the level by more than
+// equalAtr x ATR(14) at that candle; protectedOf throws without both, so no caller gets an unbanded brokenAt. The geometry
+// alone (the level the 3m machine and the Break quality line's origin need) is protectedLevel.
+const ind = require('../../scripts/lib/trading/indicators');
+const EQ = { equalAtr: require('../../scripts/lib/tunables').analysis().marketState.equalAtr };
+const banded = (bars, brk) => require('../../scripts/lib/trading/structure-events').protectedOf(bars, brk, { atr: ind.atr(bars), ...EQ });
 test('protectedOf: the origin of the leg that made the break, and the first close beyond it since the break', () => {
-  const { protectedOf } = require('../../scripts/lib/trading/structure-events');
+  const protectedOf = banded;
   // swing high 24 (i 4), pullback low 17 (i 6), BOS up at i 8 (close 25 > 24).
   const rows = [[10, 8, 9], [11, 9, 10], [14, 10, 13], [12, 9, 11], [11, 7, 8], [12, 9, 10], [16, 10, 15], [17, 12, 16]];
   const up = mk([[9, 7, 8], [8, 6, 7], ...rows.map(([h, l, c]) => [h + 10, l + 10, c + 10])]);
@@ -161,9 +167,11 @@ test('protectedOf: the origin of the leg that made the break, and the first clos
   assert.strictEqual(protectedOf(up, { ...last, at: new Date(Date.UTC(2027, 0, 1)).toISOString() }), null, 'a break past the bars: none (causal)');
 });
 
-test('protectedOf on real bars: the protected level of every printed 3m break is the extreme from its broken swing to the break; brokenAt the first close beyond it', () => {
+test('protectedOf on real bars: the protected level of every printed 3m break is the extreme from its broken swing to the break; brokenAt the first close past the tie', () => {
   const path = require('path');
-  const { protectedOf } = require('../../scripts/lib/trading/structure-events');
+  const protectedOf = banded;
+  const PS = require('../../scripts/lib/trading/protected-status');
+  let tied = 0;
   const { readBarsArg } = require('../../scripts/lib/backtest/data');
   const bars = readBarsArg(path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv'));
   const seen = { BOS: 0, CHoCH: 0 };
@@ -177,20 +185,41 @@ test('protectedOf on real bars: the protected level of every printed 3m break is
       const want = lb.direction === 'up' ? Math.min(...span.map(x => x.l)) : Math.max(...span.map(x => x.h));
       assert.strictEqual(p.level, want);
       assert.ok(Date.parse(p.at) > Date.parse(lb.swingAt) && Date.parse(p.at) <= Date.parse(lb.at), 'after the broken swing (its own bar excluded), by the break');
-      const first = xs.find(x => Date.parse(x.t) > Date.parse(lb.at) && (lb.direction === 'up' ? x.c < want : x.c > want));
-      assert.strictEqual(p.brokenAt, first ? first.t : null);
+      const atr = ind.atr(xs);
+      const k = xs.findIndex((x, j) => Date.parse(x.t) > Date.parse(lb.at) && PS.through(x.c, want, lb.direction, EQ.equalAtr * (Number.isFinite(atr[j]) ? atr[j] : 0)));
+      assert.strictEqual(p.brokenAt, k >= 0 ? xs[k].t : null);
+      const raw = xs.find(x => Date.parse(x.t) > Date.parse(lb.at) && (lb.direction === 'up' ? x.c < want : x.c > want));
+      if (raw && (k < 0 || raw.t !== xs[k].t)) tied += 1;
       // Causal: the same answer from the bars cut at the break's own bar.
       const cut = xs.filter(x => Date.parse(x.t) <= Date.parse(lb.at));
       assert.strictEqual(protectedOf(cut, lb).level, p.level);
     }
   }
   assert.ok(seen.BOS > 20 && seen.CHoCH > 20, JSON.stringify(seen));
+  assert.ok(tied > 0, 'the real bars reach a first close past the level inside the tie (the band decides there)');
+});
+
+test('protectedOf (swing-holds): brokenAt is the first close past the tie, a tie holds; it throws without atr and equalAtr; protectedLevel is the geometry alone', () => {
+  const SE = require('../../scripts/lib/trading/structure-events');
+  const t = i => new Date(Date.UTC(2026, 5, 1, 14, i)).toISOString();
+  const bar = (i, h, l, c) => ({ t: t(i), o: c, h, l, c, v: 1 });
+  const up = [bar(0, 110, 100, 105), bar(1, 108, 104, 106), bar(2, 107, 104.5, 105), bar(3, 108, 105, 107), bar(4, 112, 106, 111), bar(5, 111, 103.5, 103.9), bar(6, 104, 103, 103.5)];
+  const brk = { direction: 'up', swingAt: t(0), at: t(4) };
+  const atr = Array(7).fill(4); // a tie of 0.2: 103.9 is 0.1 under 104 (a tie), 103.5 is 0.5 under (a break)
+  assert.deepStrictEqual(SE.protectedOf(up, brk, { atr, ...EQ }), { side: 'low', level: 104, at: t(1), brokenAt: t(6) });
+  assert.strictEqual(SE.protectedOf(up.slice(0, 6), brk, { atr, ...EQ }).brokenAt, null, 'the tie close alone: holds');
+  assert.strictEqual(SE.protectedOf(up, brk, { atr: Array(7).fill(NaN), ...EQ }).brokenAt, t(5), 'no ATR: a tie of 0');
+  assert.throws(() => SE.protectedOf(up, brk), /atr/, 'no caller gets an unbanded brokenAt');
+  assert.throws(() => SE.protectedOf(up, brk, { atr }), /equalAtr/);
+  assert.deepStrictEqual(SE.protectedLevel(up, brk), { side: 'low', level: 104, at: t(1) });
+  assert.strictEqual(SE.protectedLevel(up, null), null);
+  assert.strictEqual(SE.protectedOf(up, null, { atr, ...EQ }), null);
 });
 
 // Fable round 16 (PREREG addendum 17): the protected higher low is the swing low formed AFTER the broken high, never the
 // broken swing bar's own low (a wide swing-high bar's low is not a higher low). Mirrored for the lower high.
 test('protectedOf: the protected swing excludes the broken swing\'s bar (Fable\'s case: swing high 110 with low 100, consolidation 104-108, BOS at 111 -> 104)', () => {
-  const { protectedOf } = require('../../scripts/lib/trading/structure-events');
+  const protectedOf = banded;
   const t = i => new Date(Date.UTC(2026, 5, 1, 14, i)).toISOString();
   const bar = (i, h, l, c) => ({ t: t(i), o: c, h, l, c, v: 1 });
   const up = [bar(0, 110, 100, 105), bar(1, 108, 104, 106), bar(2, 107, 104.5, 105), bar(3, 108, 105, 107), bar(4, 112, 106, 111)];

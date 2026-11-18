@@ -202,14 +202,7 @@ test('the reaction questions (q23-q35, feat/sweep-candle-control): answer-first 
         'Not yet: wait, then short on the 3m once it confirms.', 'No - the 1h broke out, so the 3m times a short now.', 'No; short the 3m rejection with a tight stop, the 1h is stronger but late.',
         'No: the 1h is stronger, but the 3m rejection is a short with the count.', 'Wait: the 1h is stronger; take the short with the next 3m close.', 'Short, the 3m is a rejection; the 1h is noise.', 'No: short on the 3m with the 1h breakout as context.',
         'No short; the trend rule refuses it.']],
-    // The mirror of q30 (a rejection of a low): the side is the candle's (the long side), never the bias's.
-    q33: [['Both are the long side (a rejection of a low); only the first, with the 4h and 1h up, can be taken; the trend rule refuses the second (never counter).',
-      'Long side both times: the pullback one is a continuation long, the one against the 4h + 1h is refused.', 'Both long; the first can be taken, the second is counter to the 4h and 1h: no trade.',
-      'Both are longs (the candle\'s side). Only the first can be taken; the second is refused by the trend rule.', 'Both are longs, but only the one with the 4h and 1h up can be taken.'],
-      ['Both are longs to take.', 'The first is a long, the second a short setup.', 'Long both: take them both.', 'The first a long; the second is a counter-trend long I\'d take small.',
-        'Both long: the first can be taken, and take the second anyway.', 'The pullback one is a short, the other a long.', 'Both long and both can be taken.', 'The pullback one is a continuation; the other one is refused.',
-        'Both long; neither is refused.', 'Pullback case is LONG (takeable); the case with 4h and 1h down is SHORT-side only as a counter, so it cannot be taken.',
-        'Long (the pullback one) can be taken; the short-side one is not a long setup, so it is refused.', 'The first is a long; the other is a short-only entry, refused.']],
+    // q33 (q30's mirror, a rejection of a low) retired by swing-holds: q30 keeps its anchor and its lesson.
     // No bare rejection: a `rejected` relation with a plain reaction is no rejection read by itself.
     q34: [['No: no one took control; plain is not a rejection, weak context only.', 'Not a rejection: the relation is only the fact, and plain means no one took control.', 'No - the reaction decides, and plain is weak context only.',
       'No. A rejection needs a long-wick, engulfing or confirmed reaction; plain is weak context only.', 'No: it is a rejection only with a long wick, an engulfing or a confirmation; plain is weak context.'],
@@ -239,9 +232,6 @@ test('the reaction questions (q23-q35, feat/sweep-candle-control): answer-first 
       'The 4h-and-1h-down one is a short with the trend; the 4h-and-1h-up one is a counter-trend short the trend rule refuses.'],
     ['Both are shorts; neither can be taken.', 'Pullback-level rejection is a short, refused; the 4h+1h-up one is a short, refused too, and neither can be taken.',
       'Both are the short side, and both are refused.', 'Both short: no trade in either case.', 'Pullback rejection is the short side and can\'t be taken; the rejection with the 4h and 1h up is also the short side and is refused too.']],
-    q33: [['Pullback-level low rejection (4h and 1h up) is a long and can be taken; the one with 4h and 1h down is a long and is refused.', 'Pullback-level low rejection is a long; the low rejection with 4h and 1h down is a long that may not be taken.',
-      'Both are long-side reads; take the 4h/1h-up pullback long if the rest of the setup checks, and refuse the 4h/1h-down long.'],
-    ['Both are longs; neither can be taken.', 'Both are the long side, and both are refused.', 'Both long: no trade in either case.']],
     q36: [['Case 1 is a short and can be taken; Case 2 is a short and is refused.', 'Case 1: short, allowed. Case 2: short, refused (counter-trend); no long exists in either case.'],
     ['Case 1 is a short, refused; Case 2 is a short, refused: neither can be taken.', 'Both are shorts and both are refused.', 'Both short: no trade in either case.']],
     q37: [['Case 1 is a long, and it can be taken; Case 2 is a long, and it is refused.'], ['Both are longs; neither can be taken.', 'Both are longs and both are refused.', 'Both long: no trade in either case.']],
@@ -829,7 +819,7 @@ test('marketStateOfText with an item\'s layer facts: the layered line, the same 
   const L = Q.layersOf(chop);
   assert.deepStrictEqual([L.transition, L.stale, L.pbRotation, L.momentum.trigger, L.chop.facts.nd, L.chop.evidence.flip, L.structure.status, L.structure.origin], [false, false, false, false, false, false, 'intact', 21526.5], 'the facts not stated: absent');
   const brk = { rthBars: 24, structure: { side: 'down', level: 21495, status: 'broken', flip: { barsAgo: 1, disp: false, oldSide: 'up', oldLevel: 21480.25 } } };
-  assert.strictEqual(Q.marketStateOfText(text, brk), 'Market state (3m): range: no leg holds, HL 21480.25 broken 3 min ago; 4h+1h up; class trend-up', 'a broken protected level: the flip\'s facts not stated filled (undisplaced, by a close)');
+  assert.strictEqual(Q.marketStateOfText(text, brk), 'Market state (3m): range: no leg holds, HL 21480.25 broken by a close 3 min ago; 4h+1h up; class trend-up', 'a broken protected level: the flip\'s facts not stated filled (undisplaced, by a close)');
   assert.throws(() => Q.layersOf({ behavior: {} }), /structure/);
   const QUIZ0 = QUIZ;
   const one = QUIZ0.questions.find(x => x.id === 'q119');

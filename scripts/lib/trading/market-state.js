@@ -46,7 +46,12 @@
  *                       trend, leg, transition the 4h + 1h way -> that trend class, against -> unclear
  *   marketStateLine(s)  "Market state (3m): <state>: <structure>; <momentum>; behavior <word> (...), 15m <word>;
  *                       <alignment>; class <c>", the class last (round 18); the behavior word only under rotation,
- *                       weakening and transition (round 20b; elsewhere "overlap x, efficiency y, 15m <word>"); null for null
+ *                       weakening and transition (round 20b; elsewhere "overlap x, efficiency y, 15m <word>"); null for null.
+ *                       A protected level is `holds` only while no close past the tie went through it (protected-status.js
+ *                       R2, swing-holds): a level the 3m machine handed back (levelBroken) prints `broken by a close N min
+ *                       ago, closed back below, the break's high E`; a broken level with no leg restored prints `broken by
+ *                       a close`, `closed back` while the latest close is back past it (flip.inside), and the new side's
+ *                       protected swing from the break record (`new protected low Y`)
  */
 
 const { trendOf } = require('./entry-rule');
@@ -172,24 +177,44 @@ const pbText = p => `pullback (${p.side} leg ${p.leg.origin} -> ${p.leg.extreme}
 const mins = (bars, m) => bars * m;
 const ago = n => (n === 0 ? 'this bar' : n === 1 ? '1 bar ago' : `${n} bars ago`);
 const minsAgo = (n, m) => (n === 0 ? 'this bar' : `${n * m} min ago`);
-// A break against at the protected level itself: a close through it that came back (this break's own protected break, at
-// this level and bar, failed: the leg resumed), or a close within the tie tolerance (decision 8: no break). Never
-// "internal". `resumed` is the leg's flag, so the flip decides it per break (re-review of fe35c98b8, finding 1).
-const closedBack = (P, barsAgo) => Boolean(P.resumed && isObj(P.flip) && !P.flip.held && P.flip.byRule === 'close' && P.flip.oldLevel === P.level && P.flip.barsAgo === barsAgo);
-const atLevelText = (P, barsAgo) => (closedBack(P, barsAgo) ? `through the ${swingName(P.side)}, closed back` : `tested the ${swingName(P.side)} (a tie)`);
+// The protected level's words (swing-holds; protected-status.js R2: a level a close went through is never printed as
+// holding). An intact leg's level holds unless the machine handed the leg back after a close through it (levelBroken: the
+// break failed within followBars and the old side keeps the read); then it was broken by a close, the close came back,
+// and the failed break's extreme is the swing it left. Brief (a range, a chop, a pullback): no age, no extreme.
+const backWord = side => (side === 'up' ? 'above' : 'below');
+function levelText(P, s, brief = false) {
+  if (!P.levelBroken) return `${swingName(P.side)} ${P.level} holds`;
+  const f = isObj(P.flip) ? P.flip : {};
+  const when = !brief && Number.isInteger(f.barsAgo) ? ` ${minsAgo(f.barsAgo, s.minutes)}` : '';
+  const ext = !brief && Number.isFinite(f.extreme) ? `, the break's ${P.side === 'up' ? 'low' : 'high'} ${f.extreme}` : '';
+  return `${swingName(P.side)} ${P.level} broken by a close${when}, closed back ${backWord(P.side)}${ext}`;
+}
+// A break against at this bar that is the failed protected break itself (same level, same bar as the flip): the level's
+// words already name it, so its clause drops the level words. Any other break against at the level itself is a close
+// within the tie (decision 8: no break), never "internal".
+const isFailedBreak = (P, barsAgo) => Boolean(P.levelBroken && isObj(P.flip) && P.flip.oldLevel === P.level && P.flip.barsAgo === barsAgo);
+const atLevelText = P => `tested the ${swingName(P.side)} (a tie)`;
+// A level broken with no leg restored (status broken): broken by a close, whether the latest close is back inside
+// (flip.inside, present tense), and the new side's protected swing from the break record (s.last, never the machine's own
+// level: the Break quality line beside it prints the record's), left out when that swing is broken or another way.
+function brokenText(P, s, brief = false) {
+  const f = P.flip;
+  const back = f.inside ? `, closed back ${backWord(f.oldSide)}` : '';
+  const l = s.last;
+  const rec = !brief && isObj(l) && l.direction === P.side && isObj(l.protected) && Number.isFinite(l.protected.level) && !l.protected.brokenAt
+    ? `, new protected ${P.side === 'up' ? 'low' : 'high'} ${l.protected.level}` : '';
+  return `${swingName(f.oldSide)} ${f.oldLevel} broken by a ${f.disp ? 'displaced ' : ''}close ${minsAgo(f.barsAgo, s.minutes)}${back}${rec}`;
+}
 
 /** The protected structure clause from the layers' snapshot. */
 function structureText(P, s, { brief = false } = {}) {
   if (!P) return '';
-  if (P.status === 'broken') {
-    const f = P.flip;
-    return `${swingName(f.oldSide)} ${f.oldLevel} broken by a ${f.disp ? 'displaced ' : ''}close ${minsAgo(f.barsAgo, s.minutes)}, the new leg unconfirmed`;
-  }
-  const parts = [`${swingName(P.side)} ${P.level} holds`];
+  if (P.status === 'broken') return `${brokenText(P, s, brief)}, the new leg unconfirmed`;
+  const parts = [levelText(P, s, brief)];
   if (brief) return parts[0];
   const w = P.lastWay;
   if (w && (!P.lastInternal || w.barsAgo <= P.lastInternal.barsAgo)) parts.push(`${w.kind} ${w.direction} ${minsAgo(w.barsAgo, s.minutes)}${w.strong ? ' (displaced)' : ''}`);
-  else if (P.lastInternal && !(s.layers.momentum && s.layers.momentum.trigger)) parts.push(P.lastInternal.level === P.level ? atLevelText(P, P.lastInternal.barsAgo) : `internal ${P.lastInternal.direction === 'up' ? 'high' : 'low'} ${P.lastInternal.level} broken`);
+  else if (P.lastInternal && !(s.layers.momentum && s.layers.momentum.trigger) && !isFailedBreak(P, P.lastInternal.barsAgo)) parts.push(P.lastInternal.level === P.level ? atLevelText(P) : `internal ${P.lastInternal.direction === 'up' ? 'high' : 'low'} ${P.lastInternal.level} broken`);
   const cb = Boolean(P.flip && P.flip.byRule === 'choch-bos' && P.flip.barsAgo === (w ? w.barsAgo : -1));
   // The owner's table (round 20c): CHoCH then BOS with the old protected level unbroken is a confirmed transition, never a
   // reversal; only a close through that level makes it one.
@@ -211,7 +236,7 @@ function momentumText(L, P, s) {
   const brk = m.breakAgainst;
   // A break against at the protected level itself is no internal break (design review section 5): atLevelText.
   const atLevel = brk && brk.level === P.level;
-  if (m.trigger && brk && atLevel) out.push(`${m.dispAgainst || brk.strong ? 'displacement' : 'a move'} ${against} ${ago(brk.barsAgo)} ${atLevelText(P, brk.barsAgo)}`);
+  if (m.trigger && brk && atLevel) out.push(`${m.dispAgainst || brk.strong ? 'displacement' : 'a move'} ${against} ${ago(brk.barsAgo)}${isFailedBreak(P, brk.barsAgo) ? '' : ` ${atLevelText(P)}`}`);
   else if (m.trigger && brk) out.push(`${m.dispAgainst || brk.strong ? 'displacement' : 'a move'} ${against} ${ago(brk.barsAgo)} broke internal ${against === 'down' ? 'low' : 'high'} ${brk.level}`);
   else if (m.dispAgainst) out.push(`displacement ${against} ${ago(m.dispAgainst.barsAgo)}`);
   if (m.loss) out.push(P.lastWay && P.lastWay.failed ?`the last ${P.lastWay.kind} ${P.side} failed` : `no new ${P.side === 'up' ? 'high' : 'low'} for ${mins(P.sinceProgress, s.minutes)} min`);
@@ -236,14 +261,14 @@ function behaviorText(L, state, early = false) {
 // broken); an intact level whose leg's breaks all failed prints that, and the level, as it is. A chop remembered on a leg
 // with a break that held (legOK: one of its breaks not failed) has made no new extreme by close since (a fresh one ends
 // the chop).
-function legText(P) {
+function legText(P, s) {
   if (!(P && P.status === 'intact' && Number.isFinite(P.level))) return 'no leg holds';
-  const lvl = `${swingName(P.side)} ${P.level} holds`;
+  const lvl = levelText(P, s, true);
   return P.legOK ? `a ${P.side} break held, no new ${P.side === 'up' ? 'high' : 'low'} since, ${lvl}` : `the ${P.side} leg's last break failed, ${lvl}`;
 }
 
 /** The chop's evidence, structural then behavioral (the owner's checklist answered by what was yes). */
-function chopText(L) {
+function chopText(L, s) {
   const c = L.chop || {};
   const ev = c.evidence || {};
   // A protected break the leg took back (round 20c: its level printed as holding) is named as failed; a CHoCH-then-BOS
@@ -255,7 +280,7 @@ function chopText(L) {
   const f = c.facts || {};
   const b = L.behavior || {};
   const be = [f.ov ? `overlap ${b.overlap}` : null, f.ef ? `efficiency ${b.eff}` : null, f.fl ? 'failed continuation' : null, f.nd ? 'no displacement' : null].filter(Boolean);
-  return `${legText(P)}${st.length ? ` (${st.join(', ')})` : ''}; ${be.join(', ')}; 15m ${b.word15 || 'early'}`;
+  return `${legText(P, s)}${st.length ? ` (${st.join(', ')})` : ''}; ${be.join(', ')}; 15m ${b.word15 || 'early'}`;
 }
 
 function layeredLine(s) {
@@ -267,11 +292,11 @@ function layeredLine(s) {
   else if (s.state === 'rotation' && s.of === 'pullback') {
     const ph = L.pbPhase || {};
     parts.push(`rotation: ${pbText(s.pullback)}, ${ph.bars} bars, ${ph.crosses} midpoint crosses${L.momentum && L.momentum.trigger && P && P.side === s.way ? `, the ${s.way} leg weakening` : ''}`);
-  } else if (s.state === 'chop') parts.push(`chop: ${chopText(L)}`);
+  } else if (s.state === 'chop') parts.push(`chop: ${chopText(L, s)}`);
   else if (s.state === 'range') {
     const e = L.edges;
-    const broken = P && P.status === 'broken' ? `, ${swingName(P.flip.oldSide)} ${P.flip.oldLevel} broken ${minsAgo(P.flip.barsAgo, s.minutes)}` : '';
-    parts.push(`range: ${legText(P)}${broken}${e ? `, edges ${e.bot}-${e.top} (${e.interior === 0 ? 'travel edge to edge' : 'fails mid-range'})` : ''}`);
+    const broken = P && P.status === 'broken' ? `, ${brokenText(P, s)}` : '';
+    parts.push(`range: ${legText(P, s)}${broken}${e ? `, edges ${e.bot}-${e.top} (${e.interior === 0 ? 'travel edge to edge' : 'fails mid-range'})` : ''}`);
   } else {
     const word = { transition: `transition ${s.way}`, weakening: `weakening ${s.way}`, rotation: `rotation ${s.way}`, trend: `trend ${s.way}`, leg: `in the ${s.way} leg` }[s.state];
     parts.push(`${word}: ${structureText(P, s, { brief: s.state === 'rotation' })}${s.state === 'rotation' ? `, no new ${s.way === 'up' ? 'high' : 'low'} for ${mins(P.sinceProgress, s.minutes)} min` : ''}`);
@@ -312,12 +337,17 @@ function marketStateLine(s) {
 }
 
 // Over the budget, in order: the behavior clause's numbers drop; the chop's "Day so far rotational" drops (the chop line
-// says it; its numbers are its evidence and stay).
+// says it; its numbers are its evidence and stay); the failed break's extreme drops; the new protected swing drops.
 const CUTS = [
   // The numbers alone (round 20c: under the early read no 15m word follows them) drop as a clause.
   l => l.replace(/ \((?:overlap [\d.]+(?:, efficiency [\d.]+)?|efficiency [\d.]+)\)/, '').replace(/; (?:overlap [\d.]+, )?(?:efficiency [\d.]+, )?(?=15m )/, '; ')
     .replace(/; (?:overlap [\d.]+(?:, efficiency [\d.]+)?|efficiency [\d.]+)(?=; 15m (?:up|down): )/, ''),
   l => l.replace('; Day so far rotational, ', '; ').replace('; Day so far rotational;', ';'),
+  // swing-holds: the failed break's extreme, then the new side's protected swing (the broken words themselves stay). The
+  // two never share a line (the extreme is a handed-back leg's, the new swing a broken level's), so their order is
+  // not observable: swapping them is an equivalent mutant (review D8), kept in this order for reading.
+  l => l.replace(/, the break's (?:high|low) [\d.]+/, ''),
+  l => l.replace(/, new protected (?:high|low) [\d.]+/, ''),
 ];
 function fitLine(full, budget) {
   let out = full;
