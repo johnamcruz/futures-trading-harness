@@ -132,12 +132,19 @@ test('context quiz: every layer asked, ids unique, the bar the whole quiz at K 5
   // 538 of 600) under maxSlips 11, so two items whose anchor a kept item shares retired: q33 (q30's mirror, the same
   // anchor "Side first, from the candle" and the same lesson for a low) and q132 (a CHoCH fails at its origin: q127 keeps
   // that anchor, and q131 and q147 ask a close through a protected level). q138 and q140, the only items on two
-  // displacement sentences, stay. The quiz stays at 113.
+  // displacement sentences, stay. The quiz stays at 113. Quiz accuracy C6/C7 (owner direction 2026-11-18: remove the
+  // outdated, focus on the structure reads): q35 (which skill to look up, and how) and q141-q143 (a printed giveback, MAE
+  // and "the stop rests at the lock" copied back) removed as plumbing, not reads; q19 kept (unstable on main, a gap);
+  // q149-q152 added (the protected swing's tie on the 3m and in a managed trade; CHoCH then BOS a transition confirmed,
+  // not a reversal, the old level unbroken; the pullback read through the higher frame: the 15m, then the 1h, broke
+  // against the leg). 113; maxSlips stays an absolute 11.
   assert.strictEqual(QUIZ.questions.length, 113);
+  assert.ok(!QUIZ.questions.some(x => ['q35', 'q141', 'q142', 'q143'].includes(x.id)), 'q35 and q141-q143 removed');
+  assert.ok(['q149', 'q150', 'q151', 'q152'].every(id => QUIZ.questions.some(x => x.id === id)), 'q149-q152 added');
   assert.ok(['q147', 'q148'].every(id => QUIZ.questions.some(x => x.id === id)), 'q147 and q148 added');
   assert.ok(!QUIZ.questions.some(x => ['q33', 'q132'].includes(x.id)), 'q33 and q132 retired');
   assert.ok(['q134', 'q135', 'q136', 'q137', 'q138', 'q139', 'q140'].every(id => QUIZ.questions.some(x => x.id === id)), 'every displacement item kept');
-  assert.deepStrictEqual(QUIZ.questions.filter(x => x.layer === 'manage').map(x => x.id), ['q141', 'q142', 'q143', 'q144', 'q145', 'q146']);
+  assert.deepStrictEqual(QUIZ.questions.filter(x => x.layer === 'manage').map(x => x.id), ['q144', 'q145', 'q146', 'q150']);
   assert.ok(!QUIZ.questions.some(x => ['q55', 'q59', 'q94', 'q108', 'q113'].includes(x.id)), 'q55, q59, q94, q108 and q113 retired');
   assert.ok(QUIZ.questions.some(x => x.id === 'q118a'), 'q118a added');
   assert.ok(['q91', 'q112', 'q121'].every(id => QUIZ.questions.some(x => x.id === id)), 'q91, q112 and q121 kept');
@@ -298,8 +305,9 @@ test('context quiz: the chop-read questions (q114-q133, less q115, q116, q117, q
     ['q130', 'lookup', ['bos-vs-choch'], 'the trend holds: no close below the protected HL 21480.25', /a BOS holds until the leg's higher low \(lower high\) breaks/g],
     ['q131', 'lookup', ['bos-vs-choch'], 'invalidated: the close below the protected HL ended the up trend (a potential reversal, unconfirmed)', /a BOS holds until the leg's higher low \(lower high\) breaks/g],
     ['q133', 'lookup', ['bos-vs-choch'], 'a confirmed transition up: the CHoCH up was followed by a BOS up', /CHoCH then BOS the same way: a confirmed transition; a reversal once a close goes through the old leg's protected level/g],
-    // Top-down: the 3m CHoCH pair the 15m BOS confirms is the 15m continuation (owner, 2026-11-15).
-    ['q128', 'head', undefined, "trend-up: the 3m CHoCH pair is the 15m BOS up (continuation); long setups the side's way", /`trend`, their way: setups the side's way\./g],
+    // A CHoCH pair alone is not chop (#340, trend-vs-range); under a printed trend class a range is not chop (#338): the
+    // class the line prints (quiz accuracy C6: reworded from "the 3m CHoCH pair is the 15m BOS up", no longer taught).
+    ['q128', 'head', undefined, "trend-up: the class printed; a CHoCH pair alone is not chop; long setups the side's way", /a range day too; a range is not chop/g],
     // The 15m CHoCH back the side's way is a 15m turn (owner-approved 2026-11-15).
     ['q129', 'head', undefined, 'enter long: the 15m CHoCH up is the turn; the 3m BOS up near value is the entry', /a live strong 15m CISD, a 15m BOS, a 15m CHoCH back or a 15m reaction at the level, the side's way/g],
     // The owner: "15min up trend, 3min down trend could mean pullback".
