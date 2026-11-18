@@ -1035,6 +1035,7 @@ up at 16235.00.
   (`trend-vs-range`).
   Side: `htf-to-ltf`'s.
 - An open trade ("Trade read"); `manage-position` acts.
+- The nested read across timeframes (stages, entry models): the `MTF structure` lines, `bos-vs-choch`.
 
 ## How It Works
 
@@ -1315,6 +1316,59 @@ overlapping, consolidating, or repeatedly failing to continue."
   continuation detects loss of directional control."): the line's
   warnings (`displacement down 2 bars ago broke internal low ...`, `no
   new high for 30 min`) never end the leg; only its level does.
+
+**Multi-timeframe structure** (the two `MTF structure` lines under
+the `Market state` line, the runner's briefing).
+  `1h > 15m` (primary,
+timed on the 3m; the only `Entry:` clause; it ends with `Above:`, the
+4h structure and whether the 1h is pulling back against it: no stage
+word) and `below: 15m > 3m` (context; no frame under it, so no
+`POTENTIAL`, `WEAKENING`, `REVERSING`).
+  Each `stage` word is computed:
+copy it from its own line, never infer it, never carry it to another
+level.
+  Primary with the 1h up; mirror for down:
+
+| stage | printed when | means |
+|---|---|---|
+| `NONE` | no pullback open | nothing to read |
+| `POTENTIAL` | a 3m CHoCH down, the 1h protected low holding | a pullback may start: monitor |
+| `DEVELOPING` | a 15m CHoCH down | a 15m pullback forming: track its low; `Entry: none` |
+| `ESTABLISHED` | then a 15m BOS down | the 15m has turned against the 1h (CHoCH then BOS): a pullback only while the 1h protected low holds; says nothing about which way it resolves; watch the 3m; `Entry: none yet` |
+| `WEAKENING` | then a 3m CHoCH or CISD up | the first 3m sign back UP with the 1h (may fail: Reset): the aggressive model's condition met |
+| `REVERSING` | then a 3m BOS up | the 3m turn up confirmed: the balanced model's condition met (the default) |
+| `CONFIRMED REVERSAL` | a 15m close above the pullback's protected high | the pullback is over on the 15m; conservative: a fresh 3m CHoCH down, then a 3m BOS up |
+| `COMPLETED` | a 15m close above the 1h impulse high | the 1h trend continued: this pullback is finished |
+| `INVALIDATED` | a 1h close below the 1h protected low | that line's parent structure is broken: setup cancelled |
+
+- No stage predicts the outcome: a stage is where the structure is, not
+  where it goes.
+- Direction: the pullback runs AGAINST the parent.
+  Price has turned back
+  WITH the parent only at `WEAKENING`, `REVERSING`, `CONFIRMED
+  REVERSAL`; not at `POTENTIAL`, `DEVELOPING`, `ESTABLISHED`.
+  None is a
+  reversal of the parent; only `INVALIDATED` is, on its own line only.
+- Order: a 3m CHoCH or CISD up before `ESTABLISHED` is a 3m fact, not
+  `WEAKENING`.
+  A 15m break up printed while `ESTABLISHED` is the minor
+  high (`early weakening`) unless the line says `CONFIRMED REVERSAL`.
+- Reset: a 3m close below the pullback low after `WEAKENING` or
+  `REVERSING` -> `ESTABLISHED` again; the 3m turn is void.
+- `Entry:` (a fact, never an order, a wait or a filter; other setups
+  stand): `ready` names the model whose condition is met, since when,
+  and the structural stop: the structure's level, a fact; an order's
+  stop is the STOP line's.
+  `Entry: none: <why>` -> context only
+  (against the side, no side, a warning, the stop already traded).
+- `1h structure` is the 1h break record; the Bias line's 1h is the
+  trend read; they can differ, and the line says so: the side is the
+  Bias line's.
+  The `Pullback` line measures the trend rule's leg and
+  its own swings: a swing can be broken there and hold here; neither
+  changes the class word or the side.
+- Depth (`shallow` < 0.30, `moderate` < 0.75, `deep`, `breached`) is
+  context.
 
 **Fields**: `m3.lastBreak.last` and `m3.lastBreak.previous`; the same
 under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
