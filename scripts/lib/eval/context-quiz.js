@@ -21,14 +21,16 @@
  *                                      case its Bias line and compose_check's REACTION line (reaction-echo.js)
  *                                      (prop/size-line.js), from the code that writes them
  *   questionText(quiz, q)              the text asked: the excerpt (Part B), the question, the answer format (a
- *                                      question's own `format`, or a choice question's naming its choices)
- *   answerLine(answer)                 { line, fmt }: the ANSWER line (fmt false: the first line, no ANSWER label)
+ *                                      question's own `format`, or a choice question's: reason first, then its labels
+ *                                      named or its choices lettered A-F, the answer last)
+ *   answerLine(answer)                 { line, fmt }: the LAST ANSWER line (fmt false: the first line, no ANSWER label)
  *   negated(line, index, negations, window)   a match at `index` negated within its clause (a negation word in the
  *                                      `window` words before it: the quiz file's negationWindow). A line-leading verdict
  *                                      ("No," "No -" "Not yet:" "Yes,": VERDICT) answers the question; it never negates
  *                                      the explanation after it
  *   gradeAnswer(quiz, q, answer)       { id, line, fmt, pass, miss, forb, unsure }: by its required and forbidden regexes,
  *                                      or a choice question (`choices`, `answer`) by the ANSWER line equal to its answer
+ *                                      (a lettered one: its letter, or the letter with its own text)
  *   summarize(quiz, rows, k)           per question { id, passes, n, allCorrect, bothWays }, per part totals, meetsBar
  *   compare(a, b)                      per question the change between two summaries: { id, from, to, delta }
  *   anchorsMissing(quiz, prompts)      the questions whose anchor is not in their prompt (CI, offline)
@@ -145,8 +147,35 @@ const norm = s => String(s).toLowerCase().replace(/^[\s`_"(*]+/, '').replace(/[\
   .replace(/\d+(?:\.\d+)?/g, n => String(Number(n)));
 /** The line with its leading article dropped (markdown and quotes before it kept out), for free-text patterns. */
 const dropArticle = line => String(line).replace(/^([\s`_"(*]*)(?:a|an|the)\s+/i, '$1');
-/** The format line a choice question is asked with: its own, or its choices named. */
-const choiceFormat = q => q.format || ` Answer from your instructions only. First line: ANSWER: <one of: ${q.choices.join(' | ')}>, nothing else. Second line: one short sentence why.`;
+// Quiz accuracy (C1, C3): a choice question asks the reason first and the answer last (answered first, the model wrote a
+// choice its own reasoning then rejected). Phrase choices are lettered A-F and answered by letter (a paraphrase is no
+// answer); choices that are labels the question defines (F1-F4) are answered by label.
+const LETTERS = 'ABCDEF';
+const REASON_FIRST = 'Answer from your instructions only. Reason first, in at most 3 short lines. Last line: ANSWER: ';
+const isLabels = choices => choices.every(c => /^[A-Z]\d+$/.test(c));
+/** Whether a choice question is answered by letter: its choices are phrases and it has no format of its own. */
+const lettered = q => !q.format && !isLabels(q.choices);
+const orList = xs => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} or ${xs[xs.length - 1]}` : xs.join(''));
+/** The format a choice question is asked with: its own; its labels named; or its choices lettered, one per line. */
+function choiceFormat(q) {
+  if (q.format) return q.format;
+  if (!lettered(q)) return ` ${REASON_FIRST}<one of: ${q.choices.join(' | ')}>, nothing else.`;
+  const letters = [...LETTERS.slice(0, q.choices.length)];
+  return `\n${q.choices.map((c, i) => `${letters[i]}) ${c}`).join('\n')}\n${REASON_FIRST}<one letter: ${orList(letters)}>, nothing else.`;
+}
+/**
+ * The choice a lettered answer line names: its index, or -1. The line (markdown and quotes around it aside) is one letter,
+ * or the letter, a separator (`)`, `.`, `:`, ` -`) and that same choice's text; a letter with another choice's text, two
+ * letters, a hedge or a letter past the choices names none.
+ */
+function letterPick(q, line) {
+  const s = String(line).replace(/^[\s`_"(*]+/, '').replace(/[\s`_")*.!]+$/, '');
+  const m = /^([A-Fa-f])(?:\s*$|(?:[).:]|\s+[-–—])\s*(\S.*)$)/.exec(s);
+  if (!m) return -1;
+  // A letter past the choices names an index no answer has (never a pass).
+  const i = LETTERS.indexOf(m[1].toUpperCase());
+  return m[2] === undefined || norm(m[2]) === norm(q.choices[i]) ? i : -1;
+}
 
 const loadQuiz = ({ file = null } = {}) => loadConfigFile({ name: 'context-quiz', validate: quizErrors }, { file });
 
@@ -334,10 +363,11 @@ function questionText(quiz, q) {
   return `${head}${q.text}${q.choices ? choiceFormat(q) : q.format || quiz.answerFormat}`;
 }
 
+// The last ANSWER line (quiz accuracy C2): a reply that corrects itself is graded on its correction.
 function answerLine(answer) {
   const a = String(answer || '');
-  const m = /^\s*\**\s*ANSWER\**\s*:?\**\s*(.*)$/mi.exec(a);
-  return m ? { line: m[1].trim(), fmt: true } : { line: a.split('\n')[0].trim(), fmt: false };
+  const all = [...a.matchAll(/^\s*\**\s*ANSWER\**\s*:?\**\s*(.*)$/gmi)];
+  return all.length ? { line: all[all.length - 1][1].trim(), fmt: true } : { line: a.split('\n')[0].trim(), fmt: false };
 }
 
 // A line-leading verdict and its punctuation ("No," "No -" "Not yet:" "Not now," "**No**," "Yes."): the answer to the question, not a negation
@@ -370,7 +400,7 @@ function gradeAnswer(quiz, q, answer) {
   if (line.length > cap) return { id: q.id, line, fmt, pass: false, miss: q.choices ? [q.answer] : [...q.required], forb: [], unsure: false, why: `the answer line is longer than gate.maxGradedLineChars (${cap}): not graded, a fail` };
   // A choice question: the line equal to its answer (markdown, case and a trailing period aside), nothing else on it.
   if (q.choices) {
-    const ok = norm(line) === norm(q.answer);
+    const ok = norm(line) === norm(q.answer) || (lettered(q) && q.choices.includes(q.answer) && letterPick(q, line) === q.choices.indexOf(q.answer));
     return { id: q.id, line, fmt, pass: ok, miss: ok ? [] : [q.answer], forb: [], unsure: re(quiz.unsure).test(line) };
   }
   // Free text: a required pattern passes on the line with or without its leading article; a forbidden one fails on either.

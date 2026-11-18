@@ -679,7 +679,7 @@ test('grading: every pattern of q70 does work (its removal lets a wrong answer t
 // The chop questions (q79-q82): chop DETECTION, the owner's class A of what the briefing showed (no read yet) and the
 // which-fact questions. Graded as a closed choice: the ANSWER line equal to the question's answer, one of its choices
 // (case, the markdown or quotes around it and a trailing period aside). A hedge, a second
-// label or anything else on the line is a fail; the why is the second line, read by a person, never graded.
+// label or anything else on the line is a fail; the why comes first, read by a person, never graded (quiz accuracy C1).
 const CHOP = { q79: 'no read yet', q80: 'no read yet', q81: 'F4', q82: 'F4' };
 const CLASSES = ['chop evidence', 'trend evidence', 'conflicting', 'no read yet'];
 
@@ -689,7 +689,10 @@ test('the chop questions are closed choices: their answer one of their choices, 
     assert.deepStrictEqual(x.choices, ['q81', 'q82'].includes(id) ? ['F1', 'F2', 'F3', 'F4'] : CLASSES, id);
     assert.strictEqual(x.answer, answer, id);
     assert.ok(!('required' in x) && !('forbidden' in x), id);
-    assert.ok(Q.questionText(QUIZ, x).endsWith(` Answer from your instructions only. First line: ANSWER: <one of: ${x.choices.join(' | ')}>, nothing else. Second line: one short sentence why.`), id);
+    // Reason first, the answer last (quiz accuracy C1): label choices (F1-F4) by their label, phrases by a letter.
+    const tail = ' Answer from your instructions only. Reason first, in at most 3 short lines. Last line: ANSWER: ';
+    if (/^F\d$/.test(x.choices[0])) assert.ok(Q.questionText(QUIZ, x).endsWith(`${tail}<one of: ${x.choices.join(' | ')}>, nothing else.`), id);
+    else assert.ok(Q.questionText(QUIZ, x).endsWith(`\n${x.choices.map((c, i) => `${'ABCDEF'[i]}) ${c}`).join('\n')}\n${tail.trimStart()}<one letter: A, B, C or D>, nothing else.`), id);
   }
   // The other questions keep the quiz's answer format; a question's own `format` replaces it.
   assert.ok(Q.questionText(QUIZ, q('q70')).endsWith(QUIZ.answerFormat));
@@ -890,4 +893,83 @@ test('marketStateOfText: the Market state line from an item\'s printed lines', (
   assert.strictEqual(Q.marketStateOfText(head('11:00', [BL, '- Price 21563.25.', IB, ROT, '- m3.lastBreak: last CHoCH up at 21558.25 (barsAgo 0), previous CHoCH down at 21497.75 (barsAgo 5).'])), 'Market state (3m): in the up leg: 3m CHoCH down then CHoCH up, then a close above the IB high 21560 (confirmed); 4h+1h up; class trend-up');
   // The RTH pair: a previous break before 09:30 ET does not count.
   assert.strictEqual(Q.marketStateOfText(head('09:36', [BL, '- m3.lastBreak: last CHoCH up at 21512.25 (barsAgo 0), previous CHoCH down at 21497.75 (barsAgo 4).'])), 'Market state (3m): range: 3m CHoCH up (unconfirmed); 4h+1h up; class trend-up');
+});
+
+// Quiz accuracy (fix/quiz-accuracy): the instrument, not the items' rules. On main the answer-first format let the model
+// write a choice its own reasoning then rejected (q103: about 23 of its 25 fails), and of 36 recorded replies holding two
+// ANSWER lines, 33 corrected themselves to the right one; a paraphrased choice was graded off the list (q114 "wait").
+test('quiz accuracy C2: the answer is the LAST ANSWER line (a self-corrected reply is graded on its correction)', () => {
+  assert.deepStrictEqual(Q.answerLine('ANSWER: a short on the next 3m bar\nWait, that is wrong.\nANSWER: a reversal sign: wait'), { line: 'a reversal sign: wait', fmt: true });
+  assert.deepStrictEqual(Q.answerLine('The 15m turned against the side.\nNever counter.\nANSWER: B'), { line: 'B', fmt: true });
+  assert.deepStrictEqual(Q.answerLine('**ANSWER:** No\nwhy\n**ANSWER**: Yes, size 3'), { line: 'Yes, size 3', fmt: true });
+  assert.deepStrictEqual(Q.answerLine('ANSWER: No, never counter.\nwhy one\nwhy two'), { line: 'No, never counter.', fmt: true });
+  // No label: the first line, as before.
+  assert.deepStrictEqual(Q.answerLine('No side.\nmore'), { line: 'No side.', fmt: false });
+  // A free-text item is graded on the last line too: the correction passes, a correction to a wrong answer fails.
+  assert.strictEqual(pass('q18', 'ANSWER: Less than the full verdict size: cut it.\nWait.\nANSWER: Full verdict size; a serious factor against does not cut it in a prop attempt.'), true);
+  assert.strictEqual(pass('q18', 'ANSWER: Full verdict size, never half.\nHmm.\nANSWER: Half size, floor(size/2).'), false);
+});
+
+test('quiz accuracy C1: a choice item asks reason first and the answer last; phrase choices lettered A-F, label choices (F1-F4) by label', () => {
+  const tail = 'Answer from your instructions only. Reason first, in at most 3 short lines. Last line: ANSWER: ';
+  assert.ok(Q.questionText(QUIZ, q('q79')).endsWith(`?\nA) chop evidence\nB) trend evidence\nC) conflicting\nD) no read yet\n${tail}<one letter: A, B, C or D>, nothing else.`));
+  const f = Q.questionText(QUIZ, q('q81'));
+  assert.ok(f.endsWith(` ${tail}<one of: F1 | F2 | F3 | F4>, nothing else.`));
+  assert.doesNotMatch(f, /\nA\) F1/);
+  const two = { ...q('q79'), choices: ['yes', 'no'], answer: 'no' };
+  assert.ok(Q.questionText(QUIZ, two).endsWith(`\nA) yes\nB) no\n${tail}<one letter: A or B>, nothing else.`));
+  const six = { ...q('q79'), choices: ['p', 'q', 'r', 's', 't', 'u'], answer: 'p' };
+  assert.ok(Q.questionText(QUIZ, six).endsWith(`\nF) u\n${tail}<one letter: A, B, C, D, E or F>, nothing else.`));
+  // Every choice item of the file without its own format asks reason first; a question's own format stays its own.
+  for (const x of [...QUIZ.questions, ...QUIZ.partB].filter(y => y.choices && !y.format)) assert.ok(Q.questionText(QUIZ, x).includes(`\n${tail}`) || Q.questionText(QUIZ, x).includes(` ${tail}`), x.id);
+  assert.ok(Q.questionText(QUIZ, { ...q('q79'), format: ' Say it.' }).endsWith('? Say it.'));
+  // The free-text items keep the quiz's answer format (answer first: their patterns read the reason on the line).
+  assert.ok(Q.questionText(QUIZ, q('q70')).endsWith(QUIZ.answerFormat));
+});
+
+test('quiz accuracy C3: a lettered choice passes on its letter, the letter with its own text, or its text; anything else fails', () => {
+  const g = (x, a) => Q.gradeAnswer(QUIZ, x, a).pass;
+  const x = q('q79'); // its answer, no read yet, is D
+  for (const a of ['why\nANSWER: D', 'ANSWER: d', 'ANSWER: **D**', 'ANSWER: D.', 'ANSWER: D)', 'ANSWER: (D)', 'ANSWER: `D`', 'ANSWER: D) no read yet',
+    'ANSWER: D - no read yet', 'ANSWER: D: no read yet', 'ANSWER: D. No read yet.', 'ANSWER: **D) no read yet**', 'ANSWER: no read yet', 'ANSWER: A\nno, wait\nANSWER: D', 'D\nno label: the first line, as a phrase\'s']) assert.strictEqual(g(x, a), true, a);
+  for (const a of ['ANSWER: A', 'ANSWER: E', 'ANSWER: D, A', 'ANSWER: A or D', 'ANSWER: D or A', 'ANSWER: D) chop evidence', 'ANSWER: A) no read yet', 'ANSWER: D (I think)',
+    'ANSWER: maybe D', 'ANSWER: DD', 'ANSWER: D/A', 'ANSWER: D\nwait\nANSWER: A', 'ANSWER: ', 'ANSWER: Option D', 'ANSWER: D) no read', 'ANSWER: D -']) assert.strictEqual(g(x, a), false, a);
+  // A letter past the choices is no answer.
+  const two = { ...x, choices: ['yes', 'no'], answer: 'no' };
+  for (const [a, want] of [['ANSWER: B', true], ['ANSWER: C', false], ['ANSWER: A', false], ['ANSWER: no', true]]) assert.strictEqual(g(two, a), want, a);
+  // A choice that starts like a letter ("a reversal") is never read as letter A, and its text still decides.
+  const art = { ...x, choices: ['a reversal', 'b-side chop', 'chop', 'no read'], answer: 'chop' };
+  for (const [a, want] of [['ANSWER: a reversal', false], ['ANSWER: A reversal', false], ['ANSWER: C', true], ['ANSWER: b-side chop', false], ['ANSWER: chop', true], ['ANSWER: A) a reversal', false]]) assert.strictEqual(g(art, a), want, a);
+  const artA = { ...art, answer: 'a reversal' };
+  for (const [a, want] of [['ANSWER: a reversal', true], ['ANSWER: A', true], ['ANSWER: A) a reversal', true], ['ANSWER: A) reversal', true], ['ANSWER: A) chop', false]]) assert.strictEqual(g(artA, a), want, a);
+  // An answer that is no choice never matches by letter (an index of -1 on both sides is no pass).
+  const off = { ...x, answer: 'not among the choices' };
+  for (const a of ['ANSWER: Z', 'ANSWER: G', 'ANSWER: maybe', 'ANSWER: A']) assert.strictEqual(g(off, a), false, a);
+  // Label items (F1-F4) answer by label: a letter is no answer. A question with its own format is graded on its text only.
+  assert.strictEqual(g(q('q81'), 'ANSWER: F4'), true);
+  assert.strictEqual(g(q('q81'), 'ANSWER: D'), false);
+  const own = { ...x, format: ' First line: ANSWER: <one of: chop evidence | trend evidence | conflicting | no read yet>.' };
+  for (const [a, want] of [['ANSWER: no read yet', true], ['ANSWER: D', false]]) assert.strictEqual(g(own, a), want, a);
+});
+
+test('quiz accuracy C4: q17, q28 and q49 pass the right answers their patterns failed on main; the wrong ones still fail', () => {
+  // Recorded on main (Haiku, ~/fth-replays quiz-full-v4 and quiz-v5): right reads graded wrong.
+  assert.ok(pass('q17', 'ANSWER: Full verdict size; a healthy account is traded at the verdict\'s full size, and only a pacing rule may cut it.'));
+  assert.ok(pass('q17', 'ANSWER: Full verdict size; a healthy prop account gets no size cut for a serious factor against, only a pacing rule can cut it.'));
+  for (const a of ['Full size, but cut it to 2.', 'Full, then reduce the size.', 'Full; the risk manager may cut it.', 'Less: cut it.']) assert.ok(!pass('q17', `ANSWER: ${a}`), a);
+  assert.ok(pass('q28', 'ANSWER: Not necessarily; this is conflicting, so it needs other confirmation before it reads as sellers in control.'));
+  for (const a of ['Yes, sellers in control.', 'Mixed, but sellers in control.', 'Wait: sellers in control']) assert.ok(!pass('q28', `ANSWER: ${a}`), a);
+  assert.ok(pass('q49', 'ANSWER: No. The 3m close alone isn\'t the decision; the check is whether `compose_check` passes on the reads.'));
+  for (const a of ['No, so I\'d pass.', 'No. compose_check passes, but I pass.', 'No, `compose_check` ok; then pass.']) assert.ok(!pass('q49', `ANSWER: ${a}`), a);
+});
+
+test('quiz accuracy C5: each (b) stem states the fact its anchored rule needs (a prop attempt, no Pullback line, the broken level), or asks one thing', () => {
+  assert.match(q('q2').text, /^In a prop attempt, the 4h and 1h both range\. What sets the side\?$/);
+  assert.match(q('q10').text, /No `Pullback` line prints\. When do you enter\?$/);
+  assert.match(q('q16').text, /^In a prop attempt, a composed trade is open\. Is the named 1h swing high your exit\?$/);
+  assert.match(q('q20').text, /^In a prop attempt, the setup fits only 2 contracts at the stop\. What do you do\?$/);
+  assert.match(q('q38').text, /Is it a setup you may take in the attempt\?$/);
+  assert.match(q('q143').text, /\nPer the code floor line, what does the working stop rest on now\?$/);
+  assert.match(q('q87').text, /\n- m15\.lastBreak: last BOS up at 21500\.00 \(barsAgo 6\)\.\n/);
+  assert.match(q('q87').text, /rejected prior RTH high 21500\.00 \(closed back above/);
 });

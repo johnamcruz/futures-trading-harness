@@ -2629,7 +2629,13 @@ sizing ones) as the runner builds it, plus 5 with a Bias or Size line from the
 briefing (Part B). The questions, their keys (required and forbidden terms on
 the ANSWER line, a forbidden term counting only when it isn't negated) and the
 pass bar are `config/context-quiz.json`: every question correct on all K runs
-(K 5), none answered both ways, Part B 5 of 5.
+(K 5), none answered both ways, Part B 5 of 5. The graded line is the reply's
+last `ANSWER:` line (a reply that corrects itself is graded on its
+correction). A closed-choice question asks the reason first and the answer
+last: its phrase choices lettered A-F and answered by letter (or the letter
+with that choice's text, or the text), choices the question defines as labels
+(F1-F4) by label; answered first, the model wrote a choice its own reasoning
+then rejected.
 
 Run it after any skill, rule, agent or briefing-text change, and before a
 practice round:
