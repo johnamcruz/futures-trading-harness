@@ -93,6 +93,31 @@ test('tunables: a missing, unreadable, non-JSON, incomplete, unknown-keyed or mi
   refused('analysis', writeAt(clone(committed('analysis')), 'fvg.frames', [5, 'x']), /fvg\.frames\[1\]: a whole number/);
 });
 
+test('tunables: the MTF structure read\'s keys (analysis.mtfStructure) load, BUILT_IN carries them, a mistyped one is refused, and sideMode is pinned exactly at rule', () => {
+  const want = { hierarchy: 'intraday', hierarchies: { scalping: [15, 5, 1], intraday: [60, 15, 3], day: [240, 60, 15], swing: [1440, 240, 60] }, sideMode: 'rule', depth: [0.3, 0.75, 1], warmBars: 20, lineBytes: T.analysis().mtfStructure.lineBytes, primaryBytes: T.analysis().mtfStructure.primaryBytes };
+  assert.deepStrictEqual(clone(T.analysis().mtfStructure), want);
+  assert.deepStrictEqual(clone(T.BUILT_IN.analysis.mtfStructure), want);
+  assert.ok(want.primaryBytes > 0 && want.lineBytes > want.primaryBytes);
+  const dir = tmp();
+  const f = path.join(dir, 'a.json');
+  for (const [k, bad, re] of [['mtfStructure.hierarchy', 3, /mtfStructure\.hierarchy: a string/], ['mtfStructure.sideMode', 'both', /mtfStructure\.sideMode: one of rule, parent/],
+    ['mtfStructure.depth', [0.3, 0.75], /mtfStructure\.depth: a list of 3 to 3/], ['mtfStructure.warmBars', 0, /mtfStructure\.warmBars: a whole number/],
+    ['mtfStructure.hierarchies.intraday', [60, 15], /mtfStructure\.hierarchies\.intraday: a list of 3 to 3/], ['mtfStructure.lineBytes', 'x', /mtfStructure\.lineBytes: a whole number/]]) {
+    fs.writeFileSync(f, JSON.stringify(writeAt(clone(committed('analysis')), k, bad)));
+    assert.throws(() => T.load('analysis', f), re, k);
+  }
+  fs.writeFileSync(f, JSON.stringify(dropAt(clone(committed('analysis')), 'mtfStructure.primaryBytes')));
+  assert.throws(() => T.load('analysis', f), /mtfStructure\.primaryBytes: missing/);
+  // The side mode: pinned exactly (a switch to the 1h-only mode is a reviewed pin change), so `parent` is refused on load.
+  assert.deepStrictEqual(clone(PINS.analysis), { 'mtfStructure.sideMode': 'rule' });
+  assert.strictEqual(T.SPECS.analysis.tightenOnly['mtfStructure.sideMode'], 'exact');
+  fs.writeFileSync(f, JSON.stringify(writeAt(clone(committed('analysis')), 'mtfStructure.sideMode', 'parent')));
+  assert.throws(() => T.load('analysis', f), /mtfStructure\.sideMode is "parent", not its pinned "rule"/);
+  // Another hierarchy loads (the briefing refuses it: tests/lib/mtf-structure-briefing.test.js).
+  fs.writeFileSync(f, JSON.stringify(writeAt(clone(committed('analysis')), 'mtfStructure.hierarchy', 'day')));
+  assert.strictEqual(T.load('analysis', f).mtfStructure.hierarchy, 'day');
+});
+
 test('tunables: fingerprints name each file\'s version and canonical hash (what runs and ledger entries record)', () => {
   const fp = T.fingerprints();
   assert.deepStrictEqual(Object.keys(fp), [...T.NAMES]);

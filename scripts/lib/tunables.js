@@ -254,6 +254,13 @@ const ANALYSIS = {
   // candles (entry frame) and 15m candles (setup frame) a break prints for, and the line's byte budget. Display only:
   // the strength rule's numbers stay cisd.minBody / cisd.minRangeAtr; nothing decides on these.
   displacement: { bodyPrior: int(1), recentEntry: int(0), recentSetup: int(0), lineBytes: int(1) },
+  // The multi-timeframe nested structure read (mtf-structure.js, the `bos-vs-choch` skill's "Multi-timeframe structure"):
+  // the hierarchy and its [parent, setup, timing] minutes (only `intraday` is gated; the briefing refuses another), the
+  // side the entry clause is read against (`rule`: the entry rule's 4h+1h side, pinned; `parent`: the 1h structure only),
+  // the depth classes' upper bounds (shallow, moderate, deep), the parent candles a level needs before its leg start (fewer:
+  // partial), and the two lines' byte budgets (both lines, the primary alone; cut in a fixed order past them). Display
+  // only: nothing decides on these.
+  mtfStructure: { hierarchy: str(), hierarchies: record(list(int(1), { min: 3, max: 3 })), sideMode: str(['rule', 'parent']), depth: list(frac(), { min: 3, max: 3 }), warmBars: int(1), lineBytes: int(1), primaryBytes: int(1) },
   briefing: { equalK: int(1), cisdFrames: list(int(1), { min: 1 }) },
   tradeRead: { frames: list(int(1), { min: 1 }), deepPullback: frac(), minSigns: int(1) },
   pullbackRead: { minLegAtr: pos(), maxStateDepth: frac() },
@@ -316,7 +323,9 @@ const PINS = deepFreeze({
     'runner.killGraceMs': 10000, 'runner.exitKillGraceMs': 2000, 'session.gateSlackMs': 2000, 'runner.keptAlertBars': 3,
     'monteCarlo.max': 20000,
   },
-  analysis: {},
+  // The MTF structure read's side mode (feat/mtf-structure, owner-approved 2026-11-17): the 4h+1h entry rule's side; a
+  // switch to the 1h-only mode is its own reviewed change (exact).
+  analysis: { 'mtfStructure.sideMode': 'rule' },
 });
 
 /**
@@ -405,6 +414,7 @@ const BUILT_IN = deepFreeze({
     fvg: { frames: [5, 15, 60], window: 60, max: 3 },
     compression: { frames: [3, 5, 15, 60], nr: [7], maxWidthAtr: 2, poleBars: 3, expandAtr: 1, minBeyondAtr: 0.1, recentBars: 3, maxRunAtr: 1, levelBandAtr: 0.25, maxLevels: 3 },
     displacement: { bodyPrior: 10, recentEntry: 6, recentSetup: 2, lineBytes: 450 },
+    mtfStructure: { hierarchy: 'intraday', hierarchies: { scalping: [15, 5, 1], intraday: [60, 15, 3], day: [240, 60, 15], swing: [1440, 240, 60] }, sideMode: 'rule', depth: [0.3, 0.75, 1], warmBars: 20, lineBytes: 1010, primaryBytes: 720 },
     briefing: { equalK: 2, cisdFrames: [3, 5, 15, 60] },
     tradeRead: { frames: [15], deepPullback: 0.618, minSigns: 2 },
     pullbackRead: { minLegAtr: 1, maxStateDepth: 0.62 },
@@ -486,7 +496,7 @@ const SPECS = Object.freeze({
     'runner.keptAlertBars': 'down',
     'monteCarlo.max': 'down',
   }),
-  analysis: spec('analysis', ANALYSIS, {}),
+  analysis: spec('analysis', ANALYSIS, { 'mtfStructure.sideMode': 'exact' }),
 });
 
 const NAMES = Object.freeze(Object.keys(SPECS));
