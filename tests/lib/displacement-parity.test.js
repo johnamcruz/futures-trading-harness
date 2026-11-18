@@ -73,3 +73,23 @@ function open0411() {
 test('displacement: no regression: quality, the invalidation read, last.protected.brokenAt and the Break quality line equal main\'s on every fixture bar', () => {
   assertGolden('displacement-parity.txt', `${[...DAYS.flatMap(morning), ...open0411()].join('\n')}\n`);
 });
+
+// The tie's boundary, exactly (no real fixture close sits on it, so the golden above cannot see `>` against `>=`): ATR 5,
+// equalAtr 0.05, a tie of 0.25. A close exactly 0.25 past the protected low holds (a tie); 0.26 past is the invalidation.
+// Without the break's candle the scan starts at the record's brokenAt, never earlier (a close before the break is not it).
+test('displacement: the invalidation read at the tie\'s exact boundary, and without the break\'s candle', () => {
+  const assert = require('node:assert');
+  assert.strictEqual(EQ * 5, 0.25, 'the fixture: a tie of exactly 0.25');
+  const t = i => new Date(Date.UTC(2026, 0, 6, 15, 3 * i)).toISOString();
+  const c = (i, close) => ({ t: t(i), o: 101, h: 101.5, l: Math.min(close, 100.5) - 0.25, c: close, v: 1 });
+  const brk = { direction: 'up', at: t(0) };
+  const tie = [c(0, 101), c(1, 99.75)];
+  assert.deepStrictEqual(D.invalidationQuality(tie, brk, { level: 100, brokenAt: null }, [5, 5], D.PARAMS), { tie: true });
+  const past = [c(0, 101), c(1, 99.74)];
+  const q = D.invalidationQuality(past, brk, { level: 100, brokenAt: t(1) }, [5, 5], D.PARAMS);
+  assert.ok(q && q.tie === undefined && q.barsAgo === 0, JSON.stringify(q));
+  // A close past the level BEFORE the break, and no break candle given: the scan starts at brokenAt.
+  const early = [c(0, 99), c(1, 101), c(2, 99.75)];
+  assert.deepStrictEqual(D.invalidationQuality(early, { direction: 'up' }, { level: 100, brokenAt: t(2) }, [5, 5, 5], D.PARAMS), { tie: true }, 'the scan starts at brokenAt (a tie at 2): the close at 0, 1 past the level, is not counted');
+  assert.strictEqual(D.invalidationQuality(early, { direction: 'up' }, { level: 100, brokenAt: null }, [5, 5, 5], D.PARAMS), null, 'no break candle, no record: nothing');
+});

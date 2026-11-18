@@ -161,11 +161,14 @@ function invalidationQuality(candles, brk, prot, atr, p = PARAMS, minutes = null
   if (!brk || !prot || !Number.isFinite(prot.level) || !['up', 'down'].includes(brk.direction)) return null;
   // The one predicate (protected-status.js, the Market state's and the record's): a close through the level by no more
   // than equalAtr x ATR(14) of its candle is a tie, not a break, so the line says `holds` as the state does; the
-  // invalidating close is the first past it, after the break (the whole series when the break's candle is not given).
-  const after = brk.at ? candles.findIndex(c => c.t === brk.at) : -1;
-  if (brk.at && after < 0) return null;
+  // invalidating close is the first past it, after the break. Without the break's candle the scan starts at the record's
+  // brokenAt (main's rule), never earlier, so no close before the break can read as its invalidation. A record whose
+  // brokenAt is null reads a tie or nothing (main's contract: no invalidation without a broken record).
+  const after = brk.at ? candles.findIndex(c => c.t === brk.at) : prot.brokenAt ? candles.findIndex(c => c.t === prot.brokenAt) - 1 : -2;
+  if (after < -1 || (brk.at && after < 0)) return null;
   const st = PS.statusOf(candles, { level: prot.level, legSide: brk.direction, after, atr: Array.isArray(atr) ? atr : [], equalAtr: p.equalAtr });
   if (!st.broken) return st.tied ? { tie: true } : null;
+  if (!prot.brokenAt) return null;
   const j = st.brokenI;
   if (j < 1) return null;
   const closedAt = minutes ? new Date(Date.parse(candles[j].t) + minutes * 60000).toISOString() : null;

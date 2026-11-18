@@ -239,9 +239,7 @@ test('qualityOf: the field `quality` on lastBreak.last, and on its protected sta
   const pw = SE.protectedOf(w, bos, { atr: flatAtr(13), equalAtr: D.PARAMS.equalAtr });
   assert.strictEqual(pw.brokenAt, w[12].t, 'broken by the close, weak or not');
   assert.deepStrictEqual(D.invalidationQuality(w, bos, pw, flatAtr(13)), { displaced: false, why: ['wicks'], barsAgo: 0, closedAt: null });
-  // The status is the level's own (protected-status.js), never read back from the field handed in: a level no close went
-  // through reads nothing.
-  assert.strictEqual(D.invalidationQuality(w, bos, { ...pw, level: 90, brokenAt: null }, flatAtr(13)), null);
+  assert.strictEqual(D.invalidationQuality(w, bos, { ...pw, brokenAt: null }, flatAtr(13)), null);
 });
 
 test('the tie at the protected level (the Market state\'s, structure-layers.js): a close through it within equalAtr x ATR is no break, both lines say holds; the first close past it is the invalidating one', () => {
