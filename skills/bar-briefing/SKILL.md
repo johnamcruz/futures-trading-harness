@@ -49,7 +49,8 @@ structure, the pullback against it and one computed `stage` word
 (`NONE`, `POTENTIAL`, `DEVELOPING`, `ESTABLISHED`, `WEAKENING`,
 `REVERSING`, `CONFIRMED REVERSAL`, `COMPLETED`, `INVALIDATED`); the
 primary line also has an `Entry:` clause and ends with the 4h `Above:`
-clause. Read each stage off its own line, never infer it; the table is
+clause; each level prints `<frame> pullback against the <parent>:
+UP|DOWN|NONE`. Read each stage off its own line, never infer it; the table is
 `bos-vs-choch`'s "Multi-timeframe structure".
 
 ## Examples

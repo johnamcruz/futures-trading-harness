@@ -50,6 +50,8 @@ const NOT_READS = [
   { file: 'skills/momentum-and-volume/SKILL.md', span: 'momentum up|down', why: 'the briefing\'s candle-line text, beside the read it names (`<tf> momentum up|down`)' },
   { file: 'skills/bos-vs-choch/SKILL.md', span: '1h > 15m', why: 'the primary `MTF structure` line\'s name (a level: parent > setup), no read (feat/mtf-structure)' },
   { file: 'skills/bos-vs-choch/SKILL.md', span: '1h structure', why: 'the MTF structure line\'s words for the 1h break record, quoted, no read (feat/mtf-structure)' },
+  { file: 'skills/bos-vs-choch/SKILL.md', span: '1h pullback against the 4h: UP', why: 'the MTF structure line\'s Above clause phrase, quoted, no compose read form (feat/mtf-structure, SPEC v3)' },
+  { file: 'skills/bos-vs-choch/SKILL.md', span: '15m structure UP ... 3m pullback against the 15m: DOWN', why: 'the MTF structure below line\'s two words, quoted to show the reading direction, no compose read form (feat/mtf-structure, SPEC v3)' },
   { file: 'skills/bar-briefing/SKILL.md', span: '1h > 15m', why: 'the primary `MTF structure` line\'s name (a level: parent > setup), no read (feat/mtf-structure)' },
 ];
 
