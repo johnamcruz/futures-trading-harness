@@ -14,7 +14,8 @@ const path = require('path');
 const { codeOnly } = require('./tunable-scan');
 
 const ROOT = path.join(__dirname, '..', '..');
-const REQUIRERS = ['scripts/lib/trading/displacement.js', 'scripts/lib/trading/structure-events.js', 'scripts/lib/trading/structure-layers.js'];
+// manage-read.js too: it names a tie (statusOf's `tied`) beside the record's banded brokenAt (review m5).
+const REQUIRERS = ['scripts/lib/trading/displacement.js', 'scripts/lib/trading/manage-read.js', 'scripts/lib/trading/structure-events.js', 'scripts/lib/trading/structure-layers.js'];
 // File -> the number of `brokenAt` assignments in its code, each named above.
 const ASSIGNS = { 'scripts/lib/eval/context-quiz.js': 1, 'scripts/lib/trading/briefing.js': 1, 'scripts/lib/trading/structure-events.js': 2 };
 
@@ -32,7 +33,7 @@ const REQUIRE = /require\([^)]*\/protected-status['"]\)/;
 const ASSIGN = /\bbrokenAt\s*(?::|=(?!=))/g;
 const assigns = text => (codeOnly(text).match(ASSIGN) || []).length;
 
-test('protected-status.js is required by the 3m machine, the break record and the Break quality line, and nothing else', () => {
+test('protected-status.js is required by the 3m machine, the break record, the Break quality line and the Manage read, and nothing else', () => {
   assert.deepStrictEqual(ALL.filter(f => REQUIRE.test(fs.readFileSync(path.join(ROOT, f), 'utf8'))).sort(), REQUIRERS);
 });
 

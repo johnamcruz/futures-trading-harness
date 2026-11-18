@@ -27,7 +27,7 @@ const opened = new Date(T0 + 3 * 15 * 60000).toISOString(); // filled at c3's op
 test('manageRead: a 15m BOS the trade\'s way since entry gives its protected swing and the stop a tick beyond; the lock and the warning giveback are levels', () => {
   const m = manageRead({ side: 'long', entry: 106, risk: 10, stop: 96, openedAt: opened, bars: bars15(UP), base: 3, tick: 0.25, exit: EXIT });
   assert.deepStrictEqual([m.best, m.bestR, m.workingR], [110, 0.4, -1]);
-  assert.deepStrictEqual(m.bos, { level: 100, broken: false, stop: 99.75, tighter: true, past: false });
+  assert.deepStrictEqual(m.bos, { level: 100, broken: false, tied: false, stop: 99.75, tighter: true, past: false });
   assert.deepStrictEqual(m.lock, { atR: 1, stop: 106.5, reached: false });
   assert.deepStrictEqual(m.warning, { r: 0.5, stop: 105, tighter: true, past: false });
   assert.strictEqual(m.choch, null);
@@ -60,7 +60,7 @@ test('manageRead: a 15m BOS the trade\'s way since entry gives its protected swi
 test('manageRead: the short mirror; a CHoCH against since entry is shown; unavailable inputs say why', () => {
   const f = x => 200 - x;
   const m = manageRead({ side: 'short', entry: 94, risk: 10, stop: 104, openedAt: opened, bars: bars15(UP, f), base: 3, tick: 0.25, exit: EXIT });
-  assert.deepStrictEqual(m.bos, { level: 100, broken: false, stop: 100.25, tighter: true, past: false });
+  assert.deepStrictEqual(m.bos, { level: 100, broken: false, tied: false, stop: 100.25, tighter: true, past: false });
   assert.deepStrictEqual(m.warning.stop, 95);
   // Then a close back under the protected low (99): a CHoCH down against the long, the protected swing broken.
   const turned = [...UP, [109, 109, 101, 103], [103, 104, 98, 99]];
@@ -101,7 +101,21 @@ test('manageRead (D2): a 15m tie close past the protected swing holds; the next 
   const band = EQ * atr[c.j];
   assert.ok(band > 0.1, `the fixture: a 0.1 close under 100 sits inside the tie ${band}`);
   assert.strictEqual(m.bos.broken, false, 'a tie: holds');
-  assert.match(manageReadLine(m), /protected swing 100 holds, stop beyond it 99\.75/);
+  assert.strictEqual(m.bos.tied, true);
+  assert.match(manageReadLine(m), /protected swing 100 holds \(tested, a tie\), stop beyond it 99\.75/, 'the tie named, as the Break quality line names it');
+  // The tie's size, at its boundary (the last candle's high and low fixed, so its close moves no ATR): a close a hair
+  // inside the tie holds; a hair past it is BROKEN. A doubled or halved tie fails one of the two.
+  const edge = d => [...FLAT, ...UP, [109, 109.5, 100.5, 101], [101, 101.5, 97, 100 - d]];
+  const probe = completedCandlesAt({ bars: bars15(edge(0.1)), base: 3, minutes: 15 });
+  const tieAt = EQ * ind.atr(probe.candles.slice(0, probe.j + 1))[probe.j];
+  assert.ok(tieAt > 0.05, `the fixture's tie ${tieAt}`);
+  assert.strictEqual(run(edge(tieAt - 0.001)).bos.broken, false, `a close ${tieAt - 0.001} past: inside the tie ${tieAt}`);
+  assert.strictEqual(run(edge(tieAt - 0.001)).bos.tied, true);
+  assert.strictEqual(run(edge(tieAt + 0.001)).bos.broken, true, `a close ${tieAt + 0.001} past: past the tie ${tieAt}`);
+  // A swing no close went past: holds, no tie word.
+  const clean = run([...FLAT, ...UP, [109, 109.5, 100.5, 101]]);
+  assert.deepStrictEqual([clean.bos.broken, clean.bos.tied], [false, false]);
+  assert.match(manageReadLine(clean), /protected swing 100 holds, stop beyond it 99\.75/);
   const broken = run([...tie, [99.9, 100.2, 98.9, 99]]);
   assert.strictEqual(broken.bos.broken, true, 'a close past the tie: broken');
   assert.match(manageReadLine(broken), /protected swing 100 BROKEN by a close/);

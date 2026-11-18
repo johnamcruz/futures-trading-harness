@@ -19,6 +19,7 @@
  */
 
 const { breaksOf, protectedOf } = require('./structure-events');
+const PS = require('./protected-status');
 const ind = require('./indicators');
 const { completedCandlesAt } = require('./candle-facts');
 const { snapStop } = require('./trail');
@@ -62,11 +63,14 @@ function manageRead({ side, entry, risk, stop, openedAt, bars, base, tick, exit 
   const lastWay = [...breaks].reverse().find(x => x.direction === way && x.kind === 'BOS');
   if (lastWay) {
     // Broken by the one predicate (swing-holds D2): a 15m close past the swing by more than the tie at that candle.
-    const p = protectedOf(cs, lastWay, { atr: ind.atr(cs), equalAtr: EQUAL_ATR });
+    const band = { atr: ind.atr(cs), equalAtr: EQUAL_ATR };
+    const p = protectedOf(cs, lastWay, band);
     if (p) {
       const broken = Boolean(p.brokenAt);
+      // A close past the swing inside the tie: it holds, and the line names the tie, as the Break quality line does.
+      const tied = !broken && PS.statusOf(cs, { level: p.level, legSide: way, after: lastWay.i, ...band }).tied;
       const at = snapStop(p.level - s * tick, s, tick);
-      bos = { level: p.level, broken, stop: at, tighter: !broken && tighter(at) && !past(at), past: past(at) };
+      bos = { level: p.level, broken, tied, stop: at, tighter: !broken && tighter(at) && !past(at), past: past(at) };
     }
   }
   const choch = last && last.kind === 'CHoCH' && last.direction !== way ? { level: last.level, at: last.at } : null;
@@ -81,7 +85,7 @@ function manageReadLine(m, { level = r2 } = {}) {
   if (!m || (m.unavailable && m.best === undefined)) return `Manage read: unavailable (${m ? m.unavailable : 'not computed'}).`;
   const t = (x, past) => (past ? 'past the price: a stop there would fill at once' : x ? 'tighter than the working stop' : 'not tighter');
   const lock = m.lock ? `code floor: from ${sR(m.lock.atR)} the runner holds the stop at ${level(m.lock.stop)} (${m.lock.reached ? 'reached' : 'not reached yet'})` : 'code floor: no early lock';
-  const bos = m.bos ? `${m.tf} BOS ${m.side === 'long' ? 'up' : 'down'} since entry: protected swing ${level(m.bos.level)} ${m.bos.broken ? 'BROKEN by a close' : `holds, stop beyond it ${level(m.bos.stop)} (${t(m.bos.tighter, m.bos.past)})`}` : `${m.tf} BOS the trade's way since entry: none`;
+  const bos = m.bos ? `${m.tf} BOS ${m.side === 'long' ? 'up' : 'down'} since entry: protected swing ${level(m.bos.level)} ${m.bos.broken ? 'BROKEN by a close' : `holds${m.bos.tied ? ' (tested, a tie)' : ''}, stop beyond it ${level(m.bos.stop)} (${t(m.bos.tighter, m.bos.past)})`}` : `${m.tf} BOS the trade's way since entry: none`;
   const choch = m.choch ? `${m.tf} CHoCH against since entry: through ${level(m.choch.level)}` : `${m.tf} CHoCH against since entry: none`;
   const warn = m.warning ? `warning giveback (${m.warning.r}R behind the best): ${level(m.warning.stop)} (${t(m.warning.tighter, m.warning.past)})` : 'warning giveback: none set';
   return `Manage read (answer every cycle with one line "STOP <price|hold>: <reason>"; modify_order only when tighter): ${lock}; ${bos}; ${choch}; ${warn}${m.unavailable ? `; ${m.unavailable}` : ''}.`;
