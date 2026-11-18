@@ -72,7 +72,7 @@ test('every primary stage\'s line, the parent up, exactly (the grammar of pilot 
 test('every stage both ways: the mirrored world prints the same lines with up and down, high and low, LONG and SHORT swapped and the prices about the pivot', () => {
   const RM = run(W.world({ keys: W.KEYS, events: W.EVENTS, mirror: true }), { side: 'short' });
   const swap = s => s.replace(/\b(UP|DOWN|up|down|high|low|LONG|SHORT|above|below|long|short)\b/g, w => ({ UP: 'DOWN', DOWN: 'UP', up: 'down', down: 'up', high: 'low', low: 'high', LONG: 'SHORT', SHORT: 'LONG', above: 'below', below: 'above', long: 'short', short: 'long' }[w]))
-    .replace(/\b\d+(\.\d+)?\b(?![:)\-] ?\d)/g, (n, _f, off, str) => (/\d\d:$/.test(str.slice(0, off)) || /\(\d?$/.test(str.slice(0, off)) && Number(n) < 1 ? n : String(300 - Number(n))));
+    .replace(/\b\d+(\.\d+)?\b(?![:)-] ?\d)/g, (n, _f, off, str) => (/\d\d:$/.test(str.slice(0, off)) || /\(\d?$/.test(str.slice(0, off)) && Number(n) < 1 ? n : String(300 - Number(n))));
   const seen = new Set();
   for (let j = 0; j < A.n; j += 1) {
     const [p, b] = M.mtfLines(RA[j]);
