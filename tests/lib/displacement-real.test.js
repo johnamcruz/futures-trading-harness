@@ -32,7 +32,7 @@ function morning(date) {
     prev = b;
     const text = B.renderBriefing(b, { now: new Date(Date.parse(b.closedAt)) });
     const line = l => text.split('\n').find(x => x.startsWith(l)) || null;
-    out.push({ hm: et(bars[j].t).hm, w, b, m3: b.sections.m3.data, m15: b.sections.m15.data, state: line('- Market state'), bq: line('- Break quality'), detail: text.split('Detail by timeframe:')[1] });
+    out.push({ hm: et(bars[j].t).hm, w, b, text, m3: b.sections.m3.data, m15: b.sections.m15.data, state: line('- Market state'), bq: line('- Break quality'), detail: text.split('Detail by timeframe:')[1] });
   }
   return out;
 }
@@ -128,4 +128,38 @@ test('real: last and previous protected brokenAt follow the tie on every RTH bar
   }
   assert.ok(invalidations > 5, `${invalidations} invalidations compared`);
   assert.deepStrictEqual(tied, { last: 0, previous: 0 }, 'no tie on these two mornings: the tie cases are pinned on 2022-08-24 10:18 (market-state-real.test.js) and in the unit tests');
+});
+
+// swing-holds: every printer agrees with the predicate on every RTH bar of the two mornings: the Market state line's level
+// words (holds only when no close past the tie went through the level since it was set; the broken words when the machine
+// handed back a closed-through level), the Break quality line's protected status, and the structure-read scorecard's truth
+// (all three against protected-status.js on the bars, not against each other).
+test('real: parity: the Market state line, the Break quality line and the structure-read truth agree with protected-status on every RTH bar', () => {
+  const ind = require('../../scripts/lib/trading/indicators');
+  const PS = require('../../scripts/lib/trading/protected-status');
+  const SR = require('../../scripts/lib/learning/structure-read');
+  const EQ = require('../../scripts/lib/tunables').analysis().marketState.equalAtr;
+  const seen = { holds: 0, broken: 0, bq: 0, truth: 0 };
+  for (const r of RUNS) {
+    const atr = ind.atr(r.w);
+    const z = r.w.length - 1;
+    const P = r.m3.layers && r.m3.layers.structure;
+    if (P && P.status === 'intact' && r.state) {
+      const brokenSince = PS.firstCloseThrough(r.w, { level: P.level, legSide: P.side, after: z - P.levelAgo - 1, atr, equalAtr: EQ }) >= 0;
+      assert.strictEqual(P.levelBroken, brokenSince, `${r.hm}: levelBroken is the predicate since the level was set`);
+      if (r.state.includes(`${P.level} holds`)) { seen.holds += 1; assert.ok(!brokenSince, `${r.hm} ${r.state}`); }
+      if (P.levelBroken) { seen.broken += 1; assert.match(r.state, new RegExp(`${P.level} broken by a close`), r.hm); }
+    }
+    const last = r.m3.lastBreak.last;
+    const pr = last && last.protected;
+    const bqProt = r.bq && r.bq.match(/^- Break quality[^:]*: 3m [^;]*;[^]*?from protected (?:low|high) ([\d.]+)[^:]*: (holds|broken)/);
+    if (pr && bqProt && Number(bqProt[1]) === pr.level) {
+      seen.bq += 1;
+      const k = PS.firstCloseThrough(r.w, { level: pr.level, legSide: last.direction, after: r.w.findIndex(c => c.t === last.at), atr, equalAtr: EQ });
+      assert.strictEqual(bqProt[2] === 'broken', k >= 0, `${r.hm} ${r.bq}`);
+    }
+    const truth = SR.truthOf(`\n${r.text}`).structure;
+    if (truth && pr) { seen.truth += 1; assert.strictEqual(truth.prot_status, pr.brokenAt ? 'broken' : 'holding', r.hm); }
+  }
+  assert.ok(seen.holds > 20 && seen.broken > 0 && seen.bq > 10 && seen.truth > 20, JSON.stringify(seen));
 });
