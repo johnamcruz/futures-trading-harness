@@ -17,6 +17,7 @@ const PR = require('../../scripts/lib/trading/pullback-read');
 const { protectedOf, lastBreaks } = require('../../scripts/lib/trading/structure-events');
 const ind = require('../../scripts/lib/trading/indicators');
 const { analysis } = require('../../scripts/lib/tunables');
+const { assertGolden } = require('../golden');
 
 const AN = analysis();
 const TH = { crossesChop: AN.regime.rangeCrosses, maxPullbackDepth: AN.pullbackRead.maxStateDepth, lineBytes: AN.marketState.lineBytes }; // the briefing's
@@ -56,6 +57,41 @@ const stateAt = (date, hm) => {
   assert.ok(Buffer.byteLength(line) <= TH.lineBytes, `${date} ${hm}: ${Buffer.byteLength(line)} bytes`);
   return { b, s, line, cls: M.classWordOf(s), m3: b.sections.m3.data };
 };
+
+// 2022-04-11, the morning of the failed protected break (swing-holds): 61 real 3m bars, 07:30-10:33 ET
+// (tests/fixtures/market-state/2022-04-11-open.json, t o h l c v only; on this slice the structure snapshots equal the full
+// history's on every close 09:33-10:33). The 4h + 1h lie outside the slice: stated as the recorded prompt's (down, down).
+// No pullback read was open on those closes in the recorded prompts, so none is passed: the layers decide, as they did.
+const { marketLayers } = require('../../scripts/lib/trading/market-layers');
+const { qualityOf } = require('../../scripts/lib/trading/displacement');
+const SE = require('../../scripts/lib/trading/structure-events');
+const BARS_0411 = require('../fixtures/market-state/2022-04-11-open.json');
+const etHm = t => new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(t));
+const recordOf = bars => {
+  const atr = ind.atr(bars);
+  const lb = SE.lastBreaks(bars);
+  const w = Object.fromEntries(Object.entries(lb).map(([k, x]) => [k, x ? { ...x, protected: SE.protectedOf(bars, x, { atr, equalAtr: AN.marketState.equalAtr }) } : x]));
+  return qualityOf(bars, w, { minutes: 3, levels: [] });
+};
+const open0411 = () => {
+  const open = BARS_0411.findIndex(b => b.t === '2022-04-11T13:30:00.000Z');
+  const rows = [];
+  for (let z = open; z < BARS_0411.length; z += 1) {
+    const bars = BARS_0411.slice(0, z + 1);
+    const closedAt = new Date(Date.parse(bars[z].t) + 180000).toISOString();
+    const layers = marketLayers({ bars, minutes: 3, setupMinutes: 15, closedAt, pullback: null, p: AN.marketState, floor: AN.daySoFar.minBars, ibBars: AN.dayContext.ibMinutes / 3 });
+    const b = { minutes: 3, closedAt, sections: { h1: { data: { h4: { trend: 'down' }, h1: { trend: 'down' } } }, m3: { data: { layers, price: bars[z].c, lastBreak: recordOf(bars) } } } };
+    const s = M.readState(b, TH);
+    rows.push({ hm: etHm(closedAt), P: layers.structure, s, cls: M.classWordOf(s), line: M.marketStateLine(s), record: b.sections.m3.data.lastBreak });
+  }
+  return rows;
+};
+const ROWS_0411 = open0411();
+
+test('2022-04-11 (real): state parity: the machine\'s fields, the state and the class on every close 09:33-10:33, pinned (Build 1 changes no transition)', () => {
+  const row = r => `${r.hm} ${[r.P.side, r.P.status, r.P.level, r.P.legOK, r.P.resumed, r.P.flip ? r.P.flip.held : '-', r.P.flipsIn].join(' ')} | ${r.s.state} ${r.cls}`;
+  assertGolden('market-state-parity-0411.txt', `${ROWS_0411.map(row).join('\n')}\n`);
+});
 
 // Round 20: the two pinned real tests the design review names, rewritten with the reason. Before, the 3m CHoCH pair was
 // chop there; the owner's refinement ("Don't classify a market as chop simply because you see two opposing CHoCHs") makes

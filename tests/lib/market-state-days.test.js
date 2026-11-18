@@ -49,6 +49,17 @@ test('fixture days (real): the printed Market state per bar, 09:30-12:00 ET, pin
   assertGolden('market-state-days.txt', `${text}\n`);
 });
 
+// State parity (swing-holds Build 1): the machine's every transition and the state and class on every fixture bar, recorded
+// before the print's rework (a changed row is a changed transition: Build 1 changes none).
+const parityRow = r => {
+  const P = r.s && r.s.layers && r.s.layers.structure;
+  const m = P ? [P.side, P.status, P.level, P.legOK, P.resumed, P.flip ? P.flip.held : '-', P.flipsIn].join(' ') : '-';
+  return `${r.hm} ${m} | ${r.s ? r.s.state : '-'} ${r.cls}`;
+};
+test('fixture days (real): state parity: side, status, level, legOK, resumed, flip.held, flipsIn, the state and the class per bar, pinned', () => {
+  assertGolden('market-state-parity.txt', `${DAYS.map(d => [`== ${d}`, ...RUNS[d].map(parityRow)].join('\n')).join('\n')}\n`);
+});
+
 test('fixture days (real): every state word the precedence makes is reached from the bars; the guard never prints chop; the line stays short', () => {
   const all = DAYS.flatMap(d => RUNS[d]);
   for (const re of [/: transition (up|down): /, /: weakening (up|down): /, /: rotation: pullback \(/, /: rotation (up|down): /, /reversal confirmed/, /potential failed opening drive/, /: chop: the (up|down) leg's last break failed, (HL|LH) [\d.]+ holds/, /: pullback \((long|short) leg/, /: in the (up|down) leg: /, /: trend (up|down): /, /: range: no leg holds/, /: range: the (up|down) leg's last break failed, (HL|LH) [\d.]+ holds/, /: forming /, /, CHoCH then BOS/]) {
