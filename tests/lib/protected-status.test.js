@@ -58,8 +58,8 @@ test('firstCloseThrough on gaps: the close decides (opens past and closes past: 
 
 test('statusOf: broken at the first close past the tie and sticky (R2); tied before any break; the first close back the old way past the tie', () => {
   const o = { level: 100, legSide: 'up', after: 0, atr: ATR(8), equalAtr: EQ };
-  const s = PS.statusOf(mk([105, 103, 99.5, 98, 99.5, 101.5, 103, 97]), o);
-  assert.deepStrictEqual(s, { broken: true, brokenI: 3, tied: false, backI: 5 }, '99.5 back is a tie, 101.5 is back past it; 97 later changes nothing');
+  const s = PS.statusOf(mk([105, 103, 99.5, 98, 100.5, 101.5, 103, 97]), o);
+  assert.deepStrictEqual(s, { broken: true, brokenI: 3, tied: false, backI: 5 }, '100.5 is back above the level inside the tie (no close back), 101.5 is back past it; 97 later changes nothing');
   assert.deepStrictEqual(PS.statusOf(mk([105, 103, 99.5, 101, 104]), { ...o, atr: ATR(5) }), { broken: false, brokenI: -1, tied: true, backI: -1 }, 'a tie, no break');
   assert.deepStrictEqual(PS.statusOf(mk([105, 103, 100, 101, 104]), { ...o, atr: ATR(5) }), { broken: false, brokenI: -1, tied: false, backI: -1 }, 'a close at the level: neither');
   assert.deepStrictEqual(PS.statusOf(mk([95, 97, 101.5, 98.5]), { level: 100, legSide: 'down', after: 0, atr: ATR(4), equalAtr: EQ }), { broken: true, brokenI: 2, tied: false, backI: 3 }, 'the mirror: an LH');

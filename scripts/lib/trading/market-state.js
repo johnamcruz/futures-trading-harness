@@ -343,7 +343,9 @@ const CUTS = [
   l => l.replace(/ \((?:overlap [\d.]+(?:, efficiency [\d.]+)?|efficiency [\d.]+)\)/, '').replace(/; (?:overlap [\d.]+, )?(?:efficiency [\d.]+, )?(?=15m )/, '; ')
     .replace(/; (?:overlap [\d.]+(?:, efficiency [\d.]+)?|efficiency [\d.]+)(?=; 15m (?:up|down): )/, ''),
   l => l.replace('; Day so far rotational, ', '; ').replace('; Day so far rotational;', ';'),
-  // swing-holds: the failed break's extreme, then the new side's protected swing (the broken words themselves stay).
+  // swing-holds: the failed break's extreme, then the new side's protected swing (the broken words themselves stay). The
+  // two never share a line (the extreme is a handed-back leg's, the new swing a broken level's), so their order is
+  // not observable: swapping them is an equivalent mutant (review D8), kept in this order for reading.
   l => l.replace(/, the break's (?:high|low) [\d.]+/, ''),
   l => l.replace(/, new protected (?:high|low) [\d.]+/, ''),
 ];

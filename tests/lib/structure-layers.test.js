@@ -99,6 +99,13 @@ test('the machine (swing-holds): restored, then a second close through the same 
   assert.deepStrictEqual([late[35].side, late[35].status, late[35].flip.held, late[35].flip.inside], ['down', 'broken', false, true], 'broken stays; the close is back above');
   assert.strictEqual(late[34].flip.inside, false, 'below 103 at 34');
   assert.strictEqual(late[35].flip.extreme, null, 'no hand-back: no extreme fixed');
+  // Both close-back tests read the tie (review m1, m3): a close back above 103 by less than the tie is no close back.
+  const inTie = setup([...BREAK.slice(0, 15), 99, 103.05]);
+  assert.ok(0.05 < P.equalAtr * inTie.atr[32], `the tie ${P.equalAtr * inTie.atr[32]} covers a 0.05 close above 103`);
+  assert.deepStrictEqual([inTie.series[32].side, inTie.series[32].status, inTie.series[32].flip.inside], ['down', 'broken', false], 'inside the tie: no hand-back, not back');
+  const lateTie = setup([...BREAK.slice(0, 15), 99, 98, 97, 96, 103.05]);
+  assert.ok(0.05 < P.equalAtr * lateTie.atr[35]);
+  assert.strictEqual(lateTie.series[35].flip.inside, false, 'a close 0.05 above 103, inside the tie: not back');
 });
 
 test('the machine (swing-holds): levelBroken is never carried across sessions (the machine starts at the day\'s first RTH break)', () => {
