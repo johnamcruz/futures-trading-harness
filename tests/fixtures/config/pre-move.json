@@ -1885,8 +1885,8 @@
   "mtfStructure.sideMode": { "value": "rule", "from": "new in feat/mtf-structure (the entry clause's side: the entry rule's 4h+1h side; pinned exactly, owner-approved 2026-11-17)" },
   "mtfStructure.depth": { "value": [0.3, 0.75, 1], "from": "new in feat/mtf-structure (the owner's depth classes' upper bounds: shallow, moderate, deep; past 1: breached; context only)" },
   "mtfStructure.warmBars": { "value": 20, "from": "new in feat/mtf-structure (parent candles a level needs before its leg start; fewer: partial, not enough history)" },
-  "mtfStructure.lineBytes": { "value": 1140, "from": "new in feat/mtf-structure (the two lines' byte budget: the tune half's measured maximum, 1086 bytes on 20,200 in-window bars, plus about 5%)" },
-  "mtfStructure.primaryBytes": { "value": 731, "from": "new in feat/mtf-structure (the primary line's byte budget: the tune half's measured maximum, 696 bytes, plus about 5%)" },
+  "mtfStructure.lineBytes": { "value": 1211, "from": "new in feat/mtf-structure (the two lines' byte budget: the tune half's measured maximum with the SPEC v3 wording, 1153 bytes on 20,200 in-window bars, plus about 5%)" },
+  "mtfStructure.primaryBytes": { "value": 807, "from": "new in feat/mtf-structure (the primary line's byte budget: the tune half's measured maximum with the SPEC v3 wording, 769 bytes, plus about 5%)" },
   "tradeRead.frames": {
    "value": [
     15
