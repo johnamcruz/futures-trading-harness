@@ -671,6 +671,22 @@
       ]
     },
     {
+      "id": "q35",
+      "layer": "setup",
+      "prompt": "head",
+      "text": "A 15m candle `rejected` a level in your composed read and its reaction reads conflicting. Which skill do you read for what that means, and how?",
+      "rule": "the reaction read is candle-reading's, read from the index with skill_lookup (or the cycle's embedded copy); the gate requires it on a composed rejection or break",
+      "anchor": "- a composed read says a candle rejected a level, or a composed read says a candle broke a level, or a composed read says a level was swept: `candle-reading`",
+      "required": [
+        "\\bcandle-reading\\b"
+      ],
+      "forbidden": [
+        "\\bembedded in (my|the|your) (head )?prompt\\b",
+        "\\b(already )?in my (head )?prompt\\b",
+        "\\b(with|via|using) the skill tool\\b"
+      ]
+    },
+    {
       "id": "q38",
       "layer": "setup",
       "prompt": "head",
@@ -1133,7 +1149,7 @@
       "lookup": [
         "pullback-vs-reversal"
       ],
-      "text": "Briefing lines (synthetic, 10:24 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): pullback (long leg 21462.5 -> 21538.75, depth 27%): 3m CHoCH up then BOS up; 4h+1h up; class trend-up.\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 27% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): hammer, close top third, range 0.9 ATR, vol 0.7x; rejected prior RTH high 21500.00 (closed back above; long-wick rejection, long side).\n- m15.lastBreak: last BOS up at 21500.00 (barsAgo 6).\n- m3.lastBreak: last BOS up at 21516.75 (barsAgo 0), previous CHoCH up at 21511.25 (barsAgo 2).\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nWhat is the read and the action?\nF1 - a reversal against the trend: no long\nF2 - the pullback is over: long, a limit at this 3m close\nF3 - wait for a 15m BOS up first\nF4 - chop: pass\nAnswer with ONE of F1-F4.",
+      "text": "Briefing lines (synthetic, 10:24 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): pullback (long leg 21462.5 -> 21538.75, depth 27%): 3m CHoCH up then BOS up; 4h+1h up; class trend-up.\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 27% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): hammer, close top third, range 0.9 ATR, vol 0.7x; rejected prior RTH high 21500.00 (closed back above; long-wick rejection, long side).\n- m15.lastBreak: last BOS up at 21500.00 (barsAgo 6).\n- m3.lastBreak: last BOS up at 21516.75 (barsAgo 0), previous CHoCH up at 21511.25 (barsAgo 2).\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nWhat is the read and the action?\nF1 - a reversal against the trend: the bearish pullback has not ended, so no long here\nF2 - the pullback is over: long, a limit at this 3m close\nF3 - wait for a 15m BOS up first\nF4 - chop: pass\nAnswer with ONE of F1-F4.",
       "rule": "inside an open 15m pullback: the 15m reaction at the level (the setup read, still the last 15m candle), the 3m CHoCH up (watch), then the first 3m BOS up near value: the entry, a limit at that 3m close",
       "anchor": "the first 3m BOS or 3m CISD the side's way, near value",
       "choices": [
@@ -1688,7 +1704,7 @@
       "anchor": "a range day too; a range is not chop",
       "choices": [
         "chop: a CHoCH then a CHoCH back; sit out",
-        "unclear: the 3m broke both ways",
+        "unclear: the 3m broke both ways, so neither side has a setup here until the 15m picks one",
         "short: the 3m CHoCH down",
         "trend-up: the class printed; a CHoCH pair alone is not chop; long setups the side's way"
       ],
@@ -1890,6 +1906,84 @@
       "answer": "yes: the close broke it; that close was weak"
     },
     {
+      "id": "q141",
+      "layer": "manage",
+      "prompt": "situational",
+      "state": {
+        "positions": [
+          {
+            "contractId": "MNQ",
+            "type": 1,
+            "size": 1,
+            "averagePrice": 15659.5
+          }
+        ],
+        "workingOrders": 1
+      },
+      "text": "Prompt lines (a managed cycle, recorded 2021-09-01 09:57 ET):\nPosition (code facts): MNQ long 1 @ 15659.5, 1R 9.5 pts; now +1.39R at 15672.75; MFE +4.16R at 15699 (09:48 ET bar); MAE -0.29R; giveback 2.77R (67% of MFE); working stop 15662.75 (+0.34R; a fill there is 3.82R off the best); target reached (lock +0.34R); code floor: last confirmed 15m swing 15620.5 is behind the lock: the stop rests at the lock.\nWhat is the trade's giveback in R?",
+      "rule": "the Position line's giveback: MFE less now, cited (4.16 - 1.39 = 2.77), never recomputed from another basis",
+      "anchor": "giveback = MFE less now, in R and as a share of MFE",
+      "choices": [
+        "2.77R",
+        "1.39R",
+        "3.82R",
+        "4.16R"
+      ],
+      "answer": "2.77R"
+    },
+    {
+      "id": "q142",
+      "layer": "manage",
+      "prompt": "situational",
+      "state": {
+        "positions": [
+          {
+            "contractId": "MNQ",
+            "type": 2,
+            "size": 1,
+            "averagePrice": 13674
+          }
+        ],
+        "workingOrders": 1
+      },
+      "text": "Prompt lines (a managed cycle, recorded 2022-03-07 10:36 ET):\nPosition (code facts): MNQ short 1 @ 13674, 1R 82.25 pts; now +0.82R at 13606.75; MFE +1.34R at 13563.5 (10:30 ET bar); MAE -0.24R; giveback 0.52R (39% of MFE); working stop 13756.25 (-1R; a fill there is 2.34R off the best); target not reached; code floor: before the target: the initial stop holds.\nHas the trade gone against its entry on a closed bar, and by how much?",
+      "rule": "MAE is the worst closed-bar extreme in R, never above 0: -0.24R",
+      "anchor": "MAE = the worst, never above 0",
+      "choices": [
+        "yes: -0.24R",
+        "no: MAE is 0",
+        "yes: -1R",
+        "no: it is +0.82R"
+      ],
+      "answer": "yes: -0.24R"
+    },
+    {
+      "id": "q143",
+      "layer": "manage",
+      "prompt": "situational",
+      "state": {
+        "positions": [
+          {
+            "contractId": "MNQ",
+            "type": 1,
+            "size": 1,
+            "averagePrice": 15659.5
+          }
+        ],
+        "workingOrders": 1
+      },
+      "text": "Prompt lines (a managed cycle, recorded 2021-09-01 09:54 ET):\nPosition (code facts): MNQ long 1 @ 15659.5, 1R 9.5 pts; now +3.34R at 15691.25; MFE +4.16R at 15699 (09:48 ET bar); MAE -0.29R; giveback 0.82R (20% of MFE); working stop 15662.75 (+0.34R; a fill there is 3.82R off the best); target reached (lock +0.34R); code floor: last confirmed 15m swing 15620.5 is behind the lock: the stop rests at the lock.\nPer the code floor line, what does the working stop rest on now?",
+      "rule": "the code floor line: the last confirmed 15m swing is behind the lock, so the stop rests at the lock",
+      "anchor": "code floor = what the stop rests on (the initial stop, a 15m swing, or the lock)",
+      "choices": [
+        "the lock",
+        "the 15m swing 15620.5",
+        "the initial stop",
+        "the best price 15699"
+      ],
+      "answer": "the lock"
+    },
+    {
       "id": "q144",
       "layer": "manage",
       "prompt": "situational",
@@ -2004,109 +2098,6 @@
         "14181"
       ],
       "answer": "14197, the break's high"
-    },
-    {
-      "id": "q149",
-      "layer": "bias",
-      "prompt": "lookup",
-      "lookup": [
-        "bos-vs-choch",
-        "displacement"
-      ],
-      "text": "Briefing lines (synthetic, 10:54 ET), flat:\n- Break quality (strength, not a forecast; `displacement`): 3m BOS up 21412.25 21 min ago: displaced, closed back below 21412.25 9 min ago; cleared 0.6 ATR; FVG 21405.5-21409 filled to 21406.75; from protected low 21380.5: holds (tested, a tie).\nThe 3m candle that closed at 10:54 closed at 21380.25, one tick under the protected low 21380.5. Is the protected low broken?",
-      "rule": "a close only at the protected swing, within the tie, is no break (`holds (tested, a tie)`); only a close through it, past the tie, invalidates the leg, weak or displaced",
-      "anchor": "a close through it, past a tie, is the only invalidation of the leg",
-      "choices": [
-        "yes: a close went below it",
-        "only a displaced close breaks it; this one was a tick",
-        "unclear: wait for a second close",
-        "no: a close inside the tie is no break; the protected low holds"
-      ],
-      "answer": "no: a close inside the tie is no break; the protected low holds"
-    },
-    {
-      "id": "q150",
-      "layer": "manage",
-      "prompt": "situational",
-      "state": {
-        "positions": [
-          {
-            "contractId": "MNQ",
-            "type": 1,
-            "size": 1,
-            "averagePrice": 11990
-          }
-        ],
-        "workingOrders": 1
-      },
-      "text": "Prompt lines (a managed cycle, synthetic, 10:48 ET; the 10:45 15m candle closed at 12000.75, half a point under the swing 12001.25):\nPosition (code facts): MNQ long 1 @ 11990, 1R 77.5 pts; now +0.21R at 12006.25; MFE +0.8R at 12051.75 (10:15 ET bar); MAE -0.07R; giveback 0.59R (74% of MFE); working stop 11912.5 (-1R; a fill there is 1.8R off the best); target not reached; code floor: before the target: the initial stop holds.\nTrade read (closed bars since entry; pullback-vs-reversal): best 12051.75; 15m push made a new extreme; 15m pushes 1.6 ATR/3 mom; pullback 33% of the last impulse 11912.75-12051.75; close vs RTH VWAP +0.31 ATR, vs EMA20 +0.12 ATR (+ the trade's way); structure against since entry: 3m none, 15m none; 15m displacement against: none; compression against: none; HTF bias at entry 4h up, now 4h up (no flip against). Weakening signs: 0 of 5, 2 needed; reversal: none.\nManage read (answer every cycle with one line \"STOP <price|hold>: <reason>\"; modify_order only when tighter): code floor: no early lock; 15m BOS up since entry: protected swing 12001.25 holds (tested, a tie), stop beyond it 12001 (tighter than the working stop); 15m CHoCH against since entry: none; warning giveback (0.5R behind the best): 12013 (past the price: a stop there would fill at once).\nYour STOP line?",
-      "rule": "a 15m close only at the protected swing, within the tie, is no break (`holds (tested, a tie)`): no reversal and no close; the 15m BOS the trade's way sets the stop a tick beyond its protected swing (protected-swing)",
-      "anchor": "A close only at the swing, within the tie, is no break: `holds (tested, a tie)`.",
-      "choices": [
-        "STOP 12001: protected-swing",
-        "close_position at market: the 15m closed through the protected swing",
-        "STOP hold: hold",
-        "STOP 12013: weakening"
-      ],
-      "answer": "STOP 12001: protected-swing"
-    },
-    {
-      "id": "q151",
-      "layer": "bias",
-      "prompt": "lookup",
-      "lookup": [
-        "bos-vs-choch"
-      ],
-      "layers": {
-        "structure": {
-          "side": "up",
-          "level": 21380.5,
-          "legOK": true,
-          "lastWay": {
-            "kind": "BOS",
-            "direction": "up",
-            "level": 21412.25,
-            "barsAgo": 1,
-            "strong": false,
-            "failed": false
-          },
-          "flip": {
-            "oldSide": "down",
-            "oldLevel": 21450.25,
-            "barsAgo": 1,
-            "byRule": "choch-bos",
-            "oldBroken": false
-          }
-        }
-      },
-      "text": "Briefing lines (synthetic, 10:45 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): in the up leg: HL 21380.5 holds, BOS up 3 min ago, CHoCH then BOS: transition confirmed; 4h+1h up; class trend-up.\n- m3.lastBreak: last BOS up at 21412.25 (barsAgo 1; protected low 21380.50), previous CHoCH up at 21398.75 (barsAgo 6).\n- Price 21415.\n- Day so far (25 3m bars; `day-context`): mixed up: efficiency 0.15 (x sqrt(bars) 0.75), RTH VWAP crosses 2, range 3.2 x 3m ATR(14), net up (its size: Trend declared? day's move).\nThe down leg before it was protected by the LH 21450.25; no 3m close has gone above it. What has the market confirmed?",
-      "rule": "a CHoCH then a BOS the same way confirms a transition (`CHoCH then BOS: transition confirmed`) while the old leg's protected level is unbroken; only a close through that level makes the reversal",
-      "anchor": "A CHoCH then BOS against it confirms a transition (`CHoCH then BOS: transition confirmed`), the level unbroken; a close through it makes the reversal",
-      "choices": [
-        "a confirmed reversal up: the down trend is over",
-        "chop: a CHoCH, then another break",
-        "nothing yet: a BOS after a CHoCH is still unconfirmed",
-        "a confirmed transition up, not a reversal: that needs a close through the old leg's LH 21450.25"
-      ],
-      "answer": "a confirmed transition up, not a reversal: that needs a close through the old leg's LH 21450.25"
-    },
-    {
-      "id": "q152",
-      "layer": "setup",
-      "prompt": "lookup",
-      "lookup": [
-        "pullback-vs-reversal"
-      ],
-      "text": "Briefing lines (synthetic, 10:57 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): in the down leg: 3m BOS down then BOS down, 6 min ago; 4h+1h up; class unclear.\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 85% of the leg; 14 bars since the extreme, volume 1.2x the leg's per bar (rising), range 1.3x; swings since the extreme: 15m 21490.25 broken by a close, 1h 21481.5 broken by a close; 15m break against: CHoCH down 21490.25 (4 bars ago), 1h: CHoCH down 21481.5 (1 bars ago).\n- 15m (setup candle, closed 10:45): hammer, close top third, range 0.9 ATR, vol 1.1x; rejected prior RTH low (closed back above; long-wick rejection, long side).\n- m3.lastBreak: last BOS down at 21478.25 (barsAgo 2), previous BOS down at 21492.75 (barsAgo 9).\nWhat is the read and the action?",
-      "rule": "read through the higher frame: CHoCHs stacking up the timeframes (the 15m, then the 1h, against the leg; its 15m and 1h swings broken by a close) are a reversal developing, not this leg's pullback: no long on it (a candle at the level is no confirmation alone), and never a short against the 4h + 1h side",
-      "anchor": "CHoCHs stacking up the timeframes (15m, then 1h) are a reversal developing",
-      "choices": [
-        "a pullback: wait for the 15m turn, then the 3m BOS up",
-        "a deeper discount with a hammer at the level: long now",
-        "a reversal: short on the next 3m BOS down",
-        "a reversal developing (the 15m, then the 1h CHoCH down): not this leg's pullback; no long, and never a short"
-      ],
-      "answer": "a reversal developing (the 15m, then the 1h CHoCH down): not this leg's pullback; no long, and never a short"
     }
   ],
   "partB": [

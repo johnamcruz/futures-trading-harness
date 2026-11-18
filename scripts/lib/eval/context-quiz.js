@@ -23,12 +23,14 @@
  *   questionText(quiz, q)              the text asked: the excerpt (Part B), the question, the answer format (a
  *                                      question's own `format`, or a choice question's: reason first, then its labels
  *                                      named or its choices lettered A-F, the answer last)
+ *   answerLines(answer)                every ANSWER line's text (the label and its colon), in order
  *   answerLine(answer)                 { line, fmt }: the LAST ANSWER line (fmt false: the first line, no ANSWER label)
  *   negated(line, index, negations, window)   a match at `index` negated within its clause (a negation word in the
  *                                      `window` words before it: the quiz file's negationWindow). A line-leading verdict
  *                                      ("No," "No -" "Not yet:" "Yes,": VERDICT) answers the question; it never negates
  *                                      the explanation after it
- *   gradeAnswer(quiz, q, answer)       { id, line, fmt, pass, miss, forb, unsure }: by its required and forbidden regexes,
+ *   gradeAnswer(quiz, q, answer)       { id, line, fmt, pass, miss, forb, unsure, split }: by its required and forbidden
+ *                                      regexes on EVERY ANSWER line (free text, answer first),
  *                                      or a choice question (`choices`, `answer`) by the ANSWER line equal to its answer
  *                                      (a lettered one: its letter, or the letter with its own text)
  *   summarize(quiz, rows, k)           per question { id, passes, n, allCorrect, bothWays }, per part totals, meetsBar
@@ -363,11 +365,16 @@ function questionText(quiz, q) {
   return `${head}${q.text}${q.choices ? choiceFormat(q) : q.format || quiz.answerFormat}`;
 }
 
-// The last ANSWER line (quiz accuracy C2): a reply that corrects itself is graded on its correction.
+// An ANSWER line: the label, then its colon (markdown around either aside). A line that only starts with the word
+// ("Answering ...", "**Answer (short side):** ...") is none (review 1: a later such line must never be graded).
+const ANSWER_LINE = /^\s*\**\s*ANSWER\b\s*\**\s*:\**\s*(.*)$/gmi;
+/** Every ANSWER line's text, in order. */
+const answerLines = answer => [...String(answer || '').matchAll(ANSWER_LINE)].map(m => m[1].trim());
+// The last ANSWER line (quiz accuracy C2): a choice item, asked reason first, is graded on its last one (the live head's
+// rule: its last CYCLE RESULT line). No ANSWER line: the first line.
 function answerLine(answer) {
-  const a = String(answer || '');
-  const all = [...a.matchAll(/^\s*\**\s*ANSWER\**\s*:?\**\s*(.*)$/gmi)];
-  return all.length ? { line: all[all.length - 1][1].trim(), fmt: true } : { line: a.split('\n')[0].trim(), fmt: false };
+  const all = answerLines(answer);
+  return all.length ? { line: all[all.length - 1], fmt: true } : { line: String(answer || '').split('\n')[0].trim(), fmt: false };
 }
 
 // A line-leading verdict and its punctuation ("No," "No -" "Not yet:" "Not now," "**No**," "Yes."): the answer to the question, not a negation
@@ -392,8 +399,32 @@ function matchesUnnegated(line, src, negations, window) {
   return false;
 }
 
+/** A choice line as the choice it names: its index (exact text, or for a lettered question its letter), or null. */
+function choiceOf(q, line) {
+  const i = q.choices.findIndex(c => norm(c) === norm(line));
+  if (i >= 0) return i;
+  const j = lettered(q) ? letterPick(q, line) : -1;
+  return j >= 0 && j < q.choices.length ? j : null;
+}
+
 function gradeAnswer(quiz, q, answer) {
+  const lines = answerLines(answer);
+  // A free-text item is asked answer first: EVERY ANSWER line must pass (quiz accuracy, review 1: a later line never
+  // rescues a wrong first one, nor a wrong later one a right first one). A choice item: its last line (answerLine).
+  if (!q.choices && lines.length > 1) {
+    const each = lines.map(l => gradeLine(quiz, q, l, true));
+    const bad = each.find(g => !g.pass);
+    const g = bad || each[0];
+    return { ...g, pass: !bad, miss: [...new Set(each.flatMap(x => x.miss))], forb: [...new Set(each.flatMap(x => x.forb))], split: Boolean(bad) && each.some(x => x.pass) };
+  }
   const { line, fmt } = answerLine(answer);
+  const g = gradeLine(quiz, q, line, fmt);
+  // The choice item's lines disagree when they name different choices (an unreadable line counts as its own).
+  const named = q.choices ? new Set(lines.map(l => { const c = choiceOf(q, l); return c === null ? `?${norm(l)}` : c; })) : new Set();
+  return { ...g, split: named.size > 1 };
+}
+
+function gradeLine(quiz, q, line, fmt) {
   // A line past the gate's maxGradedLineChars is never graded (no pattern runs on it, nor on a cut of it, where a
   // forbidden phrase past the cut would hide): a fail, said so.
   const cap = quiz.gate.maxGradedLineChars;
@@ -415,7 +446,8 @@ function summarize(quiz, rows, k = quiz.k) {
     const per = list.map(q => {
       const g = rows.filter(r => r.id === q.id);
       const passes = g.filter(r => r.pass).length;
-      return { id: q.id, layer: q.layer, passes, n: g.length, allCorrect: g.length >= k && passes === g.length, bothWays: passes > 0 && passes < g.length };
+      // split: the replies whose ANSWER lines disagree (reported, never graded: quiz accuracy, ruling 7).
+      return { id: q.id, layer: q.layer, passes, n: g.length, allCorrect: g.length >= k && passes === g.length, bothWays: passes > 0 && passes < g.length, split: g.filter(r => r.split).length };
     });
     const allCorrect = per.filter(x => x.allCorrect).length;
     const bothWays = per.filter(x => x.bothWays).length;
@@ -469,4 +501,4 @@ function compare(a, b) {
   });
 }
 
-module.exports = { normChoice: norm, VERDICT, LAYERS, PROMPTS, PROMPT_ROLES, loadQuiz, quizErrors, questionErrors, promptKey, buildPrompts, excerptOf, briefingOfText, layersOf, marketStateOfText, questionText, answerLine, negated, gradeAnswer, summarize, compare, quizCommand, replyOf, anchorsMissing };
+module.exports = { normChoice: norm, answerLines, VERDICT, LAYERS, PROMPTS, PROMPT_ROLES, loadQuiz, quizErrors, questionErrors, promptKey, buildPrompts, excerptOf, briefingOfText, layersOf, marketStateOfText, questionText, answerLine, negated, gradeAnswer, summarize, compare, quizCommand, replyOf, anchorsMissing };
