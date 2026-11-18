@@ -81,3 +81,33 @@ test('manageRead, one basis: the first bar counted is `from` (the runner\'s rule
   const held = manageRead({ side: 'long', entry: 106, risk: 10, stop: 96, openedAt: opened, bars: bars15(UP), base: 3, tick: 0.25, exit: EXIT, best: 112 });
   assert.deepStrictEqual([held.best, held.bestR, held.warning.stop], [112, 0.6, 107]);
 });
+
+// swing-holds D2: the Manage read's protected swing follows the one predicate (protected-status.js): a 15m close past it
+// by no more than equalAtr x the 15m ATR(14) at that candle is a tie and the swing holds, as the Break quality line says on
+// the same swing; the next close past the tie is BROKEN. Each frame judges its own candles: a 3m close through the 15m
+// swing that the 15m candle closes back above is a 15m wick.
+test('manageRead (D2): a 15m tie close past the protected swing holds; the next close past the tie is BROKEN; a 3m dip inside the 15m candle is a wick', () => {
+  const ind = require('../../scripts/lib/trading/indicators');
+  const { completedCandlesAt } = require('../../scripts/lib/trading/candle-facts');
+  const EQ = require('../../scripts/lib/tunables').analysis().marketState.equalAtr;
+  const FLAT = Array.from({ length: 12 }, (_, j) => [100, 101.5, 98.5, j % 2 ? 100.5 : 99.5]);
+  const openedLate = new Date(T0 + (12 + 3) * 15 * 60000).toISOString();
+  const tie = [...FLAT, ...UP, [109, 109.5, 100.5, 101], [101, 101.5, 99.8, 99.9]];
+  const run = cs => manageRead({ side: 'long', entry: 106, risk: 10, stop: 96, openedAt: openedLate, bars: bars15(cs), base: 3, tick: 0.25, exit: EXIT });
+  const m = run(tie);
+  assert.strictEqual(m.bos && m.bos.level, 100, JSON.stringify(m.bos));
+  const c = completedCandlesAt({ bars: bars15(tie), base: 3, minutes: 15 });
+  const atr = ind.atr(c.candles.slice(0, c.j + 1));
+  const band = EQ * atr[c.j];
+  assert.ok(band > 0.1, `the fixture: a 0.1 close under 100 sits inside the tie ${band}`);
+  assert.strictEqual(m.bos.broken, false, 'a tie: holds');
+  assert.match(manageReadLine(m), /protected swing 100 holds, stop beyond it 99\.75/);
+  const broken = run([...tie, [99.9, 100.2, 98.9, 99]]);
+  assert.strictEqual(broken.bos.broken, true, 'a close past the tie: broken');
+  assert.match(manageReadLine(broken), /protected swing 100 BROKEN by a close/);
+  // A 3m bar closing under 100 inside a 15m candle that closes back above: no 15m close through, the swing holds.
+  const wick = bars15([...FLAT, ...UP, [109, 109.5, 98, 101]]);
+  wick[wick.length - 3] = { ...wick[wick.length - 3], c: 98.5 };
+  assert.ok(wick.some(b => b.c < 100), 'a 3m close under the 15m swing');
+  assert.strictEqual(manageRead({ side: 'long', entry: 106, risk: 10, stop: 96, openedAt: openedLate, bars: wick, base: 3, tick: 0.25, exit: EXIT }).bos.broken, false, 'a 15m wick');
+});
