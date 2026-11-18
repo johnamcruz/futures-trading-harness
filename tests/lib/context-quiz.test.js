@@ -550,7 +550,8 @@ test('summary: correct on all K, answered both ways, the totals, the bar; compar
   // 88 since q87-q112 less q100 (feat/pullback-concept, closed choices); 100 since q113-q126 less q120 and q122 (feat/chop-read): 100 x 5
   // runs, one missed = 499. 107 with q134-q140 (the displacement read: the two traps, closed back, BOS, CHoCH, CISD, a weak
   // invalidating close).
-  // 113 with q141-q146 (the Position line: three fields, three managed-cycle holds).
+  // 113 with q141-q146 (the Position line: three fields, three managed-cycle holds). 112 after quiz accuracy C6/C7 (q35 and
+  // nothing removed (review 1, ruling 4)): 113.
   assert.deepStrictEqual([all.partA.allCorrect, all.partA.bothWays, all.partB.allCorrect, all.meetsBar], [113, 0, 8, true]);
   const one = rows.map(r => (r.id === 'q6' && r.k === 2 ? { ...r, pass: false } : r));
   const s = Q.summarize(QUIZ, one, 5);
@@ -679,7 +680,7 @@ test('grading: every pattern of q70 does work (its removal lets a wrong answer t
 // The chop questions (q79-q82): chop DETECTION, the owner's class A of what the briefing showed (no read yet) and the
 // which-fact questions. Graded as a closed choice: the ANSWER line equal to the question's answer, one of its choices
 // (case, the markdown or quotes around it and a trailing period aside). A hedge, a second
-// label or anything else on the line is a fail; the why is the second line, read by a person, never graded.
+// label or anything else on the line is a fail; the why comes first, read by a person, never graded (quiz accuracy C1).
 const CHOP = { q79: 'no read yet', q80: 'no read yet', q81: 'F4', q82: 'F4' };
 const CLASSES = ['chop evidence', 'trend evidence', 'conflicting', 'no read yet'];
 
@@ -689,7 +690,10 @@ test('the chop questions are closed choices: their answer one of their choices, 
     assert.deepStrictEqual(x.choices, ['q81', 'q82'].includes(id) ? ['F1', 'F2', 'F3', 'F4'] : CLASSES, id);
     assert.strictEqual(x.answer, answer, id);
     assert.ok(!('required' in x) && !('forbidden' in x), id);
-    assert.ok(Q.questionText(QUIZ, x).endsWith(` Answer from your instructions only. First line: ANSWER: <one of: ${x.choices.join(' | ')}>, nothing else. Second line: one short sentence why.`), id);
+    // Reason first, the answer last (quiz accuracy C1): label choices (F1-F4) by their label, phrases by a letter.
+    const tail = ' Answer from your instructions only. Reason first, in at most 3 short lines. Last line: ANSWER: ';
+    if (/^F\d$/.test(x.choices[0])) assert.ok(Q.questionText(QUIZ, x).endsWith(`${tail}<one of: ${x.choices.join(' | ')}>, nothing else.`), id);
+    else assert.ok(Q.questionText(QUIZ, x).endsWith(`\n${x.choices.map((c, i) => `${'ABCDEF'[i]}) ${c}`).join('\n')}\n${tail.trimStart()}<one letter: A, B, C or D>, nothing else.`), id);
   }
   // The other questions keep the quiz's answer format; a question's own `format` replaces it.
   assert.ok(Q.questionText(QUIZ, q('q70')).endsWith(QUIZ.answerFormat));
@@ -752,8 +756,8 @@ test('grading a choice question: the ANSWER line equal to the answer passes; a h
   // Text without a number reads as before (the cases above), and the F-labels stay distinct.
   assert.strictEqual(g('q81', 'ANSWER: F3'), false);
   // The result's shape is the regex questions' (quiz-run, quiz-gate and quiz-phase read it): the answer missed, nothing forbidden.
-  assert.deepStrictEqual(Q.gradeAnswer(QUIZ, q('q79'), 'ANSWER: trend evidence\nwhy'), { id: 'q79', line: 'trend evidence', fmt: true, pass: false, miss: ['no read yet'], forb: [], unsure: false });
-  assert.deepStrictEqual(Q.gradeAnswer(QUIZ, q('q81'), 'F4'), { id: 'q81', line: 'F4', fmt: false, pass: true, miss: [], forb: [], unsure: false });
+  assert.deepStrictEqual(Q.gradeAnswer(QUIZ, q('q79'), 'ANSWER: trend evidence\nwhy'), { id: 'q79', line: 'trend evidence', fmt: true, pass: false, miss: ['no read yet'], forb: [], unsure: false, split: false });
+  assert.deepStrictEqual(Q.gradeAnswer(QUIZ, q('q81'), 'F4'), { id: 'q81', line: 'F4', fmt: false, pass: true, miss: [], forb: [], unsure: false, split: false });
   assert.strictEqual(Q.gradeAnswer(QUIZ, q('q79'), 'ANSWER: unsure').unsure, true);
   // A line past gate.maxGradedLineChars is never graded: a fail, the answer missed.
   const long = Q.gradeAnswer(QUIZ, q('q79'), `ANSWER: no read yet${' '.repeat(QUIZ.gate.maxGradedLineChars)}.`);
@@ -890,4 +894,195 @@ test('marketStateOfText: the Market state line from an item\'s printed lines', (
   assert.strictEqual(Q.marketStateOfText(head('11:00', [BL, '- Price 21563.25.', IB, ROT, '- m3.lastBreak: last CHoCH up at 21558.25 (barsAgo 0), previous CHoCH down at 21497.75 (barsAgo 5).'])), 'Market state (3m): in the up leg: 3m CHoCH down then CHoCH up, then a close above the IB high 21560 (confirmed); 4h+1h up; class trend-up');
   // The RTH pair: a previous break before 09:30 ET does not count.
   assert.strictEqual(Q.marketStateOfText(head('09:36', [BL, '- m3.lastBreak: last CHoCH up at 21512.25 (barsAgo 0), previous CHoCH down at 21497.75 (barsAgo 4).'])), 'Market state (3m): range: 3m CHoCH up (unconfirmed); 4h+1h up; class trend-up');
+});
+
+// Quiz accuracy (fix/quiz-accuracy): the instrument, not the items' rules. On main the answer-first format let the model
+// write a choice its own reasoning then rejected (q103: about 23 of its 25 fails), and recorded replies holding two
+// ANSWER lines mostly corrected themselves to the right one (counts: the PR body, from one script); a paraphrased choice
+// was graded off the list (q114 "wait").
+test('quiz accuracy C2: an ANSWER line needs its colon; a choice item (reason first) is graded on its LAST one', () => {
+  assert.deepStrictEqual(Q.answerLine('ANSWER: a short on the next 3m bar\nWait, that is wrong.\nANSWER: a reversal sign: wait'), { line: 'a reversal sign: wait', fmt: true });
+  assert.deepStrictEqual(Q.answerLine('The 15m turned against the side.\nNever counter.\nANSWER: B'), { line: 'B', fmt: true });
+  assert.deepStrictEqual(Q.answerLine('**ANSWER:** No\nwhy\n**ANSWER**: Yes, size 3'), { line: 'Yes, size 3', fmt: true });
+  assert.deepStrictEqual(Q.answerLine('ANSWER: No, never counter.\nwhy one\nwhy two'), { line: 'No, never counter.', fmt: true });
+  assert.deepStrictEqual(Q.answerLine('No side.\nmore'), { line: 'No side.', fmt: false });
+  // Review 1, finding 1: a later line that only starts with the word is no ANSWER line ("Answering ...", "**Answer (x):**").
+  assert.deepStrictEqual(Q.answerLines('ANSWER: Yes, long is ok.\nAnswering short: no.\n**Answer (short side):** not allowed.\nAnswers: none\nANSWER : C'), ['Yes, long is ok.', 'C']);
+  assert.deepStrictEqual(Q.answerLines('Answer: F4\n**ANSWER:** B\n**ANSWER**: C\n  answer:d'), ['F4', 'B', 'C', 'd']);
+  assert.deepStrictEqual(Q.answerLines('ANSWER - F4\nANSWERS: x\nno label'), []);
+  // A choice item: the last one decides (the live head's rule: its last CYCLE RESULT line).
+  const c = q('q79'); // D) no read yet
+  assert.strictEqual(Q.gradeAnswer(QUIZ, c, 'ANSWER: A\nWait: the bars are too few.\nANSWER: D').pass, true);
+  assert.strictEqual(Q.gradeAnswer(QUIZ, c, 'ANSWER: D\nHmm.\nANSWER: A').pass, false);
+  assert.strictEqual(Q.gradeAnswer(QUIZ, c, 'ANSWER: A\n**Answer (the class):** D').pass, false, 'a label line without its colon is not the answer');
+});
+
+test('quiz accuracy C2: a free-text item (answer first) passes only when EVERY ANSWER line passes', () => {
+  // Review 1, finding 1's two replies (q1, "4h up, 1h down: a long? a short?"): main failed them; so does this grader.
+  assert.strictEqual(pass('q1', 'ANSWER: Yes, long is ok; the 4h leads.\nAnswering short: no, not against the 4h.'), false);
+  assert.strictEqual(pass('q1', 'ANSWER: Yes, long is ok; the 4h leads.\n**Answer (short side):** not allowed.'), false);
+  assert.strictEqual(pass('q1', 'ANSWER: No: neither side; the 4h and 1h disagree.\nANSWER: Yes, long is ok.'), false, 'a wrong second ANSWER line fails it');
+  assert.strictEqual(pass('q1', 'ANSWER: Yes, long is ok.\nWait, that is wrong.\nANSWER: No: neither side.'), false, 'a wrong first ANSWER line fails it too');
+  assert.strictEqual(pass('q1', 'ANSWER: No: neither side; the 4h and 1h disagree.\nwhy\nANSWER: No, neither: never counter.'), true);
+  assert.strictEqual(pass('q18', 'ANSWER: Less than the full verdict size: cut it.\nWait.\nANSWER: Full verdict size; a serious factor against does not cut it in a prop attempt.'), false);
+  const g = Q.gradeAnswer(QUIZ, q('q1'), 'ANSWER: No: neither side.\nANSWER: Yes, long is ok.');
+  assert.deepStrictEqual([g.line, g.forb.length > 0], ['Yes, long is ok.', true], 'the failing line is the one reported');
+});
+
+// Review 2, N1 and N2: a free-text item's every-line rule reads any labelled ANSWER line (a colon, a dash or an em dash,
+// markdown around it); "FINAL ANSWER:" is an ANSWER line everywhere; a choice item's graded line still needs the colon,
+// and every labelled line counts toward split.
+test('quiz accuracy review 2: "ANSWER -" and "ANSWER —" lines count for free text and split; "FINAL ANSWER:" is an ANSWER line', () => {
+  for (const a of ['ANSWER - Yes, long is ok; the 4h leads.\nANSWER: No: neither side.', 'Answer — Yes, long is ok.\nANSWER: No: neither side.',
+    '**ANSWER** – Yes, long is ok.\nANSWER: No: neither side.', 'ANSWER: No: neither side.\nANSWER - Yes, long is ok.', 'ANSWER: No: neither side.\nFINAL ANSWER: Yes, long is ok.']) assert.strictEqual(pass('q1', a), false, a);
+  assert.strictEqual(pass('q1', 'ANSWER - No: neither side; the 4h and 1h disagree.'), true, 'a dash label alone: its text graded');
+  assert.strictEqual(pass('q32', 'ANSWER - No: the 1h close beyond outweighs a 3m rejection.'), true, 'the text after the label is the line its anchored patterns read, as on main');
+  assert.strictEqual(pass('q1', 'ANSWER: No: neither side.\nFINAL ANSWER: No, never counter.'), true);
+  assert.deepStrictEqual(Q.answerLines('FINAL ANSWER: B\n**Final Answer:** C\nfinal answers: x\nThe final answer: D'), ['B', 'C']);
+  const c = q('q79'); // D) no read yet
+  const G = a => Q.gradeAnswer(QUIZ, c, a);
+  assert.deepStrictEqual([G('ANSWER: C\nFINAL ANSWER: D').pass, G('ANSWER: C\nFINAL ANSWER: D').split], [true, true], 'the final answer is the last line');
+  assert.deepStrictEqual([G('ANSWER: D\nFinal answer: A').pass, G('ANSWER: D\nFinal answer: A').split], [false, true]);
+  assert.deepStrictEqual([G('ANSWER - A\nANSWER: D').pass, G('ANSWER - A\nANSWER: D').split], [true, true], 'a dash line is never the graded line of a choice item, but it counts toward split');
+  assert.deepStrictEqual([G('ANSWER - D').pass, G('ANSWER - D').split], [false, false], 'a choice item without a colon line: the first line, as before');
+  assert.strictEqual(G('ANSWER — D\nANSWER: D').split, false);
+  // Review 3, R3-1: a dash label needs whitespace before the dash, so prose that starts "Answer-wise" is no label line.
+  assert.deepStrictEqual(Q.labelLines('Answer-wise, the long is ok.\nANSWER-x\n**ANSWER**— no space\nANSWER - No.\n**ANSWER** — No.\nANSWER: No.'), ['No.', 'No.', 'No.']);
+  assert.strictEqual(pass('q1', 'Answer-wise, the long is ok here.\nANSWER: No: neither side; the 4h and 1h disagree.'), true, 'the prose line is not graded');
+  assert.strictEqual(G('Answer-wise, A looked close.\nANSWER: D').split, false);
+});
+
+test('quiz accuracy ruling 7: a reply whose ANSWER lines disagree is counted (split), per item in the summary; never a grade change', () => {
+  const c = q('q79');
+  const G = a => Q.gradeAnswer(QUIZ, c, a);
+  assert.deepStrictEqual([G('ANSWER: A\nANSWER: D').split, G('ANSWER: A\nANSWER: D').pass], [true, true]);
+  assert.deepStrictEqual([G('ANSWER: D\nANSWER: D) no read yet').split, G('ANSWER: no read yet\nANSWER: D').split], [false, false], 'the same choice twice is no split');
+  assert.strictEqual(G('ANSWER: D').split, false);
+  assert.strictEqual(G('ANSWER: maybe\nANSWER: D').split, true, 'an unreadable line and a choice disagree');
+  assert.deepStrictEqual([G('ANSWER: maybe\nANSWER: perhaps').split, G('ANSWER: maybe\nANSWER: Maybe.').split], [true, false], 'two different unreadable lines disagree; the same one twice does not');
+  // A free-text reply splits when one ANSWER line passes and another fails.
+  assert.strictEqual(Q.gradeAnswer(QUIZ, q('q1'), 'ANSWER: No: neither side.\nANSWER: Yes, long is ok.').split, true);
+  assert.strictEqual(Q.gradeAnswer(QUIZ, q('q1'), 'ANSWER: No: neither side.\nANSWER: No, never counter.').split, false);
+  const rows = [{ id: 'q79', k: 1, pass: true, split: true }, { id: 'q79', k: 2, pass: true, split: false }, { id: 'q79', k: 3, pass: false, split: true }];
+  const per = Q.summarize(QUIZ, rows, 3).partA.per.find(x => x.id === 'q79');
+  assert.deepStrictEqual([per.passes, per.n, per.split], [2, 3, 2]);
+});
+
+test('quiz accuracy C1: a choice item asks reason first and the answer last; phrase choices lettered A-F, label choices (F1-F4) by label', () => {
+  const tail = 'Answer from your instructions only. Reason first, in at most 3 short lines. Last line: ANSWER: ';
+  assert.ok(Q.questionText(QUIZ, q('q79')).endsWith(`?\nA) chop evidence\nB) trend evidence\nC) conflicting\nD) no read yet\n${tail}<one letter: A, B, C or D>, nothing else.`));
+  const f = Q.questionText(QUIZ, q('q81'));
+  assert.ok(f.endsWith(` ${tail}<one of: F1 | F2 | F3 | F4>, nothing else.`));
+  assert.doesNotMatch(f, /\nA\) F1/);
+  const two = { ...q('q79'), choices: ['yes', 'no'], answer: 'no' };
+  assert.ok(Q.questionText(QUIZ, two).endsWith(`\nA) yes\nB) no\n${tail}<one letter: A or B>, nothing else.`));
+  const six = { ...q('q79'), choices: ['p', 'q', 'r', 's', 't', 'u'], answer: 'p' };
+  assert.ok(Q.questionText(QUIZ, six).endsWith(`\nF) u\n${tail}<one letter: A, B, C, D, E or F>, nothing else.`));
+  // Every choice item of the file without its own format asks reason first; a question's own format stays its own.
+  for (const x of [...QUIZ.questions, ...QUIZ.partB].filter(y => y.choices && !y.format)) assert.ok(Q.questionText(QUIZ, x).includes(`\n${tail}`) || Q.questionText(QUIZ, x).includes(` ${tail}`), x.id);
+  assert.ok(Q.questionText(QUIZ, { ...q('q79'), format: ' Say it.' }).endsWith('? Say it.'));
+  // The free-text items keep the quiz's answer format (answer first: their patterns read the reason on the line).
+  assert.ok(Q.questionText(QUIZ, q('q70')).endsWith(QUIZ.answerFormat));
+});
+
+test('quiz accuracy C3: a lettered choice passes on its letter, the letter with its own text, or its text; anything else fails', () => {
+  const g = (x, a) => Q.gradeAnswer(QUIZ, x, a).pass;
+  const x = q('q79'); // its answer, no read yet, is D
+  for (const a of ['why\nANSWER: D', 'ANSWER: d', 'ANSWER: **D**', 'ANSWER: D.', 'ANSWER: D)', 'ANSWER: (D)', 'ANSWER: `D`', 'ANSWER: D) no read yet',
+    'ANSWER: D - no read yet', 'ANSWER: D: no read yet', 'ANSWER: D. No read yet.', 'ANSWER: **D) no read yet**', 'ANSWER: no read yet', 'ANSWER: A\nno, wait\nANSWER: D', 'D\nno label: the first line, as a phrase\'s']) assert.strictEqual(g(x, a), true, a);
+  for (const a of ['ANSWER: A', 'ANSWER: E', 'ANSWER: D, A', 'ANSWER: A or D', 'ANSWER: D or A', 'ANSWER: D) chop evidence', 'ANSWER: A) no read yet', 'ANSWER: D (I think)',
+    'ANSWER: maybe D', 'ANSWER: DD', 'ANSWER: D/A', 'ANSWER: D\nwait\nANSWER: A', 'ANSWER: ', 'ANSWER: Option D', 'ANSWER: D) no read', 'ANSWER: D -']) assert.strictEqual(g(x, a), false, a);
+  // A letter past the choices is no answer.
+  const two = { ...x, choices: ['yes', 'no'], answer: 'no' };
+  for (const [a, want] of [['ANSWER: B', true], ['ANSWER: C', false], ['ANSWER: A', false], ['ANSWER: no', true]]) assert.strictEqual(g(two, a), want, a);
+  // A choice that starts like a letter ("a reversal") is never read as letter A, and its text still decides.
+  const art = { ...x, choices: ['a reversal', 'b-side chop', 'chop', 'no read'], answer: 'chop' };
+  for (const [a, want] of [['ANSWER: a reversal', false], ['ANSWER: A reversal', false], ['ANSWER: C', true], ['ANSWER: b-side chop', false], ['ANSWER: chop', true], ['ANSWER: A) a reversal', false]]) assert.strictEqual(g(art, a), want, a);
+  const artA = { ...art, answer: 'a reversal' };
+  for (const [a, want] of [['ANSWER: a reversal', true], ['ANSWER: A', true], ['ANSWER: A) a reversal', true], ['ANSWER: A) reversal', true], ['ANSWER: A) chop', false]]) assert.strictEqual(g(artA, a), want, a);
+  // An answer that is no choice never matches by letter (an index of -1 on both sides is no pass).
+  const off = { ...x, answer: 'not among the choices' };
+  for (const a of ['ANSWER: Z', 'ANSWER: G', 'ANSWER: maybe', 'ANSWER: A']) assert.strictEqual(g(off, a), false, a);
+  // Label items (F1-F4) answer by label: a letter is no answer. A question with its own format is graded on its text only.
+  assert.strictEqual(g(q('q81'), 'ANSWER: F4'), true);
+  assert.strictEqual(g(q('q81'), 'ANSWER: D'), false);
+  const own = { ...x, format: ' First line: ANSWER: <one of: chop evidence | trend evidence | conflicting | no read yet>.' };
+  for (const [a, want] of [['ANSWER: no read yet', true], ['ANSWER: D', false]]) assert.strictEqual(g(own, a), want, a);
+});
+
+test('quiz accuracy C4: q17, q28 and q49 pass the right answers their patterns failed on main; the wrong ones still fail', () => {
+  // Recorded on main (the quiz's model; local runs): right reads graded wrong.
+  assert.ok(pass('q17', 'ANSWER: Full verdict size; a healthy account is traded at the verdict\'s full size, and only a pacing rule may cut it.'));
+  assert.ok(pass('q17', 'ANSWER: Full verdict size; a healthy prop account gets no size cut for a serious factor against, only a pacing rule can cut it.'));
+  for (const a of ['Full size, but cut it to 2.', 'Full, then reduce the size.', 'Full; the risk manager may cut it.', 'Less: cut it.']) assert.ok(!pass('q17', `ANSWER: ${a}`), a);
+  assert.ok(pass('q28', 'ANSWER: Not necessarily; this is conflicting, so it needs other confirmation before it reads as sellers in control.'));
+  for (const a of ['Yes, sellers in control.', 'Mixed, but sellers in control.', 'Wait: sellers in control']) assert.ok(!pass('q28', `ANSWER: ${a}`), a);
+  assert.ok(pass('q49', 'ANSWER: No. The 3m close alone isn\'t the decision; the check is whether `compose_check` passes on the reads.'));
+  for (const a of ['No, so I\'d pass.', 'No. compose_check passes, but I pass.', 'No, `compose_check` ok; then pass.']) assert.ok(!pass('q49', `ANSWER: ${a}`), a);
+});
+
+test('quiz accuracy C5: each (b) stem states the fact its anchored rule needs (a prop attempt, no Pullback line, the broken level), or asks one thing', () => {
+  assert.match(q('q2').text, /^In a prop attempt, the 4h and 1h both range\. What sets the side\?$/);
+  assert.match(q('q10').text, /No `Pullback` line prints\. When do you enter\?$/);
+  assert.match(q('q16').text, /^In a prop attempt, a composed trade is open\. Is the named 1h swing high your exit\?$/);
+  assert.match(q('q20').text, /^In a prop attempt, the setup fits only 2 contracts at the stop\. What do you do\?$/);
+  assert.match(q('q38').text, /Is it a setup you may take in the attempt\?$/);
+  assert.match(q('q87').text, /\n- m15\.lastBreak: last BOS up at 21500\.00 \(barsAgo 6\)\.\n/);
+  assert.match(q('q87').text, /rejected prior RTH high 21500\.00 \(closed back above/);
+  assert.match(q('q143').text, /\nPer the code floor line, what does the working stop rest on now\?$/);
+});
+
+// Quiz accuracy C6 (owner direction 2026-11-18: remove the outdated). Review 1, ruling 4: q35 and q141-q143 anchor
+// current text (candle-reading's lookup; the Position line's "cite its numbers, never recompute"), so they are not
+// outdated: nothing is removed. Only q128's rule was outdated (#340): reworded below.
+test('quiz accuracy C6: nothing removed (q35, q141-q143 and q19 kept; q143 with its C5 reword); maxSlips an absolute 11', () => {
+  for (const id of ['q19', 'q35', 'q141', 'q142', 'q143']) assert.ok(q(id), `${id} kept`);
+  assert.strictEqual(QUIZ.questions.length, 113);
+  assert.deepStrictEqual(QUIZ.passBar.partA, { allCorrect: 113, bothWays: 0 });
+  assert.strictEqual(QUIZ.gate.maxSlips, 11, 'maxSlips stays an absolute 11');
+});
+
+test('quiz accuracy C6: q128 asks its read as taught today (#340: a CHoCH pair alone is not chop; a range is not chop)', () => {
+  const x = q('q128');
+  assert.strictEqual(x.answer, "trend-up: the class printed; a CHoCH pair alone is not chop; long setups the side's way");
+  assert.deepStrictEqual(x.choices, ['chop: a CHoCH then a CHoCH back; sit out', 'unclear: the 3m broke both ways, so neither side has a setup here until the 15m picks one', 'short: the 3m CHoCH down', x.answer]);
+  assert.strictEqual(x.anchor, 'a range day too; a range is not chop');
+  assert.doesNotMatch(JSON.stringify(x), /CHoCH pair is the 15m BOS|is chop unless/);
+  const g = a => Q.gradeAnswer(QUIZ, x, a).pass;
+  for (const [a, want] of [['why\nANSWER: D', true], ['ANSWER: A', false], ['ANSWER: B', false], ['ANSWER: C', false], ['ANSWER: chop', false], ['ANSWER: D) chop: a CHoCH then a CHoCH back; sit out', false]]) assert.strictEqual(g(a), want, a);
+});
+
+// Review 1, ruling 6: in the changed lettered items the keyed choice is never the longest (the other lettered items: a
+// follow-up, listed in the PR body).
+test('quiz accuracy ruling 6: the keyed choice of q128 and q143 is not the longest; q87\'s F2 is not the longest line', () => {
+  for (const id of ['q128', 'q143']) {
+    const x = q(id);
+    assert.ok(x.choices.some(c => c !== x.answer && c.length > x.answer.length), `${id}: a distractor longer than the key`);
+  }
+  assert.deepStrictEqual(['q128', 'q143'].map(id => 'ABCD'[q(id).choices.indexOf(q(id).answer)]), ['D', 'A']);
+  const f = Object.fromEntries(q('q87').text.split('\n').filter(l => /^F\d - /.test(l)).map(l => [l.slice(0, 2), l.length]));
+  assert.ok(Object.entries(f).some(([k, n]) => k !== 'F2' && n > f.F2), 'q87: a distractor line longer than F2');
+});
+
+// Census follow-up (post hoc, after the pre-registered census): q144 had two defensible keys. Reason first, half the
+// replies keyed "STOP 11912.5: protected-swing" by manage-position's 15m-BOS rule; that stop equalled the working stop,
+// so it was the same action as the hold. The fixed stem: the working stop was tightened earlier to 11935, so the 15m
+// BOS's stop (11912.5) is looser than it, and "never looser" leaves the hold the only defensible line.
+test('quiz accuracy, census follow-up: q144 has one defensible key: the protected-swing stop is looser than the working stop', () => {
+  const x = q('q144');
+  const PR = require('../../scripts/lib/trading/position-read');
+  const pos = PR.positionLine({ contractId: 'MNQ', side: 'long', size: 1, entry: 11990, risk: 77.5, averagePrice: 11990, tick: 0.25, nowR: 0.46, last: 12025.75,
+    mfeR: 0.8, best: 12051.75, bestAt: '2022-07-07T14:15:00Z', maeR: -0.07, sign: 1, give: 0.34, giveShare: 43, work: 11935, workR: -0.71, atStopGive: 1.51, stops: 1,
+    mode: 'target_then_trail', target: 12145, armed: false, swingClass: { cls: 'A' }, basis: 'held' }, { et: () => '10:15' });
+  assert.strictEqual(x.text.split('\n')[1], pos, 'the Position line is position-read.js on the fixed facts');
+  assert.strictEqual(Math.round(((11935 - 11990) / 77.5) * 100) / 100, -0.71);
+  assert.match(x.text, /protected swing 11912\.75 holds, stop beyond it 11912\.5 \(not tighter\)/);
+  assert.match(x.text, /^Prompt lines \(a managed cycle, adapted from 2022-07-07 10:39 ET: the working stop tightened earlier to 11935\):/);
+  const stopOf = c => { const m = /^STOP (\d+(?:\.\d+)?):/.exec(c); return m ? Number(m[1]) : null; };
+  const looser = x.choices.filter(c => stopOf(c) !== null && stopOf(c) < 11935);
+  assert.deepStrictEqual(looser, ['STOP 11912.5: protected-swing'], 'the protected-swing line is looser than the working stop: never looser');
+  assert.strictEqual(x.answer, 'STOP hold: hold');
+  const g = a => Q.gradeAnswer(QUIZ, x, a).pass;
+  for (const [a, want] of [['The 15m BOS stop is looser than 11935.\nANSWER: A', true], ['ANSWER: STOP hold: hold', true], ['ANSWER: C', false], ['ANSWER: C) STOP 11912.5: protected-swing', false],
+    ['ANSWER: A) STOP 11912.5: protected-swing', false], ['ANSWER: B', false], ['ANSWER: D', false], ['ANSWER: A\nwait\nANSWER: C', false], ['ANSWER: A or C', false]]) assert.strictEqual(g(a), want, a);
 });
