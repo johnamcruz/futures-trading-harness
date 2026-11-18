@@ -2632,7 +2632,7 @@ pass bar are `config/context-quiz.json`: every question correct on all K runs
 (K 5), none answered both ways, Part B 5 of 5. An ANSWER line is the label
 (`ANSWER` or `FINAL ANSWER`) with its colon. A free-text question, asked
 answer first, passes only when every labelled answer line of the reply
-passes (a colon, a dash or an em dash after the label); a closed-choice
+passes (a colon, or a space and a dash or an em dash, after the label); a closed-choice
 question is graded on its last ANSWER line (a reply that corrects itself is
 graded on its correction). A reply whose answer lines disagree is counted
 per question (`split`); the count never changes the grade. A closed-choice question asks the reason first and the answer

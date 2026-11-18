@@ -946,6 +946,10 @@ test('quiz accuracy review 2: "ANSWER -" and "ANSWER —" lines count for free t
   assert.deepStrictEqual([G('ANSWER - A\nANSWER: D').pass, G('ANSWER - A\nANSWER: D').split], [true, true], 'a dash line is never the graded line of a choice item, but it counts toward split');
   assert.deepStrictEqual([G('ANSWER - D').pass, G('ANSWER - D').split], [false, false], 'a choice item without a colon line: the first line, as before');
   assert.strictEqual(G('ANSWER — D\nANSWER: D').split, false);
+  // Review 3, R3-1: a dash label needs whitespace before the dash, so prose that starts "Answer-wise" is no label line.
+  assert.deepStrictEqual(Q.labelLines('Answer-wise, the long is ok.\nANSWER-x\n**ANSWER**— no space\nANSWER - No.\n**ANSWER** — No.\nANSWER: No.'), ['No.', 'No.', 'No.']);
+  assert.strictEqual(pass('q1', 'Answer-wise, the long is ok here.\nANSWER: No: neither side; the 4h and 1h disagree.'), true, 'the prose line is not graded');
+  assert.strictEqual(G('Answer-wise, A looked close.\nANSWER: D').split, false);
 });
 
 test('quiz accuracy ruling 7: a reply whose ANSWER lines disagree is counted (split), per item in the summary; never a grade change', () => {

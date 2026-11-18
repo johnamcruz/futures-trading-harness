@@ -371,9 +371,10 @@ function questionText(quiz, q) {
 // ("Answering ...", "**Answer (short side):** ...") is none (review 1: a later such line must never be graded).
 // "FINAL ANSWER:" is one too (review 2, N2).
 const ANSWER_LINE = /^\s*\**\s*(?:FINAL\s+)?ANSWER\b\s*\**\s*:\**\s*(.*)$/gmi;
-// Any labelled answer line: the label and a colon, a dash or an em or en dash (markdown around them). It never picks a
+// Any labelled answer line: the label and a colon, or whitespace then a dash, an en or an em dash ("Answer-wise" is
+// prose, review 3), markdown around them. It never picks a
 // choice item's graded line; a free-text item's every-line rule and the split count read it (review 2, N1).
-const LABEL_LINE = /^\s*\**\s*(?:FINAL\s+)?ANSWER\b\s*\**\s*[:\-–—]\**\s*(.*)$/gmi;
+const LABEL_LINE = /^\s*\**\s*(?:FINAL\s+)?ANSWER\b\s*\**\s*(?::|\s+[-–—])\**\s*(.*)$/gmi;
 /** Every ANSWER line's text, in order. */
 const answerLines = answer => [...String(answer || '').matchAll(ANSWER_LINE)].map(m => m[1].trim());
 /** Every labelled answer line's text (a colon or a dash), in order. */
