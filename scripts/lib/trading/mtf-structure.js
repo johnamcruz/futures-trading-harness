@@ -593,18 +593,18 @@ function bodyOf(lv, cut, L, primary, sideText) {
   const against = lv.setupAgainst ? `${S} last break: ${lv.setupAgainst.kind} ${lv.setupAgainst.direction}, against the ${P}; no CHoCH inside this structure` : null;
   if (lv.stage === 'NONE' || !i) {
     const parts = [...lastText(), ...(against ? [against] : [])];
-    return `stage NONE. ${head}. No ${S} pullback open${parts.length ? ` (${parts.join('; ')})` : ''}.${E('none')}`;
+    return `stage NONE. ${head}. ${S} pullback against the ${P}: NONE${parts.length ? ` (${parts.join('; ')})` : ''}.${E('none')}`;
   }
-  if (lv.stage === 'COMPLETED') return `stage COMPLETED. ${head}. A ${S} close ${L(i.closed.close)} ${aboveBelow(w)} the ${P} impulse ${highLow(w)} ${L(i.impulseExtreme)}: the ${P} ${w} trend continued; this pullback is finished.${E('none')}`;
+  if (lv.stage === 'COMPLETED') return `stage COMPLETED. ${head}. ${S} pullback against the ${P}: NONE now (the last one, ${UPW(opp(w))}, is finished: a ${S} close ${L(i.closed.close)} ${aboveBelow(w)} the ${P} impulse ${highLow(w)} ${L(i.impulseExtreme)}; the ${P} ${w} trend continued).${E('none')}`;
   if (lv.stage === 'POTENTIAL') {
     const no = against ? `no ${S} CHoCH ${opp(w)} yet (${against})` : `no ${S} break ${opp(w)} yet`;
-    return `stage POTENTIAL. ${head}. ${T} CHoCH ${opp(w)} ${i.potential.et} against it; ${no}; price has not turned back ${w}.${primary ? ' Monitor only.' : ''}${E('none')}`;
+    return `stage POTENTIAL. ${head}. ${S} pullback against the ${P}: NONE yet (only a ${T} CHoCH ${opp(w)} ${i.potential.et} against the ${P}; ${no}).${primary ? ' Monitor only.' : ''}${E('none')}`;
   }
   const depth = primary && i.depth !== null && !cutOut(cut, 'depth') ? `; depth ${i.depthClass} (${i.depth})` : '';
-  const pb = `${S} pullback ${UPW(opp(w))}: CHoCH ${opp(w)} ${i.developing.et}`;
-  if (lv.stage === 'DEVELOPING') return `stage DEVELOPING. ${head}. ${pb}, no ${S} BOS ${opp(w)} yet (not established); pullback ${lowHigh(w)} ${L(i.extreme)}${depth}; price has not turned back ${w}.${primary ? ' Track only.' : ''}${E('none')}`;
+  const pb = `${S} pullback against the ${P}: ${UPW(opp(w))} (${S} CHoCH ${opp(w)} ${i.developing.et}`;
+  if (lv.stage === 'DEVELOPING') return `stage DEVELOPING. ${head}. ${pb}, no ${S} BOS ${opp(w)} yet: not established); pullback ${lowHigh(w)} ${L(i.extreme)}${depth}; price has not turned back ${w}.${primary ? ' Track only.' : ''}${E('none')}`;
   const prot = primary && Number.isFinite(i.protected) && !cutOut(cut, 'protected') ? `; its protected ${highLow(w)} ${L(i.protected)}` : '';
-  const est = `${pb}, BOS ${opp(w)} ${i.established.et}; pullback ${lowHigh(w)} ${L(i.extreme)}${depth}${prot}`;
+  const est = `${pb}, BOS ${opp(w)} ${i.established.et}); pullback ${lowHigh(w)} ${L(i.extreme)}${depth}${prot}`;
   const minor = primary && i.minor && !cutOut(cut, 'early') ? ` Early weakening: a ${S} close ${aboveBelow(w)} the minor ${highLow(w)} ${L(i.minor.level)}.` : '';
   const e = lv.entry;
   const why = () => {
@@ -616,7 +616,7 @@ function bodyOf(lv, cut, L, primary, sideText) {
     return null;
   };
   const age = s => (s.barsAgo === 0 ? 'new this bar' : `since ${s.et} (${s.barsAgo} ${s.barsAgo === 1 ? 'bar' : 'bars'})`);
-  const ready = extra => why() || `${e.model} ready ${e.side.toUpperCase()} ${age(e.since)}, structural stop ${L(e.stop)}${extra}`;
+  const ready = extra => why() || `${e.model} ready ${e.side.toUpperCase()} ${age(e.since)}, structural stop ${L(e.stop)} (a structure level, not an order stop)${extra}`;
   if (lv.stage === 'ESTABLISHED') {
     const r = i.resets.length ? i.resets[i.resets.length - 1] : null;
     const m3 = !T ? '' : r ? ` ${T}: the turn ${w} failed (a ${T} close ${belowAbove(w)} the pullback ${lowHigh(w)} ${L(r.extreme)} at ${r.et}: reset); price has not turned back ${w}.` : ` ${T}: price has not turned back ${w} (no ${T} CHoCH or CISD ${w} yet).`;
@@ -645,7 +645,7 @@ function bodyOf(lv, cut, L, primary, sideText) {
         entry = E(sideNo || notYet);
       }
     }
-    return `stage CONFIRMED REVERSAL. ${head}. The ${S} pullback ${UPW(opp(w))} is over on the ${S}: a ${S} close ${L(c.close)} ${aboveBelow(w)} its protected ${highLow(w)} ${L(c.level)} at ${c.et}; price back ${UPW(w)} with the ${P}${primary ? `; the ${P} impulse ${highLow(w)} ${L(i.impulseExtreme)} not yet broken` : ''}.${entry}`;
+    return `stage CONFIRMED REVERSAL. ${head}. ${S} pullback against the ${P}: ${UPW(opp(w))}, now over on the ${S}: a ${S} close ${L(c.close)} ${aboveBelow(w)} its protected ${highLow(w)} ${L(c.level)} at ${c.et}; price back ${UPW(w)} with the ${P}${primary ? `; the ${P} impulse ${highLow(w)} ${L(i.impulseExtreme)} not yet broken` : ''}.${entry}`;
   }
   return `stage ${lv.stage}. ${head}.${E('none')}`;
 }
@@ -657,25 +657,33 @@ function belowShort(lv) {
   const way = lv.stage === 'INVALIDATED' ? 'none' : lv.parent ? UPW(lv.parent.way) : 'none';
   const pb = ['DEVELOPING', 'ESTABLISHED', 'WEAKENING', 'REVERSING'].includes(lv.stage) && lv.parent ? UPW(opp(lv.parent.way)) : 'none';
   const last = lv.stage === 'NONE' && lv.last && (lv.last.why === 'completed' || lv.last.why === 'invalidated') ? ` (last: ${LAST_WORDS[lv.last.why]()}, ${lv.last.et})` : '';
-  return `stage ${lv.stage}. ${P} structure ${way}; ${S} pullback ${pb}${last}.`;
+  return `stage ${lv.stage}. ${P} structure ${way}; ${S} pullback against the ${P}: ${pb === 'none' ? 'NONE' : pb}${last}.`;
 }
 
-/** The `Above:` clause from the level above (no stage word). */
+/**
+ * The `Above:` clause (no stage word): the level above's parent structure, and the PRIMARY's own parent structure against
+ * it. One definition of the 1h on the line (SPEC v3): the 1h is pulling back against the 4h exactly when the primary's
+ * 1h structure (its break record, the clean CHoCH rule) runs against the 4h structure. A 1h CHoCH against the 1h
+ * structure is the primary head's warning, never a 1h pullback here; the level above's own instance stays in the record.
+ */
+function aboveRelation(lv, primary) {
+  if (!lv || lv.partial || !lv.parent) return null;
+  const pw = primary && !primary.partial && primary.stage !== 'INVALIDATED' && primary.parent ? primary.parent.way : null;
+  return { way: lv.parent.way, setupWay: pw, pullback: pw && pw !== lv.parent.way ? pw : null };
+}
 function aboveClause(lv, primary, cut, L) {
   if (!lv) return '';
   const { parent: P, setup: S } = lv.frames;
   if (lv.partial) return ` Above: ${P} structure: not enough history.`;
-  if (!lv.parent) return ` Above: ${P} structure: none (its protected swing broke).`;
+  if (!lv.parent) return ` Above: ${P} structure: none (its protected swing broke); ${S} pullback against the ${P}: NONE.`;
   const w = lv.parent.way;
-  const st = lv.stage;
-  const pulling = ['DEVELOPING', 'ESTABLISHED', 'WEAKENING', 'REVERSING'].includes(st) && lv.instance;
-  if (cutOut(cut, 'aboveShort')) return ` Above: ${P} structure ${UPW(w)}; ${S} ${pulling ? `pulling back ${UPW(opp(w))}` : st === 'CONFIRMED REVERSAL' ? `pullback ${UPW(opp(w))} over` : 'not pulling back'}.`;
+  const r = aboveRelation(lv, primary);
+  const pbw = r.pullback ? UPW(r.pullback) : 'NONE';
+  if (cutOut(cut, 'aboveShort')) return ` Above: ${P} structure ${UPW(w)}; ${S} pullback against the ${P}: ${pbw}.`;
   const differ = lv.parent.differs ? ` (its break record; the Bias line reads the ${P} ${lv.parent.biasRead})` : '';
   const nb = primary && primary.stage === 'INVALIDATED' ? ', not broken' : '';
-  const i = lv.instance;
-  const pbk = pulling ? `the ${S} is pulling back ${UPW(opp(w))} against it (${S} CHoCH ${opp(w)} ${i.developing.et}${i.established ? `, BOS ${opp(w)} ${i.established.et}` : ''})`
-    : st === 'CONFIRMED REVERSAL' ? `the ${S} pullback ${UPW(opp(w))} against it is over` : `the ${S} is not pulling back against it`;
-  return ` Above: ${P} structure ${UPW(w)}${differ}${nb}, ${P} protected ${lowHigh(w)} ${L(lv.parent.protected.level)} holds on ${P} closes; ${pbk}.`;
+  const whyText = !r.setupWay ? `no ${S} structure${primary && primary.stage === 'INVALIDATED' ? ` until the next ${S} break` : ''}` : r.pullback ? `the ${S} structure is ${UPW(r.setupWay)}, against the ${P} ${UPW(w)}` : `the ${S} structure is ${UPW(r.setupWay)}, with the ${P}`;
+  return ` Above: ${P} structure ${UPW(w)}${differ}${nb}, ${P} protected ${lowHigh(w)} ${L(lv.parent.protected.level)} holds on ${P} closes; ${S} pullback against the ${P}: ${pbw} (${whyText}).`;
 }
 
 /**
@@ -707,4 +715,4 @@ function mtfLines(rec, { lineBytes = Infinity, primaryBytes = Infinity, level = 
   return [];
 }
 
-module.exports = { WEAKENING_EVENTS, STAGES, CUTS, SIDE_MODES, GATED, configProblem, defaultPrims, levelsOf, candlesOf, protectedAt, parentSeries, levelSeries, mtfStructure, recordsOf, mtfLines };
+module.exports = { aboveRelation, WEAKENING_EVENTS, STAGES, CUTS, SIDE_MODES, GATED, configProblem, defaultPrims, levelsOf, candlesOf, protectedAt, parentSeries, levelSeries, mtfStructure, recordsOf, mtfLines };

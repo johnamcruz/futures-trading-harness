@@ -53,18 +53,18 @@ test('every primary stage\'s line, the parent up, exactly (the grammar of pilot 
   const at = A.at;
   const head = '1h structure UP, 1h protected low 100 (the origin of the last 1h break) holds on 1h closes';
   const want = {
-    [at(17, 0) - 1]: `stage NONE. ${head}. No 15m pullback open. Entry: none.`,
-    [at(17, 0)]: `stage POTENTIAL. ${head}. 3m CHoCH down 02:18 against it; no 15m break down yet; price has not turned back up. Monitor only. Entry: none.`,
-    [A.end(17)]: `stage DEVELOPING. ${head}. 15m pullback DOWN: CHoCH down 02:30, no 15m BOS down yet (not established); pullback low 147.5; depth shallow (0.05); price has not turned back up. Track only. Entry: none.`,
-    [A.end(20)]: `stage ESTABLISHED. ${head}. 15m pullback DOWN: CHoCH down 02:30, BOS down 03:15; pullback low 140; depth shallow (0.2); its protected high 145. 3m: price has not turned back up (no 3m CHoCH or CISD up yet). Entry: none yet.`,
-    [at(25, 1)]: `stage WEAKENING. ${head}. 15m pullback DOWN: CHoCH down 02:30, BOS down 03:15; pullback low 130; depth moderate (0.4); its protected high 145. 3m turning back UP with the 1h: CHoCH up 04:21. Entry: aggressive ready LONG new this bar, structural stop 129.75; balanced NOT ready (needs a 3m BOS up).`,
-    [at(25, 3)]: `stage WEAKENING. ${head}. 15m pullback DOWN: CHoCH down 02:30, BOS down 03:15; pullback low 130; depth moderate (0.4); its protected high 145. 3m turning back UP with the 1h: CHoCH up 04:21. Entry: aggressive ready LONG since 04:21 (2 bars), structural stop 129.75; balanced NOT ready (needs a 3m BOS up).`,
-    [at(27, 1)]: `stage REVERSING. ${head}. 15m pullback DOWN: CHoCH down 02:30, BOS down 03:15; pullback low 130; depth moderate (0.4); its protected high 145. 3m turned back UP with the 1h: CHoCH up 04:21, then BOS up 04:51. Entry: balanced ready LONG new this bar, structural stop 132.75 (aggressive structural stop 129.75).`,
-    [A.end(35)]: `stage CONFIRMED REVERSAL. ${head}. The 15m pullback DOWN is over on the 15m: a 15m close 146.5 above its protected high 145 at 07:00; price back UP with the 1h; the 1h impulse high 150 not yet broken. Entry: none yet: conservative NOT ready (needs a 3m CHoCH down, then a 3m BOS up).`,
-    [at(36, 2)]: `stage CONFIRMED REVERSAL. ${head}. The 15m pullback DOWN is over on the 15m: a 15m close 146.5 above its protected high 145 at 07:00; price back UP with the 1h; the 1h impulse high 150 not yet broken. Entry: none yet: conservative NOT ready (3m CHoCH down 07:06 seen; needs a 3m BOS up).`,
-    [at(37, 2)]: `stage CONFIRMED REVERSAL. ${head}. The 15m pullback DOWN is over on the 15m: a 15m close 146.5 above its protected high 145 at 07:00; price back UP with the 1h; the 1h impulse high 150 not yet broken. Entry: conservative ready LONG since 07:21 (1 bar), structural stop 147.75 (the 15m CHoCH origin 130); 3m BOS up 07:21 after a 3m CHoCH down.`,
-    [A.end(38)]: `stage COMPLETED. ${head}. A 15m close 151 above the 1h impulse high 150: the 1h up trend continued; this pullback is finished. Entry: none.`,
-    [A.end(38) + 1]: `stage NONE. ${head}. No 15m pullback open (last: COMPLETED, 07:45). Entry: none.`,
+    [at(17, 0) - 1]: `stage NONE. ${head}. 15m pullback against the 1h: NONE. Entry: none.`,
+    [at(17, 0)]: `stage POTENTIAL. ${head}. 15m pullback against the 1h: NONE yet (only a 3m CHoCH down 02:18 against the 1h; no 15m break down yet). Monitor only. Entry: none.`,
+    [A.end(17)]: `stage DEVELOPING. ${head}. 15m pullback against the 1h: DOWN (15m CHoCH down 02:30, no 15m BOS down yet: not established); pullback low 147.5; depth shallow (0.05); price has not turned back up. Track only. Entry: none.`,
+    [A.end(20)]: `stage ESTABLISHED. ${head}. 15m pullback against the 1h: DOWN (15m CHoCH down 02:30, BOS down 03:15); pullback low 140; depth shallow (0.2); its protected high 145. 3m: price has not turned back up (no 3m CHoCH or CISD up yet). Entry: none yet.`,
+    [at(25, 1)]: `stage WEAKENING. ${head}. 15m pullback against the 1h: DOWN (15m CHoCH down 02:30, BOS down 03:15); pullback low 130; depth moderate (0.4); its protected high 145. 3m turning back UP with the 1h: CHoCH up 04:21. Entry: aggressive ready LONG new this bar, structural stop 129.75 (a structure level, not an order stop); balanced NOT ready (needs a 3m BOS up).`,
+    [at(25, 3)]: `stage WEAKENING. ${head}. 15m pullback against the 1h: DOWN (15m CHoCH down 02:30, BOS down 03:15); pullback low 130; depth moderate (0.4); its protected high 145. 3m turning back UP with the 1h: CHoCH up 04:21. Entry: aggressive ready LONG since 04:21 (2 bars), structural stop 129.75 (a structure level, not an order stop); balanced NOT ready (needs a 3m BOS up).`,
+    [at(27, 1)]: `stage REVERSING. ${head}. 15m pullback against the 1h: DOWN (15m CHoCH down 02:30, BOS down 03:15); pullback low 130; depth moderate (0.4); its protected high 145. 3m turned back UP with the 1h: CHoCH up 04:21, then BOS up 04:51. Entry: balanced ready LONG new this bar, structural stop 132.75 (a structure level, not an order stop) (aggressive structural stop 129.75).`,
+    [A.end(35)]: `stage CONFIRMED REVERSAL. ${head}. 15m pullback against the 1h: DOWN, now over on the 15m: a 15m close 146.5 above its protected high 145 at 07:00; price back UP with the 1h; the 1h impulse high 150 not yet broken. Entry: none yet: conservative NOT ready (needs a 3m CHoCH down, then a 3m BOS up).`,
+    [at(36, 2)]: `stage CONFIRMED REVERSAL. ${head}. 15m pullback against the 1h: DOWN, now over on the 15m: a 15m close 146.5 above its protected high 145 at 07:00; price back UP with the 1h; the 1h impulse high 150 not yet broken. Entry: none yet: conservative NOT ready (3m CHoCH down 07:06 seen; needs a 3m BOS up).`,
+    [at(37, 2)]: `stage CONFIRMED REVERSAL. ${head}. 15m pullback against the 1h: DOWN, now over on the 15m: a 15m close 146.5 above its protected high 145 at 07:00; price back UP with the 1h; the 1h impulse high 150 not yet broken. Entry: conservative ready LONG since 07:21 (1 bar), structural stop 147.75 (a structure level, not an order stop) (the 15m CHoCH origin 130); 3m BOS up 07:21 after a 3m CHoCH down.`,
+    [A.end(38)]: `stage COMPLETED. ${head}. 15m pullback against the 1h: NONE now (the last one, DOWN, is finished: a 15m close 151 above the 1h impulse high 150; the 1h up trend continued). Entry: none.`,
+    [A.end(38) + 1]: `stage NONE. ${head}. 15m pullback against the 1h: NONE (last: COMPLETED, 07:45). Entry: none.`,
   };
   for (const [j, s] of Object.entries(want)) assert.equal(one(RA[j]), `- MTF structure 1h > 15m (primary): ${s}`, `bar ${j}`);
 });
@@ -100,9 +100,9 @@ test('INVALIDATED (primary and below), the reset line, early weakening and the I
   const minor = W.world({ keys: W.KEYS, events: [...W.EVENTS, { f: 'setup', at: 21, kind: 'CHoCH', dir: 1, swing: 20, level: 141.5 }] });
   assert.match(one(run(minor)[minor.end(21)]), /\. Early weakening: a 15m close above the minor high 141\.5\. Entry: none yet\./);
   const orphan = W.world({ keys: W.KEYS, events: [W.EVENTS[0], W.EVENTS[1], { f: 'setup', at: 17, kind: 'BOS', dir: -1, swing: 15 }] });
-  assert.match(one(run(orphan)[orphan.end(17)]), /stage POTENTIAL\. .* 3m CHoCH down 02:18 against it; no 15m CHoCH down yet \(15m last break: BOS down, against the 1h; no CHoCH inside this structure\); price has not turned back up\./);
+  assert.match(one(run(orphan)[orphan.end(17)]), /stage POTENTIAL\. .* 15m pullback against the 1h: NONE yet \(only a 3m CHoCH down 02:18 against the 1h; no 15m CHoCH down yet \(15m last break: BOS down, against the 1h; no CHoCH inside this structure\)\)\./);
   const orphan2 = W.world({ keys: W.KEYS, events: [W.EVENTS[0], { f: 'setup', at: 17, kind: 'BOS', dir: -1, swing: 15 }] });
-  assert.match(one(run(orphan2)[orphan2.end(17)]), /stage NONE\. .* No 15m pullback open \(15m last break: BOS down, against the 1h; no CHoCH inside this structure\)\. Entry: none\./);
+  assert.match(one(run(orphan2)[orphan2.end(17)]), /stage NONE\. .* 15m pullback against the 1h: NONE \(15m last break: BOS down, against the 1h; no CHoCH inside this structure\)\. Entry: none\./);
   // The below line's INVALIDATED ends with its own none-until clause, no Setup cancelled, no Entry clause.
   const below = RA.map(x => M.mtfLines(x)[1]).find(l => /stage INVALIDATED/.test(l));
   assert.match(below, /^- MTF structure below: 15m > 3m \(context\): stage INVALIDATED\. A 15m close [\d.]+ above the 15m protected high [\d.]+: the 15m structure, DOWN until now, is broken\. 15m structure: none until the next 15m break\.$/);
@@ -124,31 +124,58 @@ test('every Entry: none: reason, and the entry\'s ages (new this bar, n bars, 1 
   const bars = real('2022-03-07');
   const j0 = bars.findIndex(b => b.t === '2022-03-07T04:57:00.000Z');
   const rec = M.mtfStructure({ ...OPTS, bars: bars.slice(0, j0 + 1), minutes: 3, levels: LEVELS, side: 'short' });
-  assert.match(one(rec), /stage ESTABLISHED\. .*15m pullback UP: CHoCH up 03-06 22:30, BOS up 00:00;/);
+  assert.match(one(rec), /stage ESTABLISHED\. .*15m pullback against the 1h: UP \(15m CHoCH up 03-06 22:30, BOS up 00:00\);/);
 });
 
-test('every Above: form: UP and DOWN, pulling back (CHoCH; CHoCH and BOS), over, not pulling back, not broken (the primary INVALIDATED), none, not enough history, the Bias disagreement', () => {
+test('every Above: form (SPEC v3: the primary\'s own 1h structure against the 4h): with, against, not broken (the primary INVALIDATED), no 1h structure, none, not enough history, the short form, the Bias disagreement; the 4h level\'s own instance never changes it', () => {
   const base = clone(RA[A.at(25, 1)]);
-  const above = (patch, primaryStage) => {
+  const lv4 = patch => ({ name: '4h>1h', role: 'above', frames: { parent: '4h', setup: '1h', timing: '15m' }, partial: false, parent: { way: 'down', protected: { side: 'high', level: 14060.25 }, differs: false, biasRead: null }, stage: 'NONE', instance: null, ...patch });
+  const above = (patch, primary) => {
     const r = clone(base);
-    if (primaryStage) r.levels[0].stage = primaryStage;
-    r.levels.unshift({ name: '4h>1h', role: 'above', frames: { parent: '4h', setup: '1h', timing: '15m' }, partial: false, parent: { way: 'down', protected: { side: 'high', level: 14060.25 }, differs: false, biasRead: null }, stage: 'NONE', instance: null, ...patch });
+    if (primary) r.levels[0] = { ...r.levels[0], ...primary };
+    r.levels.unshift(lv4(patch));
     return one(r).replace(/^.* Above: /, 'Above: ');
   };
-  const dev = { developing: { et: '08:00' }, established: null };
-  assert.equal(above({}), 'Above: 4h structure DOWN, 4h protected high 14060.25 holds on 4h closes; the 1h is not pulling back against it.');
-  assert.equal(above({ stage: 'DEVELOPING', instance: dev }), 'Above: 4h structure DOWN, 4h protected high 14060.25 holds on 4h closes; the 1h is pulling back UP against it (1h CHoCH up 08:00).');
-  assert.equal(above({ stage: 'REVERSING', instance: { developing: { et: '08:00' }, established: { et: '10:00' } } }), 'Above: 4h structure DOWN, 4h protected high 14060.25 holds on 4h closes; the 1h is pulling back UP against it (1h CHoCH up 08:00, BOS up 10:00).');
-  assert.equal(above({ stage: 'CONFIRMED REVERSAL', instance: dev }), 'Above: 4h structure DOWN, 4h protected high 14060.25 holds on 4h closes; the 1h pullback UP against it is over.');
-  assert.equal(above({ stage: 'POTENTIAL', instance: dev }), 'Above: 4h structure DOWN, 4h protected high 14060.25 holds on 4h closes; the 1h is not pulling back against it.');
-  assert.equal(above({ parent: { way: 'up', protected: { side: 'low', level: 11836.5 }, differs: false } }), 'Above: 4h structure UP, 4h protected low 11836.5 holds on 4h closes; the 1h is not pulling back against it.');
-  const inv = clone(base);
-  inv.levels[0] = { ...inv.levels[0], stage: 'INVALIDATED', invalidated: { close: 99, level: 100, way: 'up' } };
-  inv.levels.unshift({ name: '4h>1h', role: 'above', frames: { parent: '4h', setup: '1h', timing: '15m' }, partial: false, parent: { way: 'down', protected: { side: 'high', level: 13781 }, differs: false }, stage: 'NONE', instance: null });
-  assert.equal(one(inv).replace(/^.* Above: /, 'Above: '), 'Above: 4h structure DOWN, not broken, 4h protected high 13781 holds on 4h closes; the 1h is not pulling back against it.');
-  assert.equal(above({ parent: null }), 'Above: 4h structure: none (its protected swing broke).');
+  const up = { parent: { way: 'up', protected: { side: 'low', level: 11836.5 }, differs: false } };
+  // The primary's 1h structure is UP (the world's), so a 4h DOWN reads a 1h pullback UP, a 4h UP reads NONE.
+  assert.equal(base.levels[0].parent.way, 'up');
+  assert.equal(above(up), 'Above: 4h structure UP, 4h protected low 11836.5 holds on 4h closes; 1h pullback against the 4h: NONE (the 1h structure is UP, with the 4h).');
+  assert.equal(above({}), 'Above: 4h structure DOWN, 4h protected high 14060.25 holds on 4h closes; 1h pullback against the 4h: UP (the 1h structure is UP, against the 4h DOWN).');
+  // The 4h level's own stage and instance stay in the record and never print: the 2021-08-04 case (a 1h CHoCH against the
+  // 1h structure is the primary head's warning, not a 1h pullback).
+  const dev = { developing: { et: '08:00' }, established: { et: '10:00' } };
+  for (const stage of ['POTENTIAL', 'DEVELOPING', 'ESTABLISHED', 'WEAKENING', 'REVERSING', 'CONFIRMED REVERSAL', 'COMPLETED']) {
+    assert.equal(above({ ...up, stage, instance: dev }), above(up), stage);
+    assert.equal(above({ stage, instance: dev }), above({}), stage);
+  }
+  const inv = { stage: 'INVALIDATED', invalidated: { close: 99, level: 100, way: 'up' } };
+  assert.equal(above({ parent: { way: 'down', protected: { side: 'high', level: 13781 }, differs: false } }, inv), 'Above: 4h structure DOWN, not broken, 4h protected high 13781 holds on 4h closes; 1h pullback against the 4h: NONE (no 1h structure until the next 1h break).');
+  assert.equal(above(up, { parent: null, stage: 'NONE' }), 'Above: 4h structure UP, 4h protected low 11836.5 holds on 4h closes; 1h pullback against the 4h: NONE (no 1h structure).');
+  assert.equal(above(up, { partial: true }), 'Above: 4h structure UP, 4h protected low 11836.5 holds on 4h closes; 1h pullback against the 4h: NONE (no 1h structure).');
+  assert.equal(above({ parent: null }), 'Above: 4h structure: none (its protected swing broke); 1h pullback against the 4h: NONE.');
   assert.equal(above({ partial: true }), 'Above: 4h structure: not enough history.');
-  assert.equal(above({ parent: { way: 'down', protected: { side: 'high', level: 14060.25 }, differs: true, biasRead: 'range' } }), 'Above: 4h structure DOWN (its break record; the Bias line reads the 4h range), 4h protected high 14060.25 holds on 4h closes; the 1h is not pulling back against it.');
+  assert.equal(above({ parent: { way: 'down', protected: { side: 'high', level: 14060.25 }, differs: true, biasRead: 'range' } }), 'Above: 4h structure DOWN (its break record; the Bias line reads the 4h range), 4h protected high 14060.25 holds on 4h closes; 1h pullback against the 4h: UP (the 1h structure is UP, against the 4h DOWN).');
+  // The short form (cut aboveShort).
+  const short = (patch) => { const r = clone(base); r.levels.unshift(lv4(patch)); return M.mtfLines(r, { cut: M.CUTS.indexOf('aboveShort') + 1 })[0].replace(/^.* Above: /, 'Above: '); };
+  assert.equal(short(up), 'Above: 4h structure UP; 1h pullback against the 4h: NONE.');
+  assert.equal(short({}), 'Above: 4h structure DOWN; 1h pullback against the 4h: UP.');
+});
+
+test('aboveRelation: with, against, no 1h structure, the primary INVALIDATED, the level above partial or without a structure', () => {
+  const lv = way => ({ partial: false, parent: { way }, stage: 'NONE' });
+  const pr = (way, o = {}) => ({ partial: false, stage: 'ESTABLISHED', parent: way ? { way } : null, ...o });
+  assert.deepEqual(M.aboveRelation(lv('up'), pr('up')), { way: 'up', setupWay: 'up', pullback: null });
+  assert.deepEqual(M.aboveRelation(lv('down'), pr('up')), { way: 'down', setupWay: 'up', pullback: 'up' });
+  assert.deepEqual(M.aboveRelation(lv('up'), pr('down')), { way: 'up', setupWay: 'down', pullback: 'down' });
+  assert.deepEqual(M.aboveRelation(lv('up'), pr(null)), { way: 'up', setupWay: null, pullback: null });
+  assert.deepEqual(M.aboveRelation(lv('up'), pr('down', { stage: 'INVALIDATED' })), { way: 'up', setupWay: null, pullback: null });
+  assert.deepEqual(M.aboveRelation(lv('up'), pr('down', { partial: true })), { way: 'up', setupWay: null, pullback: null });
+  assert.deepEqual(M.aboveRelation(lv('up'), null), { way: 'up', setupWay: null, pullback: null });
+  assert.equal(M.aboveRelation({ partial: true, parent: { way: 'up' } }, pr('down')), null);
+  assert.equal(M.aboveRelation({ partial: false, parent: null }, pr('down')), null);
+  assert.equal(M.aboveRelation(null, pr('down')), null);
+  // The level above's own stage is not read.
+  for (const stage of ['DEVELOPING', 'ESTABLISHED', 'CONFIRMED REVERSAL']) assert.deepEqual(M.aboveRelation({ ...lv('up'), stage, instance: {} }, pr('up')).pullback, null);
 });
 
 test('the 1h head: the Bias disagreement at every stage, the parent CHoCH warning, not enough history', () => {
@@ -172,7 +199,7 @@ test('the cut order, step by step: each step leaves out its part and keeps every
   p.parent.differs = true; p.parent.biasRead = 'range';
   r.levels[1] = { ...r.levels[1], stage: 'NONE', instance: null, last: { why: 'ended before established', et: '04:00' }, parent: { way: 'up', protected: { side: 'low', level: 125 }, differs: false } };
   r.levels.unshift({ name: '4h>1h', role: 'above', frames: { parent: '4h', setup: '1h', timing: '15m' }, partial: false, parent: { way: 'up', protected: { side: 'low', level: 90 }, differs: false }, stage: 'NONE', instance: null });
-  const MARK = { belowShort: /No 3m pullback open/, aboveShort: /Above: 4h structure UP, 4h protected low 90 holds on 4h closes/, origin: /\(the origin of the last 1h break\)/, depth: /; depth moderate \(0\.4\)/,
+  const MARK = { belowShort: /3m pullback against the 15m: NONE \(last: ended before ESTABLISHED/, aboveShort: /Above: 4h structure UP, 4h protected low 90 holds on 4h closes/, origin: /\(the origin of the last 1h break\)/, depth: /; depth moderate \(0\.4\)/,
     last: /\(last: ended before ESTABLISHED/, early: /Early weakening/, protected: /its protected high 145/, parentChoch: /a warning, not a reversal/, notReady: /balanced NOT ready/ };
   assert.deepEqual(Object.keys(MARK), [...M.CUTS]);
   // `last` lives on the below line, which the first cut shortens: its own check uses a NONE primary.
@@ -187,7 +214,7 @@ test('the cut order, step by step: each step leaves out its part and keeps every
       if (i < cut) assert.doesNotMatch(text, MARK[name], `cut ${cut}: ${name} left out`);
       else assert.match(text, MARK[name], `cut ${cut}: ${name} kept`);
     });
-    for (const keep of [/stage WEAKENING\./, /1h structure UP \(its break record; the Bias line reads the 1h range: the side is the Bias line's\), 1h protected low 100/, /15m pullback DOWN/, /aggressive ready LONG new this bar, structural stop 129\.75/, /stage NONE\./]) assert.match(text, keep, `cut ${cut}`);
+    for (const keep of [/stage WEAKENING\./, /1h structure UP \(its break record; the Bias line reads the 1h range: the side is the Bias line's\), 1h protected low 100/, /15m pullback against the 1h: DOWN/, /aggressive ready LONG new this bar, structural stop 129\.75 \(a structure level, not an order stop\)/, /stage NONE\./]) assert.match(text, keep, `cut ${cut}`);
     assert.equal(M.mtfLines(r, { cut }).length, 2);
   }
   // The `last` step (5) on a NONE primary: other closures cut there, COMPLETED and INVALIDATED never.
@@ -225,8 +252,9 @@ test('the byte budget: the lines are cut only as far as needed; the budget is me
   }
 });
 
-test('real bars: exactly one stage word per line, always two lines, every price and time on a line is in the record, and no ready entry whose structural stop has traded', () => {
+test('real bars: exactly one stage word per line, always two lines, every price and time on a line is in the record, and no ready entry whose structural stop has traded; each level\'s pullback phrase once; the Above clause\'s way is aboveRelation\'s', () => {
   let n = 0;
+  const nAbove = { pb: 0, none: 0 };
   for (const d of DAYS) {
     for (const { r: rec, j } of realRecs(d)) {
       const ls = M.mtfLines(rec, BUDGET);
@@ -244,8 +272,26 @@ test('real bars: exactly one stage word per line, always two lines, every price 
       for (const t of text.match(/\b(?:\d\d-\d\d )?\d\d:\d\d\b/g) || []) assert.ok(ets.has(t), `${d} ${j}: time ${t} not in the record`);
       const p = rec.levels.find(x => x.role === 'primary');
       if (/ ready (LONG|SHORT)/.test(ls[0])) assert.ok(p.entry && !p.entryWithheld && !p.stopTraded, `${d} ${j}: ready printed with a withheld entry`);
+      // SPEC v3: each level with a structure prints its pullback phrase exactly once, on its own line; none without one.
+      const count = (s, re) => (s.match(re) || []).length;
+      const b = rec.levels.find(x => x.role === 'below');
+      const a = rec.levels.find(x => x.role === 'above');
+      const has = lv => !lv.partial && !!lv.parent && lv.stage !== 'INVALIDATED';
+      assert.equal(count(ls[0], /15m pullback against the 1h: (UP|DOWN|NONE)/g), has(p) ? 1 : 0, `${d} ${j}: ${ls[0]}`);
+      assert.equal(count(ls[1], /3m pullback against the 15m: (UP|DOWN|NONE)/g), has(b) ? 1 : 0, `${d} ${j}: ${ls[1]}`);
+      assert.equal(count(ls[0], /1h pullback against the 4h: (UP|DOWN|NONE)/g), a && !a.partial ? 1 : 0, `${d} ${j}: ${ls[0]}`);
+      assert.equal(count(text, /pullback against the/g), count(text, /pullback against the \w+: (UP|DOWN|NONE)/g), `${d} ${j}`);
+      // The Above clause's way is aboveRelation's.
+      if (a && !a.partial) {
+        const r = M.aboveRelation(a, p);
+        const got = ls[0].match(/1h pullback against the 4h: (UP|DOWN|NONE)/)[1];
+        assert.equal(got, r && r.pullback ? r.pullback.toUpperCase() : 'NONE', `${d} ${j}: ${ls[0]}`);
+        if (r) nAbove[r.pullback ? 'pb' : 'none'] += 1;
+      }
       n += 1;
     }
   }
   assert.ok(n > 150, `in-window bars read: ${n}`);
+  // The four fixtures' 1h runs with the 4h on every window bar; the against way is the Above test's and gate 1's.
+  assert.ok(nAbove.pb + nAbove.none > 150, `the Above clause checked: ${JSON.stringify(nAbove)}`);
 });
