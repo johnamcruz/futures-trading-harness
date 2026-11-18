@@ -1,7 +1,7 @@
 'use strict';
 
-// Gate 3 of feat/mtf-structure (SPEC v2): the 25 MTF structure items live outside the gated quiz
-// (tests/fixtures/quiz/mtf-structure-items.json): exactly ms1..ms25, each a valid closed-choice item asked against the head
+// Gate 3 of feat/mtf-structure (SPEC v2, SPEC v3: 31 items): the MTF structure items live outside the gated quiz
+// (tests/fixtures/quiz/mtf-structure-items.json): exactly ms1..ms31, each a valid closed-choice item asked against the head
 // prompt plus bos-vs-choch (lookup), each anchor in that prompt. The gated quiz stays at 113 with maxSlips unchanged.
 
 const test = require('node:test');
@@ -12,9 +12,9 @@ const Q = require('../../scripts/lib/eval/context-quiz');
 const ROOT = path.join(__dirname, '..', '..');
 const ITEMS = require('../fixtures/quiz/mtf-structure-items.json');
 
-test('gate 3: exactly 25 items ms1..ms25, each valid, asked with bos-vs-choch looked up, each anchor in its prompt', () => {
+test('gate 3: exactly 31 items ms1..ms31, each valid, asked with bos-vs-choch looked up, each anchor in its prompt', () => {
   const qs = ITEMS.questions;
-  assert.deepEqual(qs.map(q => q.id), Array.from({ length: 25 }, (_, i) => `ms${i + 1}`));
+  assert.deepEqual(qs.map(q => q.id), Array.from({ length: 31 }, (_, i) => `ms${i + 1}`));
   const gated = Q.loadQuiz().value;
   const ids = new Set();
   for (const q of qs) {
@@ -22,6 +22,12 @@ test('gate 3: exactly 25 items ms1..ms25, each valid, asked with bos-vs-choch lo
     assert.deepEqual([q.prompt, q.lookup], ['lookup', ['bos-vs-choch']], q.id);
     assert.ok(q.text.includes('- MTF structure 1h > 15m (primary): stage ') || q.text.includes('- MTF structure below: 15m > 3m'), `${q.id}: prints the lines`);
   }
+  // SPEC v3: each item's printed lines use the v3 phrase, and every answer is one of its choices with no two-part answer
+  for (const q of qs) {
+    if (/MTF structure/.test(q.text)) assert.match(q.text, /pullback against the (1h|15m|4h): (UP|DOWN|NONE)/, `${q.id}: the v3 phrase`);
+    assert.doesNotMatch(q.text, /No 15m pullback open|No 3m pullback open|the 1h is (not )?pulling back|\b(15m|3m) pullback (UP|DOWN)[:;]|ready (LONG|SHORT) [^,]*, structural stop \d+(\.\d+)?(?![\d.]| \(a structure level)/, `${q.id}: no v2 wording`);
+  }
+  for (const id of ['ms9', 'ms11', 'ms14', 'ms21', 'ms22']) assert.ok(!qs.find(q => q.id === id).answer.includes(';'), `${id}: one answer`);
   const quiz = { ...gated, questions: qs, partB: [] };
   assert.deepEqual(Q.anchorsMissing(quiz, Q.buildPrompts(ROOT, quiz)), []);
 });
