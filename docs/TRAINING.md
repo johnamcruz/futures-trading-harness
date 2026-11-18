@@ -2630,11 +2630,12 @@ briefing (Part B). The questions, their keys (required and forbidden terms on
 the ANSWER line, a forbidden term counting only when it isn't negated) and the
 pass bar are `config/context-quiz.json`: every question correct on all K runs
 (K 5), none answered both ways, Part B 5 of 5. An ANSWER line is the label
-with its colon. A free-text question, asked answer first, passes only when
-every `ANSWER:` line of the reply passes; a closed-choice question is graded
-on its last one (a reply that corrects itself is graded on its correction).
-A reply whose ANSWER lines disagree is counted per question (`split`), never
-graded. A closed-choice question asks the reason first and the answer
+(`ANSWER` or `FINAL ANSWER`) with its colon. A free-text question, asked
+answer first, passes only when every labelled answer line of the reply
+passes (a colon, a dash or an em dash after the label); a closed-choice
+question is graded on its last ANSWER line (a reply that corrects itself is
+graded on its correction). A reply whose answer lines disagree is counted
+per question (`split`); the count never changes the grade. A closed-choice question asks the reason first and the answer
 last: its phrase choices lettered A-F and answered by letter (or the letter
 with that choice's text, or the text), choices the question defines as labels
 (F1-F4) by label; answered first, the model wrote a choice its own reasoning

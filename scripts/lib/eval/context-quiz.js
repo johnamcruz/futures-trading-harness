@@ -23,7 +23,9 @@
  *   questionText(quiz, q)              the text asked: the excerpt (Part B), the question, the answer format (a
  *                                      question's own `format`, or a choice question's: reason first, then its labels
  *                                      named or its choices lettered A-F, the answer last)
- *   answerLines(answer)                every ANSWER line's text (the label and its colon), in order
+ *   answerLines(answer)                every ANSWER line's text (the label, FINAL ANSWER too, and its colon), in order
+ *   labelLines(answer)                 every labelled answer line's text (a colon or a dash): free text's every-line
+ *                                      rule and the split count
  *   answerLine(answer)                 { line, fmt }: the LAST ANSWER line (fmt false: the first line, no ANSWER label)
  *   negated(line, index, negations, window)   a match at `index` negated within its clause (a negation word in the
  *                                      `window` words before it: the quiz file's negationWindow). A line-leading verdict
@@ -367,9 +369,15 @@ function questionText(quiz, q) {
 
 // An ANSWER line: the label, then its colon (markdown around either aside). A line that only starts with the word
 // ("Answering ...", "**Answer (short side):** ...") is none (review 1: a later such line must never be graded).
-const ANSWER_LINE = /^\s*\**\s*ANSWER\b\s*\**\s*:\**\s*(.*)$/gmi;
+// "FINAL ANSWER:" is one too (review 2, N2).
+const ANSWER_LINE = /^\s*\**\s*(?:FINAL\s+)?ANSWER\b\s*\**\s*:\**\s*(.*)$/gmi;
+// Any labelled answer line: the label and a colon, a dash or an em or en dash (markdown around them). It never picks a
+// choice item's graded line; a free-text item's every-line rule and the split count read it (review 2, N1).
+const LABEL_LINE = /^\s*\**\s*(?:FINAL\s+)?ANSWER\b\s*\**\s*[:\-–—]\**\s*(.*)$/gmi;
 /** Every ANSWER line's text, in order. */
 const answerLines = answer => [...String(answer || '').matchAll(ANSWER_LINE)].map(m => m[1].trim());
+/** Every labelled answer line's text (a colon or a dash), in order. */
+const labelLines = answer => [...String(answer || '').matchAll(LABEL_LINE)].map(m => m[1].trim());
 // The last ANSWER line (quiz accuracy C2): a choice item, asked reason first, is graded on its last one (the live head's
 // rule: its last CYCLE RESULT line). No ANSWER line: the first line.
 function answerLine(answer) {
@@ -408,16 +416,20 @@ function choiceOf(q, line) {
 }
 
 function gradeAnswer(quiz, q, answer) {
-  const lines = answerLines(answer);
-  // A free-text item is asked answer first: EVERY ANSWER line must pass (quiz accuracy, review 1: a later line never
-  // rescues a wrong first one, nor a wrong later one a right first one). A choice item: its last line (answerLine).
+  const lines = labelLines(answer);
+  // A free-text item is asked answer first: EVERY labelled ANSWER line must pass (quiz accuracy, review 1: a later line
+  // never rescues a wrong first one, nor a wrong later one a right first one; review 2: a dash label counts too). A choice
+  // item: its last ANSWER line with a colon (answerLine).
   if (!q.choices && lines.length > 1) {
-    const each = lines.map(l => gradeLine(quiz, q, l, true));
+    const fmt = answerLines(answer).length > 0;
+    const each = lines.map(l => gradeLine(quiz, q, l, fmt));
     const bad = each.find(g => !g.pass);
     const g = bad || each[0];
     return { ...g, pass: !bad, miss: [...new Set(each.flatMap(x => x.miss))], forb: [...new Set(each.flatMap(x => x.forb))], split: Boolean(bad) && each.some(x => x.pass) };
   }
-  const { line, fmt } = answerLine(answer);
+  const strict = answerLine(answer);
+  // A free-text reply's one labelled line (a dash label too) is its answer; else the colon line or the first line.
+  const { line, fmt } = !q.choices && lines.length === 1 && !strict.fmt ? { line: lines[0], fmt: false } : strict;
   const g = gradeLine(quiz, q, line, fmt);
   // The choice item's lines disagree when they name different choices (an unreadable line counts as its own).
   const named = q.choices ? new Set(lines.map(l => { const c = choiceOf(q, l); return c === null ? `?${norm(l)}` : c; })) : new Set();
@@ -501,4 +513,4 @@ function compare(a, b) {
   });
 }
 
-module.exports = { normChoice: norm, answerLines, VERDICT, LAYERS, PROMPTS, PROMPT_ROLES, loadQuiz, quizErrors, questionErrors, promptKey, buildPrompts, excerptOf, briefingOfText, layersOf, marketStateOfText, questionText, answerLine, negated, gradeAnswer, summarize, compare, quizCommand, replyOf, anchorsMissing };
+module.exports = { normChoice: norm, answerLines, labelLines, VERDICT, LAYERS, PROMPTS, PROMPT_ROLES, loadQuiz, quizErrors, questionErrors, promptKey, buildPrompts, excerptOf, briefingOfText, layersOf, marketStateOfText, questionText, answerLine, negated, gradeAnswer, summarize, compare, quizCommand, replyOf, anchorsMissing };

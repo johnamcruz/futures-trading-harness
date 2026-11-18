@@ -929,6 +929,25 @@ test('quiz accuracy C2: a free-text item (answer first) passes only when EVERY A
   assert.deepStrictEqual([g.line, g.forb.length > 0], ['Yes, long is ok.', true], 'the failing line is the one reported');
 });
 
+// Review 2, N1 and N2: a free-text item's every-line rule reads any labelled ANSWER line (a colon, a dash or an em dash,
+// markdown around it); "FINAL ANSWER:" is an ANSWER line everywhere; a choice item's graded line still needs the colon,
+// and every labelled line counts toward split.
+test('quiz accuracy review 2: "ANSWER -" and "ANSWER —" lines count for free text and split; "FINAL ANSWER:" is an ANSWER line', () => {
+  for (const a of ['ANSWER - Yes, long is ok; the 4h leads.\nANSWER: No: neither side.', 'Answer — Yes, long is ok.\nANSWER: No: neither side.',
+    '**ANSWER** – Yes, long is ok.\nANSWER: No: neither side.', 'ANSWER: No: neither side.\nANSWER - Yes, long is ok.', 'ANSWER: No: neither side.\nFINAL ANSWER: Yes, long is ok.']) assert.strictEqual(pass('q1', a), false, a);
+  assert.strictEqual(pass('q1', 'ANSWER - No: neither side; the 4h and 1h disagree.'), true, 'a dash label alone: its text graded');
+  assert.strictEqual(pass('q32', 'ANSWER - No: the 1h close beyond outweighs a 3m rejection.'), true, 'the text after the label is the line its anchored patterns read, as on main');
+  assert.strictEqual(pass('q1', 'ANSWER: No: neither side.\nFINAL ANSWER: No, never counter.'), true);
+  assert.deepStrictEqual(Q.answerLines('FINAL ANSWER: B\n**Final Answer:** C\nfinal answers: x\nThe final answer: D'), ['B', 'C']);
+  const c = q('q79'); // D) no read yet
+  const G = a => Q.gradeAnswer(QUIZ, c, a);
+  assert.deepStrictEqual([G('ANSWER: C\nFINAL ANSWER: D').pass, G('ANSWER: C\nFINAL ANSWER: D').split], [true, true], 'the final answer is the last line');
+  assert.deepStrictEqual([G('ANSWER: D\nFinal answer: A').pass, G('ANSWER: D\nFinal answer: A').split], [false, true]);
+  assert.deepStrictEqual([G('ANSWER - A\nANSWER: D').pass, G('ANSWER - A\nANSWER: D').split], [true, true], 'a dash line is never the graded line of a choice item, but it counts toward split');
+  assert.deepStrictEqual([G('ANSWER - D').pass, G('ANSWER - D').split], [false, false], 'a choice item without a colon line: the first line, as before');
+  assert.strictEqual(G('ANSWER — D\nANSWER: D').split, false);
+});
+
 test('quiz accuracy ruling 7: a reply whose ANSWER lines disagree is counted (split), per item in the summary; never a grade change', () => {
   const c = q('q79');
   const G = a => Q.gradeAnswer(QUIZ, c, a);
