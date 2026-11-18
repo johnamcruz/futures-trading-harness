@@ -1304,9 +1304,11 @@ overlapping, consolidating, or repeatedly failing to continue."
   means now: a broken protected swing ends that BOS's trend read.
   - `LH X broken by a close`, `range: no leg holds` or `transition` ->
     the new side's swing is `new protected low Y`.
-  - `LH X broken by a close ..., closed back below` in a leg state -> the
-    break failed within 3 bars, the line keeps the leg's read; X no longer
-    protects; `the break's high` is the swing above.
+  - `LH X broken by a close ..., closed back below`, any state -> a close
+    went through X, then one came back: X no longer protects; `the
+    break's high` is the swing above.
+  In a leg state the break failed
+    within 3 bars and the line keeps the leg's read.
 - Momentum (owner: "Displacement detects emerging pressure.
   Failed
   continuation detects loss of directional control."): the line's
@@ -2697,9 +2699,11 @@ overlapping, consolidating, or repeatedly failing to continue."
   means now: a broken protected swing ends that BOS's trend read.
   - `LH X broken by a close`, `range: no leg holds` or `transition` ->
     the new side's swing is `new protected low Y`.
-  - `LH X broken by a close ..., closed back below` in a leg state -> the
-    break failed within 3 bars, the line keeps the leg's read; X no longer
-    protects; `the break's high` is the swing above.
+  - `LH X broken by a close ..., closed back below`, any state -> a close
+    went through X, then one came back: X no longer protects; `the
+    break's high` is the swing above.
+  In a leg state the break failed
+    within 3 bars and the line keeps the leg's read.
 - Momentum (owner: "Displacement detects emerging pressure.
   Failed
   continuation detects loss of directional control."): the line's
@@ -4090,9 +4094,11 @@ overlapping, consolidating, or repeatedly failing to continue."
   means now: a broken protected swing ends that BOS's trend read.
   - `LH X broken by a close`, `range: no leg holds` or `transition` ->
     the new side's swing is `new protected low Y`.
-  - `LH X broken by a close ..., closed back below` in a leg state -> the
-    break failed within 3 bars, the line keeps the leg's read; X no longer
-    protects; `the break's high` is the swing above.
+  - `LH X broken by a close ..., closed back below`, any state -> a close
+    went through X, then one came back: X no longer protects; `the
+    break's high` is the swing above.
+  In a leg state the break failed
+    within 3 bars and the line keeps the leg's read.
 - Momentum (owner: "Displacement detects emerging pressure.
   Failed
   continuation detects loss of directional control."): the line's
@@ -5474,9 +5480,11 @@ overlapping, consolidating, or repeatedly failing to continue."
   means now: a broken protected swing ends that BOS's trend read.
   - `LH X broken by a close`, `range: no leg holds` or `transition` ->
     the new side's swing is `new protected low Y`.
-  - `LH X broken by a close ..., closed back below` in a leg state -> the
-    break failed within 3 bars, the line keeps the leg's read; X no longer
-    protects; `the break's high` is the swing above.
+  - `LH X broken by a close ..., closed back below`, any state -> a close
+    went through X, then one came back: X no longer protects; `the
+    break's high` is the swing above.
+  In a leg state the break failed
+    within 3 bars and the line keeps the leg's read.
 - Momentum (owner: "Displacement detects emerging pressure.
   Failed
   continuation detects loss of directional control."): the line's
@@ -6954,9 +6962,11 @@ overlapping, consolidating, or repeatedly failing to continue."
   means now: a broken protected swing ends that BOS's trend read.
   - `LH X broken by a close`, `range: no leg holds` or `transition` ->
     the new side's swing is `new protected low Y`.
-  - `LH X broken by a close ..., closed back below` in a leg state -> the
-    break failed within 3 bars, the line keeps the leg's read; X no longer
-    protects; `the break's high` is the swing above.
+  - `LH X broken by a close ..., closed back below`, any state -> a close
+    went through X, then one came back: X no longer protects; `the
+    break's high` is the swing above.
+  In a leg state the break failed
+    within 3 bars and the line keeps the leg's read.
 - Momentum (owner: "Displacement detects emerging pressure.
   Failed
   continuation detects loss of directional control."): the line's
@@ -8431,9 +8441,11 @@ overlapping, consolidating, or repeatedly failing to continue."
   means now: a broken protected swing ends that BOS's trend read.
   - `LH X broken by a close`, `range: no leg holds` or `transition` ->
     the new side's swing is `new protected low Y`.
-  - `LH X broken by a close ..., closed back below` in a leg state -> the
-    break failed within 3 bars, the line keeps the leg's read; X no longer
-    protects; `the break's high` is the swing above.
+  - `LH X broken by a close ..., closed back below`, any state -> a close
+    went through X, then one came back: X no longer protects; `the
+    break's high` is the swing above.
+  In a leg state the break failed
+    within 3 bars and the line keeps the leg's read.
 - Momentum (owner: "Displacement detects emerging pressure.
   Failed
   continuation detects loss of directional control."): the line's
@@ -9829,9 +9841,11 @@ overlapping, consolidating, or repeatedly failing to continue."
   means now: a broken protected swing ends that BOS's trend read.
   - `LH X broken by a close`, `range: no leg holds` or `transition` ->
     the new side's swing is `new protected low Y`.
-  - `LH X broken by a close ..., closed back below` in a leg state -> the
-    break failed within 3 bars, the line keeps the leg's read; X no longer
-    protects; `the break's high` is the swing above.
+  - `LH X broken by a close ..., closed back below`, any state -> a close
+    went through X, then one came back: X no longer protects; `the
+    break's high` is the swing above.
+  In a leg state the break failed
+    within 3 bars and the line keeps the leg's read.
 - Momentum (owner: "Displacement detects emerging pressure.
   Failed
   continuation detects loss of directional control."): the line's
@@ -11227,9 +11241,11 @@ overlapping, consolidating, or repeatedly failing to continue."
   means now: a broken protected swing ends that BOS's trend read.
   - `LH X broken by a close`, `range: no leg holds` or `transition` ->
     the new side's swing is `new protected low Y`.
-  - `LH X broken by a close ..., closed back below` in a leg state -> the
-    break failed within 3 bars, the line keeps the leg's read; X no longer
-    protects; `the break's high` is the swing above.
+  - `LH X broken by a close ..., closed back below`, any state -> a close
+    went through X, then one came back: X no longer protects; `the
+    break's high` is the swing above.
+  In a leg state the break failed
+    within 3 bars and the line keeps the leg's read.
 - Momentum (owner: "Displacement detects emerging pressure.
   Failed
   continuation detects loss of directional control."): the line's
@@ -12698,9 +12714,11 @@ overlapping, consolidating, or repeatedly failing to continue."
   means now: a broken protected swing ends that BOS's trend read.
   - `LH X broken by a close`, `range: no leg holds` or `transition` ->
     the new side's swing is `new protected low Y`.
-  - `LH X broken by a close ..., closed back below` in a leg state -> the
-    break failed within 3 bars, the line keeps the leg's read; X no longer
-    protects; `the break's high` is the swing above.
+  - `LH X broken by a close ..., closed back below`, any state -> a close
+    went through X, then one came back: X no longer protects; `the
+    break's high` is the swing above.
+  In a leg state the break failed
+    within 3 bars and the line keeps the leg's read.
 - Momentum (owner: "Displacement detects emerging pressure.
   Failed
   continuation detects loss of directional control."): the line's
@@ -14103,9 +14121,11 @@ overlapping, consolidating, or repeatedly failing to continue."
   means now: a broken protected swing ends that BOS's trend read.
   - `LH X broken by a close`, `range: no leg holds` or `transition` ->
     the new side's swing is `new protected low Y`.
-  - `LH X broken by a close ..., closed back below` in a leg state -> the
-    break failed within 3 bars, the line keeps the leg's read; X no longer
-    protects; `the break's high` is the swing above.
+  - `LH X broken by a close ..., closed back below`, any state -> a close
+    went through X, then one came back: X no longer protects; `the
+    break's high` is the swing above.
+  In a leg state the break failed
+    within 3 bars and the line keeps the leg's read.
 - Momentum (owner: "Displacement detects emerging pressure.
   Failed
   continuation detects loss of directional control."): the line's
@@ -15410,9 +15430,11 @@ overlapping, consolidating, or repeatedly failing to continue."
   means now: a broken protected swing ends that BOS's trend read.
   - `LH X broken by a close`, `range: no leg holds` or `transition` ->
     the new side's swing is `new protected low Y`.
-  - `LH X broken by a close ..., closed back below` in a leg state -> the
-    break failed within 3 bars, the line keeps the leg's read; X no longer
-    protects; `the break's high` is the swing above.
+  - `LH X broken by a close ..., closed back below`, any state -> a close
+    went through X, then one came back: X no longer protects; `the
+    break's high` is the swing above.
+  In a leg state the break failed
+    within 3 bars and the line keeps the leg's read.
 - Momentum (owner: "Displacement detects emerging pressure.
   Failed
   continuation detects loss of directional control."): the line's
