@@ -1407,14 +1407,14 @@ overlapping, consolidating, or repeatedly failing to continue."
 **Multi-timeframe structure** (the two `MTF structure` lines under
 the `Market state` line, the runner's briefing).
   `1h > 15m` (primary,
-timed on the 3m; the only `Entry:` clause; it ends with `Above:`, the
-4h structure and the 1h pullback against it: no stage word) and
-`below: 15m > 3m` (context; no frame under it, so no `POTENTIAL`,
-`WEAKENING`, `REVERSING`).
-  Each `stage` word is computed:
-copy it from its own line, never infer it, never carry it to another
-level.
-  Primary with the 1h up; mirror for down:
+timed on the 3m; the only `Entry:` clause) and `below: 15m > 3m`
+(context; no frame under it, so no `POTENTIAL`, `WEAKENING`,
+`REVERSING`).
+  The 4h is the Bias line's; no line prints a 4h stage.
+Each `stage` word is computed: copy it from its own line, never infer
+it, never carry it to another level.
+  Primary with the 1h up; mirror
+for down:
 
 | stage | printed when | means |
 |---|---|---|
@@ -1432,14 +1432,12 @@ level.
   other: `<parent> structure UP|DOWN` (the parent's way) and `<frame>
   pullback against the <parent>: UP|DOWN|NONE` (the pullback's way:
   always opposite to that structure word; `NONE` = not pulling back).
-  Take each pair from its own clause: 4h and 1h from `Above:`, 1h and
-  15m from the primary, 15m and 3m from `below:`.
+  Take each pair from its own line: 1h and 15m from the primary, 15m
+  and 3m from `below:`, whose phrase names its frame (`below 15m > 3m:
+  3m pullback against the 15m:`).
   `15m structure UP ...
-  3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
-- `Above:` uses the primary's own 1h structure: `1h pullback against
-  the 4h: UP` = the 1h structure is UP while the 4h is DOWN; `NONE` =
-  the 1h structure runs with the 4h (a 1h CHoCH against it is the
-  primary's warning, not a 1h pullback).
+  below 15m >
+  3m: 3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
 - No stage predicts the outcome: a stage is where the structure is, not
   where it goes.
 - Direction: the pullback runs AGAINST the parent.
@@ -2947,14 +2945,14 @@ overlapping, consolidating, or repeatedly failing to continue."
 **Multi-timeframe structure** (the two `MTF structure` lines under
 the `Market state` line, the runner's briefing).
   `1h > 15m` (primary,
-timed on the 3m; the only `Entry:` clause; it ends with `Above:`, the
-4h structure and the 1h pullback against it: no stage word) and
-`below: 15m > 3m` (context; no frame under it, so no `POTENTIAL`,
-`WEAKENING`, `REVERSING`).
-  Each `stage` word is computed:
-copy it from its own line, never infer it, never carry it to another
-level.
-  Primary with the 1h up; mirror for down:
+timed on the 3m; the only `Entry:` clause) and `below: 15m > 3m`
+(context; no frame under it, so no `POTENTIAL`, `WEAKENING`,
+`REVERSING`).
+  The 4h is the Bias line's; no line prints a 4h stage.
+Each `stage` word is computed: copy it from its own line, never infer
+it, never carry it to another level.
+  Primary with the 1h up; mirror
+for down:
 
 | stage | printed when | means |
 |---|---|---|
@@ -2972,14 +2970,12 @@ level.
   other: `<parent> structure UP|DOWN` (the parent's way) and `<frame>
   pullback against the <parent>: UP|DOWN|NONE` (the pullback's way:
   always opposite to that structure word; `NONE` = not pulling back).
-  Take each pair from its own clause: 4h and 1h from `Above:`, 1h and
-  15m from the primary, 15m and 3m from `below:`.
+  Take each pair from its own line: 1h and 15m from the primary, 15m
+  and 3m from `below:`, whose phrase names its frame (`below 15m > 3m:
+  3m pullback against the 15m:`).
   `15m structure UP ...
-  3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
-- `Above:` uses the primary's own 1h structure: `1h pullback against
-  the 4h: UP` = the 1h structure is UP while the 4h is DOWN; `NONE` =
-  the 1h structure runs with the 4h (a 1h CHoCH against it is the
-  primary's warning, not a 1h pullback).
+  below 15m >
+  3m: 3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
 - No stage predicts the outcome: a stage is where the structure is, not
   where it goes.
 - Direction: the pullback runs AGAINST the parent.
@@ -4496,14 +4492,14 @@ overlapping, consolidating, or repeatedly failing to continue."
 **Multi-timeframe structure** (the two `MTF structure` lines under
 the `Market state` line, the runner's briefing).
   `1h > 15m` (primary,
-timed on the 3m; the only `Entry:` clause; it ends with `Above:`, the
-4h structure and the 1h pullback against it: no stage word) and
-`below: 15m > 3m` (context; no frame under it, so no `POTENTIAL`,
-`WEAKENING`, `REVERSING`).
-  Each `stage` word is computed:
-copy it from its own line, never infer it, never carry it to another
-level.
-  Primary with the 1h up; mirror for down:
+timed on the 3m; the only `Entry:` clause) and `below: 15m > 3m`
+(context; no frame under it, so no `POTENTIAL`, `WEAKENING`,
+`REVERSING`).
+  The 4h is the Bias line's; no line prints a 4h stage.
+Each `stage` word is computed: copy it from its own line, never infer
+it, never carry it to another level.
+  Primary with the 1h up; mirror
+for down:
 
 | stage | printed when | means |
 |---|---|---|
@@ -4521,14 +4517,12 @@ level.
   other: `<parent> structure UP|DOWN` (the parent's way) and `<frame>
   pullback against the <parent>: UP|DOWN|NONE` (the pullback's way:
   always opposite to that structure word; `NONE` = not pulling back).
-  Take each pair from its own clause: 4h and 1h from `Above:`, 1h and
-  15m from the primary, 15m and 3m from `below:`.
+  Take each pair from its own line: 1h and 15m from the primary, 15m
+  and 3m from `below:`, whose phrase names its frame (`below 15m > 3m:
+  3m pullback against the 15m:`).
   `15m structure UP ...
-  3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
-- `Above:` uses the primary's own 1h structure: `1h pullback against
-  the 4h: UP` = the 1h structure is UP while the 4h is DOWN; `NONE` =
-  the 1h structure runs with the 4h (a 1h CHoCH against it is the
-  primary's warning, not a 1h pullback).
+  below 15m >
+  3m: 3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
 - No stage predicts the outcome: a stage is where the structure is, not
   where it goes.
 - Direction: the pullback runs AGAINST the parent.
@@ -6036,14 +6030,14 @@ overlapping, consolidating, or repeatedly failing to continue."
 **Multi-timeframe structure** (the two `MTF structure` lines under
 the `Market state` line, the runner's briefing).
   `1h > 15m` (primary,
-timed on the 3m; the only `Entry:` clause; it ends with `Above:`, the
-4h structure and the 1h pullback against it: no stage word) and
-`below: 15m > 3m` (context; no frame under it, so no `POTENTIAL`,
-`WEAKENING`, `REVERSING`).
-  Each `stage` word is computed:
-copy it from its own line, never infer it, never carry it to another
-level.
-  Primary with the 1h up; mirror for down:
+timed on the 3m; the only `Entry:` clause) and `below: 15m > 3m`
+(context; no frame under it, so no `POTENTIAL`, `WEAKENING`,
+`REVERSING`).
+  The 4h is the Bias line's; no line prints a 4h stage.
+Each `stage` word is computed: copy it from its own line, never infer
+it, never carry it to another level.
+  Primary with the 1h up; mirror
+for down:
 
 | stage | printed when | means |
 |---|---|---|
@@ -6061,14 +6055,12 @@ level.
   other: `<parent> structure UP|DOWN` (the parent's way) and `<frame>
   pullback against the <parent>: UP|DOWN|NONE` (the pullback's way:
   always opposite to that structure word; `NONE` = not pulling back).
-  Take each pair from its own clause: 4h and 1h from `Above:`, 1h and
-  15m from the primary, 15m and 3m from `below:`.
+  Take each pair from its own line: 1h and 15m from the primary, 15m
+  and 3m from `below:`, whose phrase names its frame (`below 15m > 3m:
+  3m pullback against the 15m:`).
   `15m structure UP ...
-  3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
-- `Above:` uses the primary's own 1h structure: `1h pullback against
-  the 4h: UP` = the 1h structure is UP while the 4h is DOWN; `NONE` =
-  the 1h structure runs with the 4h (a 1h CHoCH against it is the
-  primary's warning, not a 1h pullback).
+  below 15m >
+  3m: 3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
 - No stage predicts the outcome: a stage is where the structure is, not
   where it goes.
 - Direction: the pullback runs AGAINST the parent.
@@ -7585,14 +7577,14 @@ overlapping, consolidating, or repeatedly failing to continue."
 **Multi-timeframe structure** (the two `MTF structure` lines under
 the `Market state` line, the runner's briefing).
   `1h > 15m` (primary,
-timed on the 3m; the only `Entry:` clause; it ends with `Above:`, the
-4h structure and the 1h pullback against it: no stage word) and
-`below: 15m > 3m` (context; no frame under it, so no `POTENTIAL`,
-`WEAKENING`, `REVERSING`).
-  Each `stage` word is computed:
-copy it from its own line, never infer it, never carry it to another
-level.
-  Primary with the 1h up; mirror for down:
+timed on the 3m; the only `Entry:` clause) and `below: 15m > 3m`
+(context; no frame under it, so no `POTENTIAL`, `WEAKENING`,
+`REVERSING`).
+  The 4h is the Bias line's; no line prints a 4h stage.
+Each `stage` word is computed: copy it from its own line, never infer
+it, never carry it to another level.
+  Primary with the 1h up; mirror
+for down:
 
 | stage | printed when | means |
 |---|---|---|
@@ -7610,14 +7602,12 @@ level.
   other: `<parent> structure UP|DOWN` (the parent's way) and `<frame>
   pullback against the <parent>: UP|DOWN|NONE` (the pullback's way:
   always opposite to that structure word; `NONE` = not pulling back).
-  Take each pair from its own clause: 4h and 1h from `Above:`, 1h and
-  15m from the primary, 15m and 3m from `below:`.
+  Take each pair from its own line: 1h and 15m from the primary, 15m
+  and 3m from `below:`, whose phrase names its frame (`below 15m > 3m:
+  3m pullback against the 15m:`).
   `15m structure UP ...
-  3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
-- `Above:` uses the primary's own 1h structure: `1h pullback against
-  the 4h: UP` = the 1h structure is UP while the 4h is DOWN; `NONE` =
-  the 1h structure runs with the 4h (a 1h CHoCH against it is the
-  primary's warning, not a 1h pullback).
+  below 15m >
+  3m: 3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
 - No stage predicts the outcome: a stage is where the structure is, not
   where it goes.
 - Direction: the pullback runs AGAINST the parent.
@@ -9125,14 +9115,14 @@ overlapping, consolidating, or repeatedly failing to continue."
 **Multi-timeframe structure** (the two `MTF structure` lines under
 the `Market state` line, the runner's briefing).
   `1h > 15m` (primary,
-timed on the 3m; the only `Entry:` clause; it ends with `Above:`, the
-4h structure and the 1h pullback against it: no stage word) and
-`below: 15m > 3m` (context; no frame under it, so no `POTENTIAL`,
-`WEAKENING`, `REVERSING`).
-  Each `stage` word is computed:
-copy it from its own line, never infer it, never carry it to another
-level.
-  Primary with the 1h up; mirror for down:
+timed on the 3m; the only `Entry:` clause) and `below: 15m > 3m`
+(context; no frame under it, so no `POTENTIAL`, `WEAKENING`,
+`REVERSING`).
+  The 4h is the Bias line's; no line prints a 4h stage.
+Each `stage` word is computed: copy it from its own line, never infer
+it, never carry it to another level.
+  Primary with the 1h up; mirror
+for down:
 
 | stage | printed when | means |
 |---|---|---|
@@ -9150,14 +9140,12 @@ level.
   other: `<parent> structure UP|DOWN` (the parent's way) and `<frame>
   pullback against the <parent>: UP|DOWN|NONE` (the pullback's way:
   always opposite to that structure word; `NONE` = not pulling back).
-  Take each pair from its own clause: 4h and 1h from `Above:`, 1h and
-  15m from the primary, 15m and 3m from `below:`.
+  Take each pair from its own line: 1h and 15m from the primary, 15m
+  and 3m from `below:`, whose phrase names its frame (`below 15m > 3m:
+  3m pullback against the 15m:`).
   `15m structure UP ...
-  3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
-- `Above:` uses the primary's own 1h structure: `1h pullback against
-  the 4h: UP` = the 1h structure is UP while the 4h is DOWN; `NONE` =
-  the 1h structure runs with the 4h (a 1h CHoCH against it is the
-  primary's warning, not a 1h pullback).
+  below 15m >
+  3m: 3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
 - No stage predicts the outcome: a stage is where the structure is, not
   where it goes.
 - Direction: the pullback runs AGAINST the parent.
@@ -10665,14 +10653,14 @@ overlapping, consolidating, or repeatedly failing to continue."
 **Multi-timeframe structure** (the two `MTF structure` lines under
 the `Market state` line, the runner's briefing).
   `1h > 15m` (primary,
-timed on the 3m; the only `Entry:` clause; it ends with `Above:`, the
-4h structure and the 1h pullback against it: no stage word) and
-`below: 15m > 3m` (context; no frame under it, so no `POTENTIAL`,
-`WEAKENING`, `REVERSING`).
-  Each `stage` word is computed:
-copy it from its own line, never infer it, never carry it to another
-level.
-  Primary with the 1h up; mirror for down:
+timed on the 3m; the only `Entry:` clause) and `below: 15m > 3m`
+(context; no frame under it, so no `POTENTIAL`, `WEAKENING`,
+`REVERSING`).
+  The 4h is the Bias line's; no line prints a 4h stage.
+Each `stage` word is computed: copy it from its own line, never infer
+it, never carry it to another level.
+  Primary with the 1h up; mirror
+for down:
 
 | stage | printed when | means |
 |---|---|---|
@@ -10690,14 +10678,12 @@ level.
   other: `<parent> structure UP|DOWN` (the parent's way) and `<frame>
   pullback against the <parent>: UP|DOWN|NONE` (the pullback's way:
   always opposite to that structure word; `NONE` = not pulling back).
-  Take each pair from its own clause: 4h and 1h from `Above:`, 1h and
-  15m from the primary, 15m and 3m from `below:`.
+  Take each pair from its own line: 1h and 15m from the primary, 15m
+  and 3m from `below:`, whose phrase names its frame (`below 15m > 3m:
+  3m pullback against the 15m:`).
   `15m structure UP ...
-  3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
-- `Above:` uses the primary's own 1h structure: `1h pullback against
-  the 4h: UP` = the 1h structure is UP while the 4h is DOWN; `NONE` =
-  the 1h structure runs with the 4h (a 1h CHoCH against it is the
-  primary's warning, not a 1h pullback).
+  below 15m >
+  3m: 3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
 - No stage predicts the outcome: a stage is where the structure is, not
   where it goes.
 - Direction: the pullback runs AGAINST the parent.
@@ -12301,14 +12287,14 @@ overlapping, consolidating, or repeatedly failing to continue."
 **Multi-timeframe structure** (the two `MTF structure` lines under
 the `Market state` line, the runner's briefing).
   `1h > 15m` (primary,
-timed on the 3m; the only `Entry:` clause; it ends with `Above:`, the
-4h structure and the 1h pullback against it: no stage word) and
-`below: 15m > 3m` (context; no frame under it, so no `POTENTIAL`,
-`WEAKENING`, `REVERSING`).
-  Each `stage` word is computed:
-copy it from its own line, never infer it, never carry it to another
-level.
-  Primary with the 1h up; mirror for down:
+timed on the 3m; the only `Entry:` clause) and `below: 15m > 3m`
+(context; no frame under it, so no `POTENTIAL`, `WEAKENING`,
+`REVERSING`).
+  The 4h is the Bias line's; no line prints a 4h stage.
+Each `stage` word is computed: copy it from its own line, never infer
+it, never carry it to another level.
+  Primary with the 1h up; mirror
+for down:
 
 | stage | printed when | means |
 |---|---|---|
@@ -12326,14 +12312,12 @@ level.
   other: `<parent> structure UP|DOWN` (the parent's way) and `<frame>
   pullback against the <parent>: UP|DOWN|NONE` (the pullback's way:
   always opposite to that structure word; `NONE` = not pulling back).
-  Take each pair from its own clause: 4h and 1h from `Above:`, 1h and
-  15m from the primary, 15m and 3m from `below:`.
+  Take each pair from its own line: 1h and 15m from the primary, 15m
+  and 3m from `below:`, whose phrase names its frame (`below 15m > 3m:
+  3m pullback against the 15m:`).
   `15m structure UP ...
-  3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
-- `Above:` uses the primary's own 1h structure: `1h pullback against
-  the 4h: UP` = the 1h structure is UP while the 4h is DOWN; `NONE` =
-  the 1h structure runs with the 4h (a 1h CHoCH against it is the
-  primary's warning, not a 1h pullback).
+  below 15m >
+  3m: 3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
 - No stage predicts the outcome: a stage is where the structure is, not
   where it goes.
 - Direction: the pullback runs AGAINST the parent.
@@ -13934,14 +13918,14 @@ overlapping, consolidating, or repeatedly failing to continue."
 **Multi-timeframe structure** (the two `MTF structure` lines under
 the `Market state` line, the runner's briefing).
   `1h > 15m` (primary,
-timed on the 3m; the only `Entry:` clause; it ends with `Above:`, the
-4h structure and the 1h pullback against it: no stage word) and
-`below: 15m > 3m` (context; no frame under it, so no `POTENTIAL`,
-`WEAKENING`, `REVERSING`).
-  Each `stage` word is computed:
-copy it from its own line, never infer it, never carry it to another
-level.
-  Primary with the 1h up; mirror for down:
+timed on the 3m; the only `Entry:` clause) and `below: 15m > 3m`
+(context; no frame under it, so no `POTENTIAL`, `WEAKENING`,
+`REVERSING`).
+  The 4h is the Bias line's; no line prints a 4h stage.
+Each `stage` word is computed: copy it from its own line, never infer
+it, never carry it to another level.
+  Primary with the 1h up; mirror
+for down:
 
 | stage | printed when | means |
 |---|---|---|
@@ -13959,14 +13943,12 @@ level.
   other: `<parent> structure UP|DOWN` (the parent's way) and `<frame>
   pullback against the <parent>: UP|DOWN|NONE` (the pullback's way:
   always opposite to that structure word; `NONE` = not pulling back).
-  Take each pair from its own clause: 4h and 1h from `Above:`, 1h and
-  15m from the primary, 15m and 3m from `below:`.
+  Take each pair from its own line: 1h and 15m from the primary, 15m
+  and 3m from `below:`, whose phrase names its frame (`below 15m > 3m:
+  3m pullback against the 15m:`).
   `15m structure UP ...
-  3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
-- `Above:` uses the primary's own 1h structure: `1h pullback against
-  the 4h: UP` = the 1h structure is UP while the 4h is DOWN; `NONE` =
-  the 1h structure runs with the 4h (a 1h CHoCH against it is the
-  primary's warning, not a 1h pullback).
+  below 15m >
+  3m: 3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
 - No stage predicts the outcome: a stage is where the structure is, not
   where it goes.
 - Direction: the pullback runs AGAINST the parent.
@@ -15561,14 +15543,14 @@ overlapping, consolidating, or repeatedly failing to continue."
 **Multi-timeframe structure** (the two `MTF structure` lines under
 the `Market state` line, the runner's briefing).
   `1h > 15m` (primary,
-timed on the 3m; the only `Entry:` clause; it ends with `Above:`, the
-4h structure and the 1h pullback against it: no stage word) and
-`below: 15m > 3m` (context; no frame under it, so no `POTENTIAL`,
-`WEAKENING`, `REVERSING`).
-  Each `stage` word is computed:
-copy it from its own line, never infer it, never carry it to another
-level.
-  Primary with the 1h up; mirror for down:
+timed on the 3m; the only `Entry:` clause) and `below: 15m > 3m`
+(context; no frame under it, so no `POTENTIAL`, `WEAKENING`,
+`REVERSING`).
+  The 4h is the Bias line's; no line prints a 4h stage.
+Each `stage` word is computed: copy it from its own line, never infer
+it, never carry it to another level.
+  Primary with the 1h up; mirror
+for down:
 
 | stage | printed when | means |
 |---|---|---|
@@ -15586,14 +15568,12 @@ level.
   other: `<parent> structure UP|DOWN` (the parent's way) and `<frame>
   pullback against the <parent>: UP|DOWN|NONE` (the pullback's way:
   always opposite to that structure word; `NONE` = not pulling back).
-  Take each pair from its own clause: 4h and 1h from `Above:`, 1h and
-  15m from the primary, 15m and 3m from `below:`.
+  Take each pair from its own line: 1h and 15m from the primary, 15m
+  and 3m from `below:`, whose phrase names its frame (`below 15m > 3m:
+  3m pullback against the 15m:`).
   `15m structure UP ...
-  3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
-- `Above:` uses the primary's own 1h structure: `1h pullback against
-  the 4h: UP` = the 1h structure is UP while the 4h is DOWN; `NONE` =
-  the 1h structure runs with the 4h (a 1h CHoCH against it is the
-  primary's warning, not a 1h pullback).
+  below 15m >
+  3m: 3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
 - No stage predicts the outcome: a stage is where the structure is, not
   where it goes.
 - Direction: the pullback runs AGAINST the parent.
@@ -17115,14 +17095,14 @@ overlapping, consolidating, or repeatedly failing to continue."
 **Multi-timeframe structure** (the two `MTF structure` lines under
 the `Market state` line, the runner's briefing).
   `1h > 15m` (primary,
-timed on the 3m; the only `Entry:` clause; it ends with `Above:`, the
-4h structure and the 1h pullback against it: no stage word) and
-`below: 15m > 3m` (context; no frame under it, so no `POTENTIAL`,
-`WEAKENING`, `REVERSING`).
-  Each `stage` word is computed:
-copy it from its own line, never infer it, never carry it to another
-level.
-  Primary with the 1h up; mirror for down:
+timed on the 3m; the only `Entry:` clause) and `below: 15m > 3m`
+(context; no frame under it, so no `POTENTIAL`, `WEAKENING`,
+`REVERSING`).
+  The 4h is the Bias line's; no line prints a 4h stage.
+Each `stage` word is computed: copy it from its own line, never infer
+it, never carry it to another level.
+  Primary with the 1h up; mirror
+for down:
 
 | stage | printed when | means |
 |---|---|---|
@@ -17140,14 +17120,12 @@ level.
   other: `<parent> structure UP|DOWN` (the parent's way) and `<frame>
   pullback against the <parent>: UP|DOWN|NONE` (the pullback's way:
   always opposite to that structure word; `NONE` = not pulling back).
-  Take each pair from its own clause: 4h and 1h from `Above:`, 1h and
-  15m from the primary, 15m and 3m from `below:`.
+  Take each pair from its own line: 1h and 15m from the primary, 15m
+  and 3m from `below:`, whose phrase names its frame (`below 15m > 3m:
+  3m pullback against the 15m:`).
   `15m structure UP ...
-  3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
-- `Above:` uses the primary's own 1h structure: `1h pullback against
-  the 4h: UP` = the 1h structure is UP while the 4h is DOWN; `NONE` =
-  the 1h structure runs with the 4h (a 1h CHoCH against it is the
-  primary's warning, not a 1h pullback).
+  below 15m >
+  3m: 3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
 - No stage predicts the outcome: a stage is where the structure is, not
   where it goes.
 - Direction: the pullback runs AGAINST the parent.
@@ -18751,14 +18729,14 @@ overlapping, consolidating, or repeatedly failing to continue."
 **Multi-timeframe structure** (the two `MTF structure` lines under
 the `Market state` line, the runner's briefing).
   `1h > 15m` (primary,
-timed on the 3m; the only `Entry:` clause; it ends with `Above:`, the
-4h structure and the 1h pullback against it: no stage word) and
-`below: 15m > 3m` (context; no frame under it, so no `POTENTIAL`,
-`WEAKENING`, `REVERSING`).
-  Each `stage` word is computed:
-copy it from its own line, never infer it, never carry it to another
-level.
-  Primary with the 1h up; mirror for down:
+timed on the 3m; the only `Entry:` clause) and `below: 15m > 3m`
+(context; no frame under it, so no `POTENTIAL`, `WEAKENING`,
+`REVERSING`).
+  The 4h is the Bias line's; no line prints a 4h stage.
+Each `stage` word is computed: copy it from its own line, never infer
+it, never carry it to another level.
+  Primary with the 1h up; mirror
+for down:
 
 | stage | printed when | means |
 |---|---|---|
@@ -18776,14 +18754,12 @@ level.
   other: `<parent> structure UP|DOWN` (the parent's way) and `<frame>
   pullback against the <parent>: UP|DOWN|NONE` (the pullback's way:
   always opposite to that structure word; `NONE` = not pulling back).
-  Take each pair from its own clause: 4h and 1h from `Above:`, 1h and
-  15m from the primary, 15m and 3m from `below:`.
+  Take each pair from its own line: 1h and 15m from the primary, 15m
+  and 3m from `below:`, whose phrase names its frame (`below 15m > 3m:
+  3m pullback against the 15m:`).
   `15m structure UP ...
-  3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
-- `Above:` uses the primary's own 1h structure: `1h pullback against
-  the 4h: UP` = the 1h structure is UP while the 4h is DOWN; `NONE` =
-  the 1h structure runs with the 4h (a 1h CHoCH against it is the
-  primary's warning, not a 1h pullback).
+  below 15m >
+  3m: 3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
 - No stage predicts the outcome: a stage is where the structure is, not
   where it goes.
 - Direction: the pullback runs AGAINST the parent.
@@ -20378,14 +20354,14 @@ overlapping, consolidating, or repeatedly failing to continue."
 **Multi-timeframe structure** (the two `MTF structure` lines under
 the `Market state` line, the runner's briefing).
   `1h > 15m` (primary,
-timed on the 3m; the only `Entry:` clause; it ends with `Above:`, the
-4h structure and the 1h pullback against it: no stage word) and
-`below: 15m > 3m` (context; no frame under it, so no `POTENTIAL`,
-`WEAKENING`, `REVERSING`).
-  Each `stage` word is computed:
-copy it from its own line, never infer it, never carry it to another
-level.
-  Primary with the 1h up; mirror for down:
+timed on the 3m; the only `Entry:` clause) and `below: 15m > 3m`
+(context; no frame under it, so no `POTENTIAL`, `WEAKENING`,
+`REVERSING`).
+  The 4h is the Bias line's; no line prints a 4h stage.
+Each `stage` word is computed: copy it from its own line, never infer
+it, never carry it to another level.
+  Primary with the 1h up; mirror
+for down:
 
 | stage | printed when | means |
 |---|---|---|
@@ -20403,14 +20379,12 @@ level.
   other: `<parent> structure UP|DOWN` (the parent's way) and `<frame>
   pullback against the <parent>: UP|DOWN|NONE` (the pullback's way:
   always opposite to that structure word; `NONE` = not pulling back).
-  Take each pair from its own clause: 4h and 1h from `Above:`, 1h and
-  15m from the primary, 15m and 3m from `below:`.
+  Take each pair from its own line: 1h and 15m from the primary, 15m
+  and 3m from `below:`, whose phrase names its frame (`below 15m > 3m:
+  3m pullback against the 15m:`).
   `15m structure UP ...
-  3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
-- `Above:` uses the primary's own 1h structure: `1h pullback against
-  the 4h: UP` = the 1h structure is UP while the 4h is DOWN; `NONE` =
-  the 1h structure runs with the 4h (a 1h CHoCH against it is the
-  primary's warning, not a 1h pullback).
+  below 15m >
+  3m: 3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
 - No stage predicts the outcome: a stage is where the structure is, not
   where it goes.
 - Direction: the pullback runs AGAINST the parent.
@@ -22005,14 +21979,14 @@ overlapping, consolidating, or repeatedly failing to continue."
 **Multi-timeframe structure** (the two `MTF structure` lines under
 the `Market state` line, the runner's briefing).
   `1h > 15m` (primary,
-timed on the 3m; the only `Entry:` clause; it ends with `Above:`, the
-4h structure and the 1h pullback against it: no stage word) and
-`below: 15m > 3m` (context; no frame under it, so no `POTENTIAL`,
-`WEAKENING`, `REVERSING`).
-  Each `stage` word is computed:
-copy it from its own line, never infer it, never carry it to another
-level.
-  Primary with the 1h up; mirror for down:
+timed on the 3m; the only `Entry:` clause) and `below: 15m > 3m`
+(context; no frame under it, so no `POTENTIAL`, `WEAKENING`,
+`REVERSING`).
+  The 4h is the Bias line's; no line prints a 4h stage.
+Each `stage` word is computed: copy it from its own line, never infer
+it, never carry it to another level.
+  Primary with the 1h up; mirror
+for down:
 
 | stage | printed when | means |
 |---|---|---|
@@ -22030,14 +22004,12 @@ level.
   other: `<parent> structure UP|DOWN` (the parent's way) and `<frame>
   pullback against the <parent>: UP|DOWN|NONE` (the pullback's way:
   always opposite to that structure word; `NONE` = not pulling back).
-  Take each pair from its own clause: 4h and 1h from `Above:`, 1h and
-  15m from the primary, 15m and 3m from `below:`.
+  Take each pair from its own line: 1h and 15m from the primary, 15m
+  and 3m from `below:`, whose phrase names its frame (`below 15m > 3m:
+  3m pullback against the 15m:`).
   `15m structure UP ...
-  3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
-- `Above:` uses the primary's own 1h structure: `1h pullback against
-  the 4h: UP` = the 1h structure is UP while the 4h is DOWN; `NONE` =
-  the 1h structure runs with the 4h (a 1h CHoCH against it is the
-  primary's warning, not a 1h pullback).
+  below 15m >
+  3m: 3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
 - No stage predicts the outcome: a stage is where the structure is, not
   where it goes.
 - Direction: the pullback runs AGAINST the parent.
@@ -23566,14 +23538,14 @@ overlapping, consolidating, or repeatedly failing to continue."
 **Multi-timeframe structure** (the two `MTF structure` lines under
 the `Market state` line, the runner's briefing).
   `1h > 15m` (primary,
-timed on the 3m; the only `Entry:` clause; it ends with `Above:`, the
-4h structure and the 1h pullback against it: no stage word) and
-`below: 15m > 3m` (context; no frame under it, so no `POTENTIAL`,
-`WEAKENING`, `REVERSING`).
-  Each `stage` word is computed:
-copy it from its own line, never infer it, never carry it to another
-level.
-  Primary with the 1h up; mirror for down:
+timed on the 3m; the only `Entry:` clause) and `below: 15m > 3m`
+(context; no frame under it, so no `POTENTIAL`, `WEAKENING`,
+`REVERSING`).
+  The 4h is the Bias line's; no line prints a 4h stage.
+Each `stage` word is computed: copy it from its own line, never infer
+it, never carry it to another level.
+  Primary with the 1h up; mirror
+for down:
 
 | stage | printed when | means |
 |---|---|---|
@@ -23591,14 +23563,12 @@ level.
   other: `<parent> structure UP|DOWN` (the parent's way) and `<frame>
   pullback against the <parent>: UP|DOWN|NONE` (the pullback's way:
   always opposite to that structure word; `NONE` = not pulling back).
-  Take each pair from its own clause: 4h and 1h from `Above:`, 1h and
-  15m from the primary, 15m and 3m from `below:`.
+  Take each pair from its own line: 1h and 15m from the primary, 15m
+  and 3m from `below:`, whose phrase names its frame (`below 15m > 3m:
+  3m pullback against the 15m:`).
   `15m structure UP ...
-  3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
-- `Above:` uses the primary's own 1h structure: `1h pullback against
-  the 4h: UP` = the 1h structure is UP while the 4h is DOWN; `NONE` =
-  the 1h structure runs with the 4h (a 1h CHoCH against it is the
-  primary's warning, not a 1h pullback).
+  below 15m >
+  3m: 3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
 - No stage predicts the outcome: a stage is where the structure is, not
   where it goes.
 - Direction: the pullback runs AGAINST the parent.
@@ -25118,14 +25088,14 @@ overlapping, consolidating, or repeatedly failing to continue."
 **Multi-timeframe structure** (the two `MTF structure` lines under
 the `Market state` line, the runner's briefing).
   `1h > 15m` (primary,
-timed on the 3m; the only `Entry:` clause; it ends with `Above:`, the
-4h structure and the 1h pullback against it: no stage word) and
-`below: 15m > 3m` (context; no frame under it, so no `POTENTIAL`,
-`WEAKENING`, `REVERSING`).
-  Each `stage` word is computed:
-copy it from its own line, never infer it, never carry it to another
-level.
-  Primary with the 1h up; mirror for down:
+timed on the 3m; the only `Entry:` clause) and `below: 15m > 3m`
+(context; no frame under it, so no `POTENTIAL`, `WEAKENING`,
+`REVERSING`).
+  The 4h is the Bias line's; no line prints a 4h stage.
+Each `stage` word is computed: copy it from its own line, never infer
+it, never carry it to another level.
+  Primary with the 1h up; mirror
+for down:
 
 | stage | printed when | means |
 |---|---|---|
@@ -25143,14 +25113,12 @@ level.
   other: `<parent> structure UP|DOWN` (the parent's way) and `<frame>
   pullback against the <parent>: UP|DOWN|NONE` (the pullback's way:
   always opposite to that structure word; `NONE` = not pulling back).
-  Take each pair from its own clause: 4h and 1h from `Above:`, 1h and
-  15m from the primary, 15m and 3m from `below:`.
+  Take each pair from its own line: 1h and 15m from the primary, 15m
+  and 3m from `below:`, whose phrase names its frame (`below 15m > 3m:
+  3m pullback against the 15m:`).
   `15m structure UP ...
-  3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
-- `Above:` uses the primary's own 1h structure: `1h pullback against
-  the 4h: UP` = the 1h structure is UP while the 4h is DOWN; `NONE` =
-  the 1h structure runs with the 4h (a 1h CHoCH against it is the
-  primary's warning, not a 1h pullback).
+  below 15m >
+  3m: 3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
 - No stage predicts the outcome: a stage is where the structure is, not
   where it goes.
 - Direction: the pullback runs AGAINST the parent.
@@ -26581,14 +26549,14 @@ overlapping, consolidating, or repeatedly failing to continue."
 **Multi-timeframe structure** (the two `MTF structure` lines under
 the `Market state` line, the runner's briefing).
   `1h > 15m` (primary,
-timed on the 3m; the only `Entry:` clause; it ends with `Above:`, the
-4h structure and the 1h pullback against it: no stage word) and
-`below: 15m > 3m` (context; no frame under it, so no `POTENTIAL`,
-`WEAKENING`, `REVERSING`).
-  Each `stage` word is computed:
-copy it from its own line, never infer it, never carry it to another
-level.
-  Primary with the 1h up; mirror for down:
+timed on the 3m; the only `Entry:` clause) and `below: 15m > 3m`
+(context; no frame under it, so no `POTENTIAL`, `WEAKENING`,
+`REVERSING`).
+  The 4h is the Bias line's; no line prints a 4h stage.
+Each `stage` word is computed: copy it from its own line, never infer
+it, never carry it to another level.
+  Primary with the 1h up; mirror
+for down:
 
 | stage | printed when | means |
 |---|---|---|
@@ -26606,14 +26574,12 @@ level.
   other: `<parent> structure UP|DOWN` (the parent's way) and `<frame>
   pullback against the <parent>: UP|DOWN|NONE` (the pullback's way:
   always opposite to that structure word; `NONE` = not pulling back).
-  Take each pair from its own clause: 4h and 1h from `Above:`, 1h and
-  15m from the primary, 15m and 3m from `below:`.
+  Take each pair from its own line: 1h and 15m from the primary, 15m
+  and 3m from `below:`, whose phrase names its frame (`below 15m > 3m:
+  3m pullback against the 15m:`).
   `15m structure UP ...
-  3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
-- `Above:` uses the primary's own 1h structure: `1h pullback against
-  the 4h: UP` = the 1h structure is UP while the 4h is DOWN; `NONE` =
-  the 1h structure runs with the 4h (a 1h CHoCH against it is the
-  primary's warning, not a 1h pullback).
+  below 15m >
+  3m: 3m pullback against the 15m: DOWN` -> the 3m pullback runs down.
 - No stage predicts the outcome: a stage is where the structure is, not
   where it goes.
 - Direction: the pullback runs AGAINST the parent.
