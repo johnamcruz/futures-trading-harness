@@ -109,3 +109,35 @@ test('the reading lesson (the six mornings: 7 of 13 SELECTION lines): an MTF arm
   const dm = prompts({ ...cfg, mtfMode: ME.modeOf({ arm: 'D', exitMode: 'trail', minStage: 'established' }, {}, REPLAY) }, at, '/r').trade([{ symbol: 'MNQ', bar, scan: [] }]);
   assert.equal(dm, d, 'arm D: the prompt as without a mode');
 });
+
+test('the reading audit (E1): in an MTF arm the Trend rule line says it does not refuse an MTF candidate (the side is the 1h structure\'s) and the Bias line names no refused side; arm D\'s lines as before', () => {
+  const lineOf = (text, re) => text.split('\n').find(l => re.test(l)) || '';
+  const d = B.renderBriefing(build(null), { now: NOW });
+  const dRule = lineOf(d, /^- Trend rule: /);
+  assert.match(dRule, /; no (long|short) against it\.$/, dRule);
+  assert.match(lineOf(d, /^- Bias: /), /; (long|short) refused\)\.$/, 'arm D: the Bias line names the refused side');
+  for (const arm of ['A', 'B', 'AB']) {
+    const t = B.renderBriefing(build(mode(arm)), { now: NOW });
+    const rule = lineOf(t, /^- Trend rule: /);
+    assert.equal(rule, dRule.replace(/; no (long|short) against it\.$/, '; an MTF candidate\'s side is the 1h structure\'s, and this rule does not refuse it.'), arm);
+    assert.doesNotMatch(lineOf(t, /^- Bias: /), /refused/, arm);
+  }
+  assert.equal(require('../../scripts/lib/trading/mtf-entry').mtfBiasText('Bias: long only (4h up, 1h up; short refused)'), 'Bias: long only (4h up, 1h up)');
+  // The cycle prompt's bar line (the record for the gate) carries the same fence in an MTF arm, none in arm D.
+  const { prompts, validateConfig } = require('../../scripts/lib/autotrader');
+  const cfg = validateConfig({ harness: 'claude', symbols: ['MNQ'], timeframe: 3 });
+  const bar = { t: '2026-10-07T13:57:00.000Z', c: 21540, trend: 'Trend rule: LONG allowed (prevailing 4h up); no short against it.' };
+  const at = new Date('2026-10-07T14:00:02Z');
+  assert.match(prompts(cfg, at, '/r').trade([{ symbol: 'MNQ', bar, scan: [] }]), /MNQ Trend rule: LONG allowed \(prevailing 4h up\); no short against it \(recorded for the order gate, which enforces it\)\./);
+  assert.match(prompts({ ...cfg, mtfMode: mode('B') }, at, '/r').trade([{ symbol: 'MNQ', bar, scan: [] }]), /MNQ Trend rule: LONG allowed \(prevailing 4h up\); an MTF candidate's side is the 1h structure's, and this rule does not refuse it \(recorded for the order gate, which enforces it\)\./);
+});
+
+test('the reading audit (E2, E3, E4): an MTF arm\'s closing instruction fences trade-session\'s class table, take rule and pullback setup for a candidate (the side is the 1h structure\'s); arm D has no such sentence', () => {
+  const { prompts } = require('../../scripts/lib/autotrader');
+  const cfg = require('../../scripts/lib/autotrader').validateConfig({ harness: 'claude', symbols: ['MNQ'], timeframe: 3 });
+  const at = new Date('2026-10-07T14:00:02Z');
+  const bar = { t: '2026-10-07T13:57:00.000Z', c: 21540 };
+  const FENCE = ' A candidate is decided by the mtf-entry skill: its side is the 1h structure\'s, and trade-session\'s class table, take rule (your 4h and 1h too) and pullback setup (wait for the 15m turn) are not refusals of it.';
+  for (const arm of ['A', 'B', 'AB']) assert.ok(prompts({ ...cfg, mtfMode: mode(arm) }, at, '/r').trade([{ symbol: 'MNQ', bar, scan: [] }]).includes(`then the result line.${FENCE}`), arm);
+  assert.ok(!prompts(cfg, at, '/r').trade([{ symbol: 'MNQ', bar, scan: [] }]).includes('are not refusals of it'), 'arm D');
+});

@@ -1026,10 +1026,10 @@ function summaryLines(b, et) {
     `Summary (${b.symbol} ${tf}, ${m3.et} ET):`,
     `- Session: ${m3.windowText || `${m3.window} until ${et(m3.windowUntil)} ET`}.`,
     `- Price ${m3.price}. 1R = ${m3.oneR ? `${m3.oneR.points} pts (${m3.oneR.basis})` : 'unknown'}; every distance below is in points and R.`,
-    `- Trend rule: ${rule}`,
+    `- Trend rule: ${mtfOnlyOf(m3) ? ME.mtfTrendRuleText(rule) : rule}`,
     // The side the entry rule (BG) allows, from its own check (bias-line.js): the runner's briefing only (a frame's has no
     // session facts, so no declared trend).
-    ...(!own && biasLine(b) ? [`- ${biasLine(b)}.`] : []),
+    ...(!own && biasLine(b) ? [`- ${mtfOnlyOf(m3) ? ME.mtfBiasText(biasLine(b)) : biasLine(b)}.`] : []),
     // The Market state (market-state.js): one present-tense read, the precedence applied once (taught in trade-session's
     // table); a read, not a filter: no gate, hook, compose or decision code reads it, and it is never a data field.
     ...(!own && stateOf(b, STATE_TH) ? [`- ${marketStateLine(stateOf(b, STATE_TH))}.`] : []),

@@ -790,7 +790,7 @@ const PLAN_STEPS = ['HTF', 'Context', 'Location', 'Setup', 'Confluence', 'Entry'
 const PLAN_TEXT = ` Write the trader-process skill's PLAN (1 ${PLAN_STEPS[0]} to ${PLAN_STEPS.length} ${PLAN_STEPS[PLAN_STEPS.length - 1]}) before the result line.`;
 // An MTF entry arm (mtf_only): the SELECTION line named where the PLAN and the result line are, right before the result
 // line, so the PLAN's step 8 never stands in for it (the reading lesson: the six mornings labelled 7 of 13). Arm D: as above.
-const MTF_PLAN_TEXT = PLAN_TEXT.replace(' before the result line.', ', then, with an MTF candidate line printed, your SELECTION line on its own line (`SELECTION: ENTER|WAIT|PASS - <reason>`, the mtf-entry skill: the one that counts), then the result line.');
+const MTF_PLAN_TEXT = PLAN_TEXT.replace(' before the result line.', ', then, with an MTF candidate line printed, your SELECTION line on its own line (`SELECTION: ENTER|WAIT|PASS - <reason>`, the mtf-entry skill: the one that counts), then the result line. A candidate is decided by the mtf-entry skill: its side is the 1h structure\'s, and trade-session\'s class table, take rule (your 4h and 1h too) and pullback setup (wait for the 15m turn) are not refusals of it.');
 const RESULT_LINE = ` End with the cycle result as plain text in your final message, never as a tool call. Your last line must be exactly: ${RESULT_TEMPLATE}.`;
 
 /**
@@ -865,7 +865,7 @@ function prompts(cfg, now, root = '') {
       const bars = list.filter(x => x.bar).map(({ symbol, bar, scan, verdicts, notEntries, entryBlocked = null, cited = [], minutes = cfg.timeframe, repeat = false }) =>
         // The bar's close is the last of the recent bars below; the trend line is one sentence.
         ` ${symbol}: a ${minutes}-minute bar just closed (opened ${etTime(bar.t)}); closed ${minutes}-minute bars, oldest first, are in ${bar.file} (get_bars format; contractId ${bar.contractId}) - use that file; don't fetch ${minutes}-minute bars.`
-        + (repeat ? '' : bar.trend ? ` ${symbol} ${String(bar.trend).trim().replace(/\.$/, '')} (recorded for the order gate, which enforces it).` : ` ${symbol}: no multi-timeframe record this bar, so the gate refuses trend strategies' entries.`)
+        + (repeat ? '' : bar.trend ? ` ${symbol} ${(mtfOnly ? require('./trading/mtf-entry').mtfTrendRuleText : x => x)(String(bar.trend).trim().replace(/\.$/, ''))} (recorded for the order gate, which enforces it).` : ` ${symbol}: no multi-timeframe record this bar, so the gate refuses trend strategies' entries.`)
         + (bar.plan && !repeat ? ` ${sentence(bar.plan)}` : '')
         + (bar.day && !repeat ? ` ${sentence(bar.day)}` : '')
         + recentBarsText(symbol, bar.recent, minutes)

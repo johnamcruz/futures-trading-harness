@@ -42,6 +42,8 @@ test('the mtf-entry items: about 37 (the facts the selection reads, the selectio
   for (const re of [/its age/, /in the trigger's R/, /over 0\.5R the candidate is void/, /depth alone is not an entry signal/, /The rank is a fact, not a preference/]) assert.ok(qs.some(q => re.test(q.anchor)), String(re));
   for (const re of [/never against it/, /A stage word alone is not an order/, /not ready, not an entry/, /A void one says so plainly/, /15m line decides the pullback/i, /WAIT keeps an active candidate/, /PASS rejects this opportunity/, /a void candidate stays void/, /eligibility, not an obligation/, /The last such line counts/]) assert.ok(qs.some(q => re.test(q.anchor)), String(re));
   // The reading lessons (the six-morning replays and the pick evaluation, 2026-11-19): one item each, on the lesson's text.
+  // The reading audit (2026-11-19, E2, E4, E5): the 1h structure's side, the (early) candidate, the candidate's own stage.
+  for (const re of [/for a candidate the side is the 1h structure's/, /no 15m turn is needed/, /not the primary line's or a context line's/]) assert.ok(qs.some(q => re.test(q.anchor)), String(re));
   for (const re of [/the SELECTION line is the one that counts/, /the candidate line is the setup/, /compose again with the MTF reads only/, /Negative: the price is back toward the stop/, /A 1m candidate is timed by its 1m trigger/, /it fired inside the bar that just closed/, /does not refuse a verified MTF candidate/, /The Market state class describes the market/]) assert.ok(qs.some(q => re.test(q.anchor)), String(re));
 });
 

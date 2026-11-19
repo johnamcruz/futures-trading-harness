@@ -44,7 +44,9 @@ observable facts; you interpret them and select opportunities.
   structure's: today's trend rule line does not refuse a verified MTF candidate (the
   gate exempts a verified MTF entry from `[mtf-trend]`).
 - The Market state class describes the market: weigh it like any other fact. It is
-  not a refusal and not a rule.
+  not a refusal and not a rule. trade-session's class table and its take rule ("your
+  4h and 1h too") are arm D's: for a candidate the side is the 1h structure's. You
+  may still PASS on a chop day with your own reason; never cite the class as a rule.
 - Never substitute an unrelated stop for the verified structural invalidation level.
 - WAIT keeps an active candidate for a later bar (a 3m trigger); a 1m-trigger candidate
   lives one bar, so a WAIT on it is a pass. PASS rejects this opportunity.
@@ -63,9 +65,11 @@ approved trail manages the stop.
 **Evidence discipline:** structure is observable information, not proof of future
 direction. Do not invent advantages for patterns testing has not shown.
 
-**What prints.** Only READY candidates get a `- MTF candidate` line; the earliest
-trigger per side is `(chosen)`, the only one the gate takes: name it in your
-SELECTION line and your reads (`mtf ready` with another model is refused, "the ready
+**What prints.** Only READY candidates get a `- MTF candidate` line: a printed
+candidate is READY. Its stage is its own hierarchy's, printed on its line (arm B: the
+15m > 3m pullback timed on the 1m), not the primary line's or a context line's,
+whatever stage those print; the earliest trigger per side is `(chosen)`, the only
+one the gate takes: name it in your SELECTION line and your reads (`mtf ready` with another model is refused, "the ready
 candidate is X, not Y"). A model still waiting is in the one `- MTF waiting`
 clause: not ready, not an entry. A void one says so plainly, whatever its reason
 ("candidate void (stop traded)", "candidate void (price ran 0.8R past the trigger)"):
@@ -75,7 +79,7 @@ no entry. `(position open: not a pick)`: context, never an entry.
 
 | Part | Means |
 |---|---|
-| model, stage | aggressive (the first CHoCH or CISD back), balanced (a CHoCH back, then a BOS), conservative (15m CHoCH + fresh BOS): the models `mtfEntry.models` enables; `(early)`: before the 15m pullback is established |
+| model, stage | aggressive (the first CHoCH or CISD back), balanced (a CHoCH back, then a BOS), conservative (15m CHoCH + fresh BOS): the models `mtfEntry.models` enables; `(early)`: before the 15m pullback is established, still eligible: no 15m turn is needed (trade-session's pullback setup, wait for the 15m turn, is arm D's) |
 | trigger 3m or 1m | the timing frame, the candidate's own; its age (`new this bar`, `N min ago`). A 1m candidate is timed by its 1m trigger: today's 3m pullback trigger does not apply to it. A 1m trigger fired since the previous 3m close is current: it fired inside the bar that just closed; enter at the next bar or pass (this bar or never) |
 | drift NR past the trigger | how far price ran past the trigger's close, in the trigger's R (its close to the stop). Negative: the price is back toward the stop, the stop closer than at the trigger: not stale, not void. Once any close since the trigger was over 0.5R the candidate is void for good; a trigger over 60 minutes old, or from an earlier session, is void too |
 | fresh turn | the parent's last CHoCH the side's way (this session or the previous one) and the BOS that confirmed it, the BOS count since; "turn N sessions ago (not fresh)": older; "no turn": the trend has run since its first break |
