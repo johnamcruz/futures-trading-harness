@@ -1,0 +1,527 @@
+{
+ "about": "P1 (feat/p1-mtf-entries): the mtf-entry read checks, outside the gated quiz (config/context-quiz.json stays at 113): reading each fact the selection needs off a real candidate line and the selection rules (never against the 1h, a stage word is no order, WAIT vs PASS, a void candidate is never reused); no pullback-quality preferences. Every line is the module's on the goal fixture's and the MTF fixtures' real 3m bars (arm A, minStage potential, prev_high_or_trail); asked against the head prompt plus mtf-entry (lookup), reason first. Generated from the scan; re-generated only with the module or the skill.",
+ "questions": [
+  {
+   "id": "me1",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "mtf-entry"
+   ],
+   "text": "Briefing lines (real, 2022-04-18 09:48 ET), flat:\n- MTF structure 1h > 15m (primary): stage POTENTIAL. 1h structure UP (its break record; the Bias line reads the 1h range: in this entry mode the side is the 1h structure's), 1h protected low 13778 (the origin of the last 1h break) holds on 1h closes. 15m pullback against the 1h: NONE yet (only a 3m CHoCH down 09:27 against the 1h; no 15m break down yet). 3m turning back UP: 09:33. Entry: on the MTF candidate lines.\n- MTF candidate LONG (chosen): aggressive at stage POTENTIAL (early), trigger 3m CHoCH up 09:33 (15 min ago); drift -0.46R past the trigger; context: fresh turn (this session): 1h CHoCH up 02:00, BOS up 09:00; 1 BOS since the turn; impulse 4.88 ATR in 6 bars, 1 displacement candle, cleanness 0.6; pullback #1 of this 1h leg; depth not known; structural stop 13840: 40.75 pts, $82.74 a contract all in; the $300 cap fits 3; 4h structure none yet (context).\nWhat does the chosen candidate's context say about the 1h turn?",
+   "rule": "fresh turn: the parent's last CHoCH the side's way (this session or the previous one) and the BOS that confirmed it",
+   "anchor": "the BOS that confirmed it, the BOS count since",
+   "choices": [
+    "a fresh turn: a 1h CHoCH, then the BOS that confirmed it",
+    "no turn: the trend has run since its first break",
+    "a CHoCH not confirmed by a BOS yet",
+    "the turn is not known"
+   ],
+   "answer": "a fresh turn: a 1h CHoCH, then the BOS that confirmed it"
+  },
+  {
+   "id": "me2",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "mtf-entry"
+   ],
+   "text": "Briefing lines (real, 2022-04-18 09:48 ET), flat:\n- MTF structure 1h > 15m (primary): stage POTENTIAL. 1h structure UP (its break record; the Bias line reads the 1h range: in this entry mode the side is the 1h structure's), 1h protected low 13778 (the origin of the last 1h break) holds on 1h closes. 15m pullback against the 1h: NONE yet (only a 3m CHoCH down 09:27 against the 1h; no 15m break down yet). 3m turning back UP: 09:33. Entry: on the MTF candidate lines.\n- MTF candidate LONG (chosen): aggressive at stage POTENTIAL (early), trigger 3m CHoCH up 09:33 (15 min ago); drift -0.46R past the trigger; context: fresh turn (this session): 1h CHoCH up 02:00, BOS up 09:00; 1 BOS since the turn; impulse 4.88 ATR in 6 bars, 1 displacement candle, cleanness 0.6; pullback #1 of this 1h leg; depth not known; structural stop 13840: 40.75 pts, $82.74 a contract all in; the $300 cap fits 3; 4h structure none yet (context).\nHow many BOS the side's way since the turn does the chosen candidate's context count?",
+   "rule": "the BOS count since the turn",
+   "anchor": "the BOS count since",
+   "choices": [
+    "1",
+    "2",
+    "3",
+    "0"
+   ],
+   "answer": "1"
+  },
+  {
+   "id": "me3",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "mtf-entry"
+   ],
+   "text": "Briefing lines (real, 2022-04-18 09:48 ET), flat:\n- MTF structure 1h > 15m (primary): stage POTENTIAL. 1h structure UP (its break record; the Bias line reads the 1h range: in this entry mode the side is the 1h structure's), 1h protected low 13778 (the origin of the last 1h break) holds on 1h closes. 15m pullback against the 1h: NONE yet (only a 3m CHoCH down 09:27 against the 1h; no 15m break down yet). 3m turning back UP: 09:33. Entry: on the MTF candidate lines.\n- MTF candidate LONG (chosen): aggressive at stage POTENTIAL (early), trigger 3m CHoCH up 09:33 (15 min ago); drift -0.46R past the trigger; context: fresh turn (this session): 1h CHoCH up 02:00, BOS up 09:00; 1 BOS since the turn; impulse 4.88 ATR in 6 bars, 1 displacement candle, cleanness 0.6; pullback #1 of this 1h leg; depth not known; structural stop 13840: 40.75 pts, $82.74 a contract all in; the $300 cap fits 3; 4h structure none yet (context).\nHow large is the impulse the pullback came from, in ATR?",
+   "rule": "impulse: its size in ATR",
+   "anchor": "its size in ATR, bars, displacement candles, cleanness",
+   "choices": [
+    "4.88",
+    "6.38",
+    "2.44",
+    "6"
+   ],
+   "answer": "4.88"
+  },
+  {
+   "id": "me4",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "mtf-entry"
+   ],
+   "text": "Briefing lines (real, 2022-04-18 09:48 ET), flat:\n- MTF structure 1h > 15m (primary): stage POTENTIAL. 1h structure UP (its break record; the Bias line reads the 1h range: in this entry mode the side is the 1h structure's), 1h protected low 13778 (the origin of the last 1h break) holds on 1h closes. 15m pullback against the 1h: NONE yet (only a 3m CHoCH down 09:27 against the 1h; no 15m break down yet). 3m turning back UP: 09:33. Entry: on the MTF candidate lines.\n- MTF candidate LONG (chosen): aggressive at stage POTENTIAL (early), trigger 3m CHoCH up 09:33 (15 min ago); drift -0.46R past the trigger; context: fresh turn (this session): 1h CHoCH up 02:00, BOS up 09:00; 1 BOS since the turn; impulse 4.88 ATR in 6 bars, 1 displacement candle, cleanness 0.6; pullback #1 of this 1h leg; depth not known; structural stop 13840: 40.75 pts, $82.74 a contract all in; the $300 cap fits 3; 4h structure none yet (context).\nHow many displacement candles does the impulse hold?",
+   "rule": "impulse: displacement candles",
+   "anchor": "its size in ATR, bars, displacement candles, cleanness",
+   "choices": [
+    "1",
+    "3",
+    "0",
+    "6"
+   ],
+   "answer": "1"
+  },
+  {
+   "id": "me5",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "mtf-entry"
+   ],
+   "text": "Briefing lines (real, 2022-04-18 09:48 ET), flat:\n- MTF structure 1h > 15m (primary): stage POTENTIAL. 1h structure UP (its break record; the Bias line reads the 1h range: in this entry mode the side is the 1h structure's), 1h protected low 13778 (the origin of the last 1h break) holds on 1h closes. 15m pullback against the 1h: NONE yet (only a 3m CHoCH down 09:27 against the 1h; no 15m break down yet). 3m turning back UP: 09:33. Entry: on the MTF candidate lines.\n- MTF candidate LONG (chosen): aggressive at stage POTENTIAL (early), trigger 3m CHoCH up 09:33 (15 min ago); drift -0.46R past the trigger; context: fresh turn (this session): 1h CHoCH up 02:00, BOS up 09:00; 1 BOS since the turn; impulse 4.88 ATR in 6 bars, 1 displacement candle, cleanness 0.6; pullback #1 of this 1h leg; depth not known; structural stop 13840: 40.75 pts, $82.74 a contract all in; the $300 cap fits 3; 4h structure none yet (context).\nWhat is the impulse's cleanness?",
+   "rule": "cleanness (net move over the bars' ranges, 0-1)",
+   "anchor": "cleanness (net move over the bars' ranges, 0-1)",
+   "choices": [
+    "0.6",
+    "0.4",
+    "1",
+    "0.2"
+   ],
+   "answer": "0.6"
+  },
+  {
+   "id": "me6",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "mtf-entry"
+   ],
+   "text": "Briefing lines (real, 2022-04-18 09:48 ET), flat:\n- MTF structure 1h > 15m (primary): stage POTENTIAL. 1h structure UP (its break record; the Bias line reads the 1h range: in this entry mode the side is the 1h structure's), 1h protected low 13778 (the origin of the last 1h break) holds on 1h closes. 15m pullback against the 1h: NONE yet (only a 3m CHoCH down 09:27 against the 1h; no 15m break down yet). 3m turning back UP: 09:33. Entry: on the MTF candidate lines.\n- MTF candidate LONG (chosen): aggressive at stage POTENTIAL (early), trigger 3m CHoCH up 09:33 (15 min ago); drift -0.46R past the trigger; context: fresh turn (this session): 1h CHoCH up 02:00, BOS up 09:00; 1 BOS since the turn; impulse 4.88 ATR in 6 bars, 1 displacement candle, cleanness 0.6; pullback #1 of this 1h leg; depth not known; structural stop 13840: 40.75 pts, $82.74 a contract all in; the $300 cap fits 3; 4h structure none yet (context).\nWhich pullback of the 1h leg is the chosen candidate?",
+   "rule": "pullback #N of this 1h leg: its count since the 1h break that started the leg",
+   "anchor": "its count since the 1h break that started the leg",
+   "choices": [
+    "the first (#1)",
+    "the second (#2)",
+    "the third or later",
+    "not known"
+   ],
+   "answer": "the first (#1)"
+  },
+  {
+   "id": "me7",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "mtf-entry"
+   ],
+   "text": "Briefing lines (real, 2022-04-18 09:48 ET), flat:\n- MTF structure 1h > 15m (primary): stage POTENTIAL. 1h structure UP (its break record; the Bias line reads the 1h range: in this entry mode the side is the 1h structure's), 1h protected low 13778 (the origin of the last 1h break) holds on 1h closes. 15m pullback against the 1h: NONE yet (only a 3m CHoCH down 09:27 against the 1h; no 15m break down yet). 3m turning back UP: 09:33. Entry: on the MTF candidate lines.\n- MTF candidate LONG (chosen): aggressive at stage POTENTIAL (early), trigger 3m CHoCH up 09:33 (15 min ago); drift -0.46R past the trigger; context: fresh turn (this session): 1h CHoCH up 02:00, BOS up 09:00; 1 BOS since the turn; impulse 4.88 ATR in 6 bars, 1 displacement candle, cleanness 0.6; pullback #1 of this 1h leg; depth not known; structural stop 13840: 40.75 pts, $82.74 a contract all in; the $300 cap fits 3; 4h structure none yet (context).\nAt which stage is the chosen candidate, and is it early?",
+   "rule": "`(early)`: before the 15m pullback is established",
+   "anchor": "before the 15m pullback is established",
+   "choices": [
+    "POTENTIAL, early (before the 15m pullback is established)",
+    "WEAKENING, not early",
+    "CONFIRMED REVERSAL, not early",
+    "NONE: no candidate"
+   ],
+   "answer": "POTENTIAL, early (before the 15m pullback is established)"
+  },
+  {
+   "id": "me8",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "mtf-entry"
+   ],
+   "text": "Briefing lines (real, 2022-04-18 09:48 ET), flat:\n- MTF structure 1h > 15m (primary): stage POTENTIAL. 1h structure UP (its break record; the Bias line reads the 1h range: in this entry mode the side is the 1h structure's), 1h protected low 13778 (the origin of the last 1h break) holds on 1h closes. 15m pullback against the 1h: NONE yet (only a 3m CHoCH down 09:27 against the 1h; no 15m break down yet). 3m turning back UP: 09:33. Entry: on the MTF candidate lines.\n- MTF candidate LONG (chosen): aggressive at stage POTENTIAL (early), trigger 3m CHoCH up 09:33 (15 min ago); drift -0.46R past the trigger; context: fresh turn (this session): 1h CHoCH up 02:00, BOS up 09:00; 1 BOS since the turn; impulse 4.88 ATR in 6 bars, 1 displacement candle, cleanness 0.6; pullback #1 of this 1h leg; depth not known; structural stop 13840: 40.75 pts, $82.74 a contract all in; the $300 cap fits 3; 4h structure none yet (context).\nWhat triggered the chosen candidate?",
+   "rule": "trigger 3m or 1m: the timing frame",
+   "anchor": "the timing frame",
+   "choices": [
+    "a 3m CHoCH",
+    "a 3m CISD",
+    "a 15m BOS",
+    "a 1h CHoCH"
+   ],
+   "answer": "a 3m CHoCH"
+  },
+  {
+   "id": "me9",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "mtf-entry"
+   ],
+   "text": "Briefing lines (real, 2022-04-18 09:48 ET), flat:\n- MTF structure 1h > 15m (primary): stage POTENTIAL. 1h structure UP (its break record; the Bias line reads the 1h range: in this entry mode the side is the 1h structure's), 1h protected low 13778 (the origin of the last 1h break) holds on 1h closes. 15m pullback against the 1h: NONE yet (only a 3m CHoCH down 09:27 against the 1h; no 15m break down yet). 3m turning back UP: 09:33. Entry: on the MTF candidate lines.\n- MTF candidate LONG (chosen): aggressive at stage POTENTIAL (early), trigger 3m CHoCH up 09:33 (15 min ago); drift -0.46R past the trigger; context: fresh turn (this session): 1h CHoCH up 02:00, BOS up 09:00; 1 BOS since the turn; impulse 4.88 ATR in 6 bars, 1 displacement candle, cleanness 0.6; pullback #1 of this 1h leg; depth not known; structural stop 13840: 40.75 pts, $82.74 a contract all in; the $300 cap fits 3; 4h structure none yet (context).\nWhat does one contract risk all in at the chosen candidate's structural stop?",
+   "rule": "structural stop, `$ a contract all in`: the size the code will take",
+   "anchor": "the size the code will take",
+   "choices": [
+    "$82.74",
+    "$165.48",
+    "$300",
+    "$41.37"
+   ],
+   "answer": "$82.74"
+  },
+  {
+   "id": "me10",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "mtf-entry"
+   ],
+   "text": "Briefing lines (real, 2021-05-25 10:27 ET), flat:\n- MTF structure 1h > 15m (primary): stage WEAKENING. 1h structure UP (its break record; the Bias line reads the 1h range: in this entry mode the side is the 1h structure's), 1h protected low 16967.5 (the origin of the last 1h break) holds on 1h closes. 15m pullback against the 1h: DOWN (15m CHoCH down 04:15, BOS down 06:45); pullback low 16980.75; depth deep (0.88); its protected high 17068.75. 3m turning back UP with the 1h: CISD up 10:24. Entry: on the MTF candidate lines.\n- MTF candidate LONG (chosen): aggressive at stage WEAKENING, trigger 3m CISD up 10:24 (3 min ago); drift 0.17R past the trigger; context: fresh turn (the previous session): 1h CHoCH up 05-24 04:00, BOS up 02:00; 1 BOS since the turn; impulse 7.55 ATR in 110 bars, 15 displacement candles, cleanness 0.06; pullback #1 of this 1h leg; depth 88% (deep): the stop 23.75 pts away, the impulse extreme 70.75 pts away; structural stop 16980.5: 23.75 pts, $48.74 a contract all in; the $300 cap fits 6; previous high 17075 (the exit target), 2.98R; 4h structure UP (context).\n- MTF waiting: 3m balanced needs a 3m BOS up.\nHow old is the chosen candidate's trigger?",
+   "rule": "its age (`new this bar`, `N min ago`)",
+   "anchor": "its age (`new this bar`, `N min ago`)",
+   "choices": [
+    "3 min",
+    "6 min",
+    "new this bar",
+    "18 min"
+   ],
+   "answer": "3 min"
+  },
+  {
+   "id": "me11",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "mtf-entry"
+   ],
+   "text": "Briefing lines (real, 2021-05-25 10:27 ET), flat:\n- MTF structure 1h > 15m (primary): stage WEAKENING. 1h structure UP (its break record; the Bias line reads the 1h range: in this entry mode the side is the 1h structure's), 1h protected low 16967.5 (the origin of the last 1h break) holds on 1h closes. 15m pullback against the 1h: DOWN (15m CHoCH down 04:15, BOS down 06:45); pullback low 16980.75; depth deep (0.88); its protected high 17068.75. 3m turning back UP with the 1h: CISD up 10:24. Entry: on the MTF candidate lines.\n- MTF candidate LONG (chosen): aggressive at stage WEAKENING, trigger 3m CISD up 10:24 (3 min ago); drift 0.17R past the trigger; context: fresh turn (the previous session): 1h CHoCH up 05-24 04:00, BOS up 02:00; 1 BOS since the turn; impulse 7.55 ATR in 110 bars, 15 displacement candles, cleanness 0.06; pullback #1 of this 1h leg; depth 88% (deep): the stop 23.75 pts away, the impulse extreme 70.75 pts away; structural stop 16980.5: 23.75 pts, $48.74 a contract all in; the $300 cap fits 6; previous high 17075 (the exit target), 2.98R; 4h structure UP (context).\n- MTF waiting: 3m balanced needs a 3m BOS up.\nHow far has price run past the chosen candidate's trigger, in R?",
+   "rule": "drift NR past the trigger: how far price ran past the trigger's close, in the trigger's R",
+   "anchor": "how far price ran past the trigger's close, in the trigger's R",
+   "choices": [
+    "0.17R",
+    "0.67R",
+    "0R",
+    "0.51R"
+   ],
+   "answer": "0.17R"
+  },
+  {
+   "id": "me12",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "mtf-entry"
+   ],
+   "text": "Briefing lines (real, 2021-05-25 12:00 ET), flat:\n- MTF structure 1h > 15m (primary): stage WEAKENING. 1h structure UP (its break record; the Bias line reads the 1h range: in this entry mode the side is the 1h structure's), 1h protected low 16967.5 (the origin of the last 1h break) holds on 1h closes. 15m pullback against the 1h: DOWN (15m CHoCH down 04:15, BOS down 06:45); pullback low 16943; depth breached (1.23); its protected high 17022.75. 3m turning back UP with the 1h: CISD up 11:45. Entry: on the MTF candidate lines.\n- MTF structure below (early read; 3m, noisy: the 15m line decides the pullback, the 3m only times it): 15m > 3m (context): stage NONE. 15m structure DOWN, 15m protected high 17022.75 (the origin of the last 15m break) holds on 15m closes. below 15m > 3m: 3m pullback against the 15m: NONE (last: ended before ESTABLISHED, 11:18).\n- MTF candidate: none ready the 1h's way (LONG); 3m aggressive: candidate void (price ran 1.23R past the trigger).\n- MTF waiting: 3m balanced needs a 3m BOS up.\nWhat does \"price ran ... past the trigger\" mean for an entry?",
+   "rule": "over 0.5R the candidate is void",
+   "anchor": "over 0.5R the candidate is void",
+   "choices": [
+    "no entry: price ran over 0.5R past the trigger, the candidate is void",
+    "enter at the market now",
+    "enter with a wider stop",
+    "wait for price to come back, then it is live again"
+   ],
+   "answer": "no entry: price ran over 0.5R past the trigger, the candidate is void"
+  },
+  {
+   "id": "me13",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "mtf-entry"
+   ],
+   "text": "Briefing lines (real, 2021-05-25 10:24 ET), flat:\n- MTF structure 1h > 15m (primary): stage WEAKENING. 1h structure UP (its break record; the Bias line reads the 1h range: in this entry mode the side is the 1h structure's), 1h protected low 16967.5 (the origin of the last 1h break) holds on 1h closes. 15m pullback against the 1h: DOWN (15m CHoCH down 04:15, BOS down 06:45); pullback low 16980.75; depth deep (0.88); its protected high 17068.75. 3m turning back UP with the 1h: CISD up 10:24. Entry: on the MTF candidate lines.\n- MTF candidate LONG (chosen): aggressive at stage WEAKENING, trigger 3m CISD up 10:24 (new this bar); drift 0R past the trigger; context: fresh turn (the previous session): 1h CHoCH up 05-24 04:00, BOS up 02:00; 1 BOS since the turn; impulse 7.55 ATR in 110 bars, 15 displacement candles, cleanness 0.06; pullback #1 of this 1h leg; depth 88% (deep): the stop 20.25 pts away, the impulse extreme 74.25 pts away; structural stop 16980.5: 20.25 pts, $41.74 a contract all in; the $300 cap fits 7; previous high 17075 (the exit target), 3.67R; 4h structure UP (context).\n- MTF waiting: 3m balanced needs a 3m BOS up.\nWhat is the chosen candidate's pullback depth class, and what does it decide alone?",
+   "rule": "depth N% (class): how far the pullback retraced the parent impulse; context only, depth alone is not an entry signal",
+   "anchor": "depth alone is not an entry signal",
+   "choices": [
+    "deep: context only, never an entry signal alone",
+    "shallow: context only, never an entry signal alone",
+    "moderate: context only, never an entry signal alone",
+    "deep: it is the entry signal"
+   ],
+   "answer": "deep: context only, never an entry signal alone"
+  },
+  {
+   "id": "me14",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "mtf-entry"
+   ],
+   "text": "Briefing lines (real, 2021-05-25 10:36 ET), flat:\n- MTF structure 1h > 15m (primary): stage WEAKENING. 1h structure UP (its break record; the Bias line reads the 1h range: in this entry mode the side is the 1h structure's), 1h protected low 16967.5 (the origin of the last 1h break) holds on 1h closes. 15m pullback against the 1h: DOWN (15m CHoCH down 04:15, BOS down 06:45); pullback low 16972.75; depth deep (0.95); its protected high 17068.75. 3m turning back UP with the 1h: CISD up 10:24. Entry: on the MTF candidate lines.\n- MTF structure below (early read; 3m, noisy: the 15m line decides the pullback, the 3m only times it): 15m > 3m (context): stage NONE. 15m structure DOWN, 15m protected high 17068.75 (the origin of the last 15m break) holds on 15m closes. below 15m > 3m: 3m pullback against the 15m: NONE (last: ended before ESTABLISHED, 09:39).\n- MTF candidate: none ready the 1h's way (LONG); 3m aggressive: candidate void (stop traded).\n- MTF waiting: 3m balanced needs a 3m BOS up.\nIs a balanced entry ready on this bar?",
+   "rule": "A model still waiting is in the one `- MTF waiting` clause: not ready, not an entry",
+   "anchor": "not ready, not an entry",
+   "choices": [
+    "no: it waits for a 3m BOS; nothing to enter",
+    "yes: the waiting clause names it",
+    "yes, once the next bar opens",
+    "only if the 4h agrees"
+   ],
+   "answer": "no: it waits for a 3m BOS; nothing to enter"
+  },
+  {
+   "id": "me15",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "mtf-entry"
+   ],
+   "text": "Briefing lines (real, 2021-05-25 09:33 ET), flat:\n- MTF structure 1h > 15m (primary): stage REVERSING. 1h structure UP, 1h protected low 16967.5 (the origin of the last 1h break) holds on 1h closes. 15m pullback against the 1h: DOWN (15m CHoCH down 04:15, BOS down 06:45); pullback low 17012; depth moderate (0.59); its protected high 17062.25. 3m turned back UP with the 1h: CISD up 07:09, then BOS up 07:48. Entry: on the MTF candidate lines.\n- MTF structure below (early read; 3m, noisy: the 15m line decides the pullback, the 3m only times it): 15m > 3m (context): stage DEVELOPING. 15m structure DOWN, 15m protected high 17062.25 (the origin of the last 15m break) not broken on a 15m close; WARNING: a 3m close 17063.5 above it at 09:33 (the 15m close decides). below 15m > 3m: 3m pullback against the 15m: UP (3m CHoCH up 09:33, no 3m BOS up yet: not established); pullback high 17068.75; price has not turned back down.\n- MTF candidate: none ready the 1h's way (LONG); 3m balanced: candidate void (stop traded).\nWhat does \"candidate void (stop traded)\" mean for an entry?",
+   "rule": "A void one says so plainly: no entry",
+   "anchor": "A void one says so plainly",
+   "choices": [
+    "no entry: the candidate is void",
+    "enter at a better price",
+    "enter with a wider stop",
+    "wait for the stop to be traded again"
+   ],
+   "answer": "no entry: the candidate is void"
+  },
+  {
+   "id": "me16",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "mtf-entry"
+   ],
+   "text": "Briefing lines (real, 2021-05-25 09:33 ET), flat:\n- MTF structure 1h > 15m (primary): stage REVERSING. 1h structure UP, 1h protected low 16967.5 (the origin of the last 1h break) holds on 1h closes. 15m pullback against the 1h: DOWN (15m CHoCH down 04:15, BOS down 06:45); pullback low 17012; depth moderate (0.59); its protected high 17062.25. 3m turned back UP with the 1h: CISD up 07:09, then BOS up 07:48. Entry: on the MTF candidate lines.\n- MTF structure below (early read; 3m, noisy: the 15m line decides the pullback, the 3m only times it): 15m > 3m (context): stage DEVELOPING. 15m structure DOWN, 15m protected high 17062.25 (the origin of the last 15m break) not broken on a 15m close; WARNING: a 3m close 17063.5 above it at 09:33 (the 15m close decides). below 15m > 3m: 3m pullback against the 15m: UP (3m CHoCH up 09:33, no 3m BOS up yet: not established); pullback high 17068.75; price has not turned back down.\n- MTF candidate: none ready the 1h's way (LONG); 3m balanced: candidate void (stop traded).\nWhich line decides whether the pullback is established?",
+   "rule": "the 15m line decides the pullback; the 3m line only times it",
+   "anchor": "the 15m line decides the pullback; the 3m line only times it",
+   "choices": [
+    "the primary 15m line; the below 3m line only times it",
+    "the below 3m line",
+    "either: whichever says ESTABLISHED",
+    "the candidate line's stage alone"
+   ],
+   "answer": "the primary 15m line; the below 3m line only times it"
+  },
+  {
+   "id": "me17",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "mtf-entry"
+   ],
+   "text": "Briefing lines (real, 2021-05-26 09:33 ET), flat:\n- MTF structure 1h > 15m (primary): stage POTENTIAL. 1h structure UP, 1h protected low 16967.5 (the origin of the last 1h break) holds on 1h closes. 15m pullback against the 1h: NONE yet (only a 3m CHoCH down 08:48 against the 1h; no 15m break down yet). 3m turning back UP: 09:33. Entry: on the MTF candidate lines.\n- MTF candidate LONG (chosen): aggressive at stage POTENTIAL (early), trigger 3m CISD up 09:33 (new this bar); drift 0R past the trigger; context: turn 2 sessions ago (not fresh): 1h CHoCH up 05-24 04:00, BOS up 05-25 02:00; 1 BOS since the turn; impulse 7.55 ATR in 110 bars, 15 displacement candles, cleanness 0.06; pullback #3 of this 1h leg; depth not known; structural stop 16942.75: 93 pts, $187.24 a contract all in; the $300 cap fits 1, under the floor of 3: 3 = $561.72, over the $500 floor stretch: skip; 4h structure UP (context).\nWhat will the size code do with the chosen candidate?",
+   "rule": "under the floor: the stretch only while healthy, else skip",
+   "anchor": "under the floor: the stretch only while healthy, else skip",
+   "choices": [
+    "skip: 3 contracts cost more than the floor stretch",
+    "take 1 contract",
+    "take 3 contracts at the $500 stretch",
+    "take the cap's size"
+   ],
+   "answer": "skip: 3 contracts cost more than the floor stretch"
+  },
+  {
+   "id": "me18",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "mtf-entry"
+   ],
+   "text": "Briefing lines (real, 2021-05-26 10:18 ET), flat:\n- MTF structure 1h > 15m (primary): stage DEVELOPING. 1h structure UP (its break record; the Bias line reads the 1h range: in this entry mode the side is the 1h structure's), 1h protected low 16967.5 (the origin of the last 1h break) holds on 1h closes (1h CHoCH down at 17007.5: a warning, not a reversal). 15m pullback against the 1h: DOWN (15m CHoCH down 09:45, no 15m BOS down yet: not established); pullback low 16943; depth breached (1.23). 3m turning back UP: 10:18. Entry: on the MTF candidate lines.\n- MTF candidate LONG (chosen): aggressive at stage DEVELOPING (early), trigger 3m CISD up 10:18 (new this bar); drift 0R past the trigger; context: turn 2 sessions ago (not fresh): 1h CHoCH up 05-24 04:00, BOS up 05-25 02:00; 1 BOS since the turn; impulse 7.55 ATR in 110 bars, 15 displacement candles, cleanness 0.06; pullback #3 of this 1h leg; depth 123% (breached): the stop 72 pts away, the impulse extreme 60.25 pts away; structural stop 16942.75: 72 pts, $145.24 a contract all in; the $300 cap fits 2, under the floor of 3: 3 = $435.72 (the $500 floor stretch only while the attempt is healthy, else skip); previous high 17075 (the exit target), 0.84R (under 1R); 4h structure UP (context).\nThe exit target is under 1R away. What does the teaching say?",
+   "rule": "previous high (exit target): under 1R: weigh whether the room pays",
+   "anchor": "under 1R: weigh whether the room pays",
+   "choices": [
+    "weigh whether the room pays; no automatic skip",
+    "always skip it",
+    "always take it",
+    "move the stop closer"
+   ],
+   "answer": "weigh whether the room pays; no automatic skip"
+  },
+  {
+   "id": "me19",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "mtf-entry"
+   ],
+   "text": "Briefing lines (real, 2021-05-28 10:36 ET), flat:\n- MTF structure 1h > 15m (primary): stage POTENTIAL. 1h structure UP, 1h protected low 16999 (the origin of the last 1h break) holds on 1h closes. 15m pullback against the 1h: NONE yet (only a 3m CHoCH down 10:27 against the 1h; no 15m break down yet). 3m turning back UP: 10:36. Entry: on the MTF candidate lines.\n- MTF candidate LONG (chosen): aggressive at stage POTENTIAL (early), trigger 3m CISD up 10:36 (new this bar); drift 0R past the trigger; context: fresh turn (the previous session): 1h CHoCH up 05-27 12:00, no BOS up yet; 0 BOS since the turn; impulse 4.29 ATR in 4 bars, 1 displacement candle, cleanness 0.69; pullback #2 of this 1h leg; depth not known; structural stop 17030.5: 27 pts, $55.24 a contract all in; the $300 cap fits 5; 4h structure UP (context).\nThe chosen candidate is the 2nd pullback of the leg. What does the teaching say about its rank?",
+   "rule": "The rank is a fact, not a preference: weigh #1, #2 and later on the rest of the line",
+   "anchor": "The rank is a fact, not a preference",
+   "choices": [
+    "a fact to weigh with the rest of the line; no rank is preferred",
+    "it needs a cleaner read than #1",
+    "pass: only #1 is an entry",
+    "conservative only"
+   ],
+   "answer": "a fact to weigh with the rest of the line; no rank is preferred"
+  },
+  {
+   "id": "me20",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "mtf-entry"
+   ],
+   "text": "Briefing lines (real, 2021-05-25 10:24 ET), flat:\n- MTF structure 1h > 15m (primary): stage WEAKENING. 1h structure UP (its break record; the Bias line reads the 1h range: in this entry mode the side is the 1h structure's), 1h protected low 16967.5 (the origin of the last 1h break) holds on 1h closes. 15m pullback against the 1h: DOWN (15m CHoCH down 04:15, BOS down 06:45); pullback low 16980.75; depth deep (0.88); its protected high 17068.75. 3m turning back UP with the 1h: CISD up 10:24. Entry: on the MTF candidate lines.\n- MTF candidate LONG (chosen): aggressive at stage WEAKENING, trigger 3m CISD up 10:24 (new this bar); drift 0R past the trigger; context: fresh turn (the previous session): 1h CHoCH up 05-24 04:00, BOS up 02:00; 1 BOS since the turn; impulse 7.55 ATR in 110 bars, 15 displacement candles, cleanness 0.06; pullback #1 of this 1h leg; depth 88% (deep): the stop 20.25 pts away, the impulse extreme 74.25 pts away; structural stop 16980.5: 20.25 pts, $41.74 a contract all in; the $300 cap fits 7; previous high 17075 (the exit target), 3.67R; 4h structure UP (context).\n- MTF waiting: 3m balanced needs a 3m BOS up.\nYou read a short at this level. May you take it?",
+   "rule": "The side is the 1h structure's, never against it",
+   "anchor": "never against it",
+   "choices": [
+    "never: the side is the 1h structure's",
+    "yes, if the 4h is down",
+    "yes, with a conservative entry",
+    "yes, with half size"
+   ],
+   "answer": "never: the side is the 1h structure's"
+  },
+  {
+   "id": "me21",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "mtf-entry"
+   ],
+   "text": "Briefing lines (real, 2021-05-25 10:36 ET), flat:\n- MTF structure 1h > 15m (primary): stage WEAKENING. 1h structure UP (its break record; the Bias line reads the 1h range: in this entry mode the side is the 1h structure's), 1h protected low 16967.5 (the origin of the last 1h break) holds on 1h closes. 15m pullback against the 1h: DOWN (15m CHoCH down 04:15, BOS down 06:45); pullback low 16972.75; depth deep (0.95); its protected high 17068.75. 3m turning back UP with the 1h: CISD up 10:24. Entry: on the MTF candidate lines.\n- MTF structure below (early read; 3m, noisy: the 15m line decides the pullback, the 3m only times it): 15m > 3m (context): stage NONE. 15m structure DOWN, 15m protected high 17068.75 (the origin of the last 15m break) holds on 15m closes. below 15m > 3m: 3m pullback against the 15m: NONE (last: ended before ESTABLISHED, 09:39).\n- MTF candidate: none ready the 1h's way (LONG); 3m aggressive: candidate void (stop traded).\n- MTF waiting: 3m balanced needs a 3m BOS up.\nThe primary line says stage WEAKENING. Is that an order to enter?",
+   "rule": "A stage word alone is not an order",
+   "anchor": "A stage word alone is not an order",
+   "choices": [
+    "no: a stage word alone is not an order",
+    "yes: WEAKENING is the aggressive entry",
+    "yes, at the next bar",
+    "only with the 4h"
+   ],
+   "answer": "no: a stage word alone is not an order"
+  },
+  {
+   "id": "me22",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "mtf-entry"
+   ],
+   "text": "Briefing lines (real, 2022-04-18 09:48 ET), flat:\n- MTF structure 1h > 15m (primary): stage POTENTIAL. 1h structure UP (its break record; the Bias line reads the 1h range: in this entry mode the side is the 1h structure's), 1h protected low 13778 (the origin of the last 1h break) holds on 1h closes. 15m pullback against the 1h: NONE yet (only a 3m CHoCH down 09:27 against the 1h; no 15m break down yet). 3m turning back UP: 09:33. Entry: on the MTF candidate lines.\n- MTF candidate LONG (chosen): aggressive at stage POTENTIAL (early), trigger 3m CHoCH up 09:33 (15 min ago); drift -0.46R past the trigger; context: fresh turn (this session): 1h CHoCH up 02:00, BOS up 09:00; 1 BOS since the turn; impulse 4.88 ATR in 6 bars, 1 displacement candle, cleanness 0.6; pullback #1 of this 1h leg; depth not known; structural stop 13840: 40.75 pts, $82.74 a contract all in; the $300 cap fits 3; 4h structure none yet (context).\nThe candidate line is printed. What decides the entry?",
+   "rule": "Structural readiness is eligibility, not an obligation",
+   "anchor": "Structural readiness is eligibility, not an obligation",
+   "choices": [
+    "your selection: a ready candidate is eligible, never an obligation",
+    "the line itself: it is an order",
+    "the 4h context alone",
+    "the rank alone"
+   ],
+   "answer": "your selection: a ready candidate is eligible, never an obligation"
+  },
+  {
+   "id": "me23",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "mtf-entry"
+   ],
+   "text": "Briefing lines (real, 2021-05-25 09:33 ET), flat:\n- MTF structure 1h > 15m (primary): stage REVERSING. 1h structure UP, 1h protected low 16967.5 (the origin of the last 1h break) holds on 1h closes. 15m pullback against the 1h: DOWN (15m CHoCH down 04:15, BOS down 06:45); pullback low 17012; depth moderate (0.59); its protected high 17062.25. 3m turned back UP with the 1h: CISD up 07:09, then BOS up 07:48. Entry: on the MTF candidate lines.\n- MTF structure below (early read; 3m, noisy: the 15m line decides the pullback, the 3m only times it): 15m > 3m (context): stage DEVELOPING. 15m structure DOWN, 15m protected high 17062.25 (the origin of the last 15m break) not broken on a 15m close; WARNING: a 3m close 17063.5 above it at 09:33 (the 15m close decides). below 15m > 3m: 3m pullback against the 15m: UP (3m CHoCH up 09:33, no 3m BOS up yet: not established); pullback high 17068.75; price has not turned back down.\n- MTF candidate: none ready the 1h's way (LONG); 3m balanced: candidate void (stop traded).\nWhich option fits this bar?",
+   "rule": "A void one says so plainly: no entry",
+   "anchor": "A void one says so plainly",
+   "choices": [
+    "nothing to enter: the candidate is void",
+    "aggressive now",
+    "balanced now",
+    "conservative now"
+   ],
+   "answer": "nothing to enter: the candidate is void"
+  },
+  {
+   "id": "me24",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "mtf-entry"
+   ],
+   "text": "Briefing lines (real, 2022-04-18 09:48 ET), flat:\n- MTF structure 1h > 15m (primary): stage POTENTIAL. 1h structure UP (its break record; the Bias line reads the 1h range: in this entry mode the side is the 1h structure's), 1h protected low 13778 (the origin of the last 1h break) holds on 1h closes. 15m pullback against the 1h: NONE yet (only a 3m CHoCH down 09:27 against the 1h; no 15m break down yet). 3m turning back UP: 09:33. Entry: on the MTF candidate lines.\n- MTF candidate LONG (chosen): aggressive at stage POTENTIAL (early), trigger 3m CHoCH up 09:33 (15 min ago); drift -0.46R past the trigger; context: fresh turn (this session): 1h CHoCH up 02:00, BOS up 09:00; 1 BOS since the turn; impulse 4.88 ATR in 6 bars, 1 displacement candle, cleanness 0.6; pullback #1 of this 1h leg; depth not known; structural stop 13840: 40.75 pts, $82.74 a contract all in; the $300 cap fits 3; 4h structure none yet (context).\nThe candidate is ready, but you want the next 3m bar's close first. Which decision keeps it?",
+   "rule": "WAIT keeps an active candidate for a later bar; PASS rejects this opportunity",
+   "anchor": "WAIT keeps an active candidate for a later bar; PASS rejects this opportunity",
+   "choices": [
+    "SELECTION: WAIT - it stays a candidate; the next bar's line decides again",
+    "SELECTION: PASS - it stays a candidate for later",
+    "SELECTION: ENTER - a ready line must be taken",
+    "no line: a ready line needs no decision"
+   ],
+   "answer": "SELECTION: WAIT - it stays a candidate; the next bar's line decides again"
+  },
+  {
+   "id": "me25",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "mtf-entry"
+   ],
+   "text": "Briefing lines (real, 2022-04-18 09:48 ET), flat:\n- MTF structure 1h > 15m (primary): stage POTENTIAL. 1h structure UP (its break record; the Bias line reads the 1h range: in this entry mode the side is the 1h structure's), 1h protected low 13778 (the origin of the last 1h break) holds on 1h closes. 15m pullback against the 1h: NONE yet (only a 3m CHoCH down 09:27 against the 1h; no 15m break down yet). 3m turning back UP: 09:33. Entry: on the MTF candidate lines.\n- MTF candidate LONG (chosen): aggressive at stage POTENTIAL (early), trigger 3m CHoCH up 09:33 (15 min ago); drift -0.46R past the trigger; context: fresh turn (this session): 1h CHoCH up 02:00, BOS up 09:00; 1 BOS since the turn; impulse 4.88 ATR in 6 bars, 1 displacement candle, cleanness 0.6; pullback #1 of this 1h leg; depth not known; structural stop 13840: 40.75 pts, $82.74 a contract all in; the $300 cap fits 3; 4h structure none yet (context).\nYou judge this candidate not worth the risk. Which decision do you state?",
+   "rule": "WAIT keeps an active candidate for a later bar; PASS rejects this opportunity",
+   "anchor": "PASS rejects this opportunity",
+   "choices": [
+    "SELECTION: PASS - this opportunity is rejected",
+    "SELECTION: WAIT - the same as a pass",
+    "SELECTION: ENTER at half size",
+    "no line to state"
+   ],
+   "answer": "SELECTION: PASS - this opportunity is rejected"
+  },
+  {
+   "id": "me26",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "mtf-entry"
+   ],
+   "text": "Briefing lines (real, 2022-04-18 09:48 ET), flat:\n- MTF structure 1h > 15m (primary): stage POTENTIAL. 1h structure UP (its break record; the Bias line reads the 1h range: in this entry mode the side is the 1h structure's), 1h protected low 13778 (the origin of the last 1h break) holds on 1h closes. 15m pullback against the 1h: NONE yet (only a 3m CHoCH down 09:27 against the 1h; no 15m break down yet). 3m turning back UP: 09:33. Entry: on the MTF candidate lines.\n- MTF candidate LONG (chosen): aggressive at stage POTENTIAL (early), trigger 3m CHoCH up 09:33 (15 min ago); drift -0.46R past the trigger; context: fresh turn (this session): 1h CHoCH up 02:00, BOS up 09:00; 1 BOS since the turn; impulse 4.88 ATR in 6 bars, 1 displacement candle, cleanness 0.6; pullback #1 of this 1h leg; depth not known; structural stop 13840: 40.75 pts, $82.74 a contract all in; the $300 cap fits 3; 4h structure none yet (context).\nHow do you state your decision on this candidate?",
+   "rule": "State your decision on one line of its own, at the line's start: SELECTION: ENTER|WAIT|PASS - <reason>",
+   "anchor": "The last such line counts; none is an unlabelled decision",
+   "choices": [
+    "one line at its start: SELECTION: ENTER, WAIT or PASS, a dash and the reason; the last such line counts",
+    "the words enter, wait or pass anywhere in the reasoning",
+    "only the CYCLE RESULT line",
+    "nothing: the order shows it"
+   ],
+   "answer": "one line at its start: SELECTION: ENTER, WAIT or PASS, a dash and the reason; the last such line counts"
+  },
+  {
+   "id": "me27",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "mtf-entry"
+   ],
+   "text": "Briefing lines (real, 2021-05-25 12:00 ET), flat:\n- MTF structure 1h > 15m (primary): stage WEAKENING. 1h structure UP (its break record; the Bias line reads the 1h range: in this entry mode the side is the 1h structure's), 1h protected low 16967.5 (the origin of the last 1h break) holds on 1h closes. 15m pullback against the 1h: DOWN (15m CHoCH down 04:15, BOS down 06:45); pullback low 16943; depth breached (1.23); its protected high 17022.75. 3m turning back UP with the 1h: CISD up 11:45. Entry: on the MTF candidate lines.\n- MTF structure below (early read; 3m, noisy: the 15m line decides the pullback, the 3m only times it): 15m > 3m (context): stage NONE. 15m structure DOWN, 15m protected high 17022.75 (the origin of the last 15m break) holds on 15m closes. below 15m > 3m: 3m pullback against the 15m: NONE (last: ended before ESTABLISHED, 11:18).\n- MTF candidate: none ready the 1h's way (LONG); 3m aggressive: candidate void (price ran 1.23R past the trigger).\n- MTF waiting: 3m balanced needs a 3m BOS up.\nOn the next bar price comes back near the trigger. May this candidate be entered then?",
+   "rule": "Do not reuse invalidated execution confirmations: a void candidate stays void",
+   "anchor": "Do not reuse invalidated execution confirmations: a void candidate stays void",
+   "choices": [
+    "no: a void candidate stays void; only a new trigger is a new candidate",
+    "yes: it is back within 0.5R",
+    "yes, at half size",
+    "yes, if the 4h agrees"
+   ],
+   "answer": "no: a void candidate stays void; only a new trigger is a new candidate"
+  },
+  {
+   "id": "me28",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "mtf-entry"
+   ],
+   "text": "Briefing lines (real, 2021-05-25 10:24 ET), flat:\n- MTF structure 1h > 15m (primary): stage WEAKENING. 1h structure UP (its break record; the Bias line reads the 1h range: in this entry mode the side is the 1h structure's), 1h protected low 16967.5 (the origin of the last 1h break) holds on 1h closes. 15m pullback against the 1h: DOWN (15m CHoCH down 04:15, BOS down 06:45); pullback low 16980.75; depth deep (0.88); its protected high 17068.75. 3m turning back UP with the 1h: CISD up 10:24. Entry: on the MTF candidate lines.\n- MTF candidate LONG (chosen): aggressive at stage WEAKENING, trigger 3m CISD up 10:24 (new this bar); drift 0R past the trigger; context: fresh turn (the previous session): 1h CHoCH up 05-24 04:00, BOS up 02:00; 1 BOS since the turn; impulse 7.55 ATR in 110 bars, 15 displacement candles, cleanness 0.06; pullback #1 of this 1h leg; depth 88% (deep): the stop 20.25 pts away, the impulse extreme 74.25 pts away; structural stop 16980.5: 20.25 pts, $41.74 a contract all in; the $300 cap fits 7; previous high 17075 (the exit target), 3.67R; 4h structure UP (context).\n- MTF waiting: 3m balanced needs a 3m BOS up.\nA strong short signal prints on the 3m at this level. What about a short?",
+   "rule": "never against the 1h",
+   "anchor": "never against it",
+   "choices": [
+    "never take the short: it is against the 1h structure",
+    "take the short at the 3m signal",
+    "take the short with a conservative entry",
+    "take the short at half size"
+   ],
+   "answer": "never take the short: it is against the 1h structure"
+  },
+  {
+   "id": "me29",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "mtf-entry"
+   ],
+   "text": "Briefing lines (real, 2021-05-25 10:36 ET), flat:\n- MTF structure 1h > 15m (primary): stage WEAKENING. 1h structure UP (its break record; the Bias line reads the 1h range: in this entry mode the side is the 1h structure's), 1h protected low 16967.5 (the origin of the last 1h break) holds on 1h closes. 15m pullback against the 1h: DOWN (15m CHoCH down 04:15, BOS down 06:45); pullback low 16972.75; depth deep (0.95); its protected high 17068.75. 3m turning back UP with the 1h: CISD up 10:24. Entry: on the MTF candidate lines.\n- MTF structure below (early read; 3m, noisy: the 15m line decides the pullback, the 3m only times it): 15m > 3m (context): stage NONE. 15m structure DOWN, 15m protected high 17068.75 (the origin of the last 15m break) holds on 15m closes. below 15m > 3m: 3m pullback against the 15m: NONE (last: ended before ESTABLISHED, 09:39).\n- MTF candidate: none ready the 1h's way (LONG); 3m aggressive: candidate void (stop traded).\n- MTF waiting: 3m balanced needs a 3m BOS up.\nWhich option fits this bar?",
+   "rule": "A model still waiting: not ready, not an entry",
+   "anchor": "not ready, not an entry",
+   "choices": [
+    "nothing to enter: no candidate is ready",
+    "aggressive now",
+    "balanced now",
+    "conservative now"
+   ],
+   "answer": "nothing to enter: no candidate is ready"
+  }
+ ]
+}
