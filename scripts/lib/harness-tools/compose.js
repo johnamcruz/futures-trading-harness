@@ -90,11 +90,15 @@ function composeCheck({ symbol = null, side = null, reads = null, size = null } 
   const entryRule = entryRuleHere(home, doc, all, symbol);
   // The setups a record may cite (a `<strategy> fired` read: its plan, strategies.js citedSetups), as the gate's re-check.
   const cited = citedSetups(all, STRATEGY, { paper: c.env.FTH_PAPER === '1' });
-  const checked = checkReads({ reads, side, briefing: got.briefing, skills: skillCatalog(c.root).map(k => k.name), tick: tick || 0.25, entryRule, cited });
+  // P1: the MTF entry arm (config/runner.json mtfEntry; refused outside a replay), as the gate's re-check reads it.
+  const mtfMode = require('../trading/mtf-entry').modeOf(require('../tunables').runner().mtfEntry, c.env);
+  const checked = checkReads({ reads, side, briefing: got.briefing, skills: skillCatalog(c.root).map(k => k.name), tick: tick || 0.25, entryRule, cited, mtfMode });
   const plan = { size, tickValue: spec ? spec.tickValue : null, minRR: doc.risk.min_rr, maxRiskUsd: doc.risk.max_risk_usd, stopRule: stopRuleOf(doc.risk), suggestion: inAttempt(home, doc, all, symbol) };
   const planned = checked.stop && checked.target ? planOf({ checked, briefing: got.briefing, side, tick, ...plan }) : null;
   const fits = noSizeFitsHere({ c, home, doc, all, symbol, planned, spec, specOf });
-  const record = buildRecord({ at, root: symbol, symbol, side, briefing: got.briefing, checked, planned, problems: fits ? [fits.problem] : [], cycleId: cycleId(c.env), validBars: doc.valid_bars });
+  // an MTF entry's plan stop is the candidate's structural stop, as the gate checks it ([mtf-stop]).
+  const mtfOff = planned && planned.plan ? require('../trading/mtf-entry').mtfPlanProblems(checked, planned.plan) : [];
+  const record = buildRecord({ at, root: symbol, symbol, side, briefing: got.briefing, checked, planned, problems: [...(fits ? [fits.problem] : []), ...mtfOff], cycleId: cycleId(c.env), validBars: doc.valid_bars });
   appendRecord(home, record);
   // A record that is not OK is an answer, not a failure: the text says what stands, then what is TRUE on this bar
   // (compose-hints.js: never a verdict; a hint that can't be worked out is left out, the record unchanged).

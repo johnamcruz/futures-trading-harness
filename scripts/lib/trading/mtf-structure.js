@@ -42,7 +42,8 @@
  *   candlesOf(bars, minutes, base)          the completed candles with first and known (the base bar it is known at)
  *   protectedAt(candles, swingI, breakI, d) protectedLevel's rule by index: { level, i } or null
  *   parentSeries({ exec, parent, equalAtr, k, prims })   the parent's break record per base bar (the owner's clean CHoCH)
- *   levelSeries({ exec, base, level, equalAtr, k, depth, prims, cache, keep })   { rows, instances }
+ *   levelSeries({ exec, base, level, equalAtr, k, depth, prims, cache, keep, trackEarly })   { rows, instances } (trackEarly:
+ *                                          an MTF arm's early candidates, P1)
  *   mtfStructure(o)                         the record at the last bar (m3.mtfStructure), or null (no bars)
  *   recordsOf(o)                            the record at every bar (one pass per level; gates and tests)
  *   mtfLines(record, { lineBytes, primaryBytes, level, cut })   the two summary lines, or [] without a record (cut: that
@@ -61,6 +62,8 @@ const OPEN_PULLBACK = Object.freeze(['ESTABLISHED', 'WEAKENING', 'REVERSING']);
 const SIDE_MODES = Object.freeze(['rule', 'parent']);
 const LEVEL_FRAMES = Object.freeze(['parent', 'setup', 'timing']); // a hierarchy's minutes, in this order
 const DEPTH_CLASSES = Object.freeze(['shallow', 'moderate', 'deep']); // config depth: each class's upper bound; past the last: breached
+/** P1, mtfEntry.minStage: the earliest stage a ready may fire at, and the stages each lets an early candidate fire in. */
+const MIN_STAGES = Object.freeze({ established: Object.freeze([]), developing: Object.freeze(['DEVELOPING']), potential: Object.freeze(['POTENTIAL', 'DEVELOPING']) });
 const sgn = d => (d === 'up' ? 1 : -1);
 const legSide = d => (d > 0 ? 'up' : 'down');
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
@@ -89,8 +92,18 @@ function levelsOf({ hierarchy, hierarchies } = {}) {
 /** The one hierarchy and side mode this build gates and prints (decision 19; spec 4.4): any other loads, never prints. */
 const GATED = Object.freeze({ hierarchy: 'intraday', sideMode: 'rule' });
 /** Why the briefing refuses this config (no record, no lines), or null. */
-function configProblem(cfg) {
+function configProblem(cfg, mode = null) {
   if (!isObj(cfg)) return 'no mtfStructure config';
+  if (isObj(mode) && mode.entryMode && mode.entryMode !== 'today') {
+    // An MTF entry arm (P1, trading/mtf-entry.js): the side is the parent's (the 1h structure) or, on arm B's execution
+    // record, the 1h side passed in as the rule's; its hierarchy is the arm's (arm B: the intraday one gives the 1h side).
+    const hs = Array.isArray(mode.hierarchies) ? mode.hierarchies : [];
+    const allowed = hs.includes('execution') ? [GATED.hierarchy, 'execution'] : [GATED.hierarchy];
+    if (!allowed.includes(cfg.hierarchy)) return `hierarchy ${cfg.hierarchy}: arm ${mode.arm} reads ${allowed.join(' and ')}`;
+    if (!SIDE_MODES.includes(cfg.sideMode)) return `sideMode ${cfg.sideMode}: one of ${SIDE_MODES.join(', ')}`;
+    try { levelsOf(cfg); } catch (err) { return err.message; }
+    return null;
+  }
   if (cfg.hierarchy !== GATED.hierarchy) return `hierarchy ${cfg.hierarchy}: only ${GATED.hierarchy} is gated`;
   if (cfg.sideMode !== GATED.sideMode) return `sideMode ${cfg.sideMode}: only ${GATED.sideMode} is printed`;
   try { levelsOf(cfg); } catch (err) { return err.message; }
@@ -163,6 +176,12 @@ function parentSeries({ exec, parent, equalAtr, k, prims = defaultPrims() }) {
     return biasOf(x);
   };
   const against = b => ({ kind: b.kind, level: b.level, d: b.d, at: b.at, prot: b.prot ? b.prot.level : null });
+  // P1, the parent's turn (the MTF candidate's context): the CHoCH that turned the way and the BOS that confirmed it, the
+  // BOS the way since; or, with no turn seen, the trend since its first break. Carried with the state; no state reads it.
+  const withTurn = (X, turn) => (X.mode === 'bias' ? { ...X, turn } : X);
+  const firstTurn = b => ({ way: legSide(b.d), choch: null, bos: null, since: { at: b.at }, bosCount: b.kind === 'BOS' ? 1 : 0 });
+  const counted = (turn, b) => (!turn || b.kind !== 'BOS' ? turn : { ...turn, bosCount: turn.bosCount + 1, bos: turn.choch && !turn.bos ? { at: b.at } : turn.bos });
+  const promoted = (b, pi) => withTurn(promote(b, pi), { way: legSide(b.d), choch: { kind: b.kind, at: b.at }, bos: b.kind === 'BOS' ? { at: b.at } : null, since: null, bosCount: b.kind === 'BOS' ? 1 : 0 });
   for (let j = 0; j < n; j += 1) {
     const ev = [];
     for (const pi of known.get(j) || []) {
@@ -171,27 +190,27 @@ function parentSeries({ exec, parent, equalAtr, k, prims = defaultPrims() }) {
       const t = parent[pi].t;
       for (const b of at.get(pi) || []) {
         if (S.mode === 'none') {
-          if (b.prot) { S = biasOf(b); ev.push({ type: 'bias', d: b.d, kind: b.kind, level: b.level, t }); }
+          if (b.prot) { S = withTurn(biasOf(b), firstTurn(b)); ev.push({ type: 'bias', d: b.d, kind: b.kind, level: b.level, t }); }
           continue;
         }
         if (S.mode === 'bias') {
           if (b.d === S.d) {
-            if (b.prot) { S = { ...S, level: b.prot.level, protI: b.prot.i, brk: brkOf(b), via: 'break' }; ev.push({ type: 'continuation', d: b.d, kind: b.kind, level: b.level, prot: b.prot.level, t }); }
+            if (b.prot) { S = { ...S, level: b.prot.level, protI: b.prot.i, brk: brkOf(b), via: 'break', turn: counted(S.turn, b) }; ev.push({ type: 'continuation', d: b.d, kind: b.kind, level: b.level, prot: b.prot.level, t }); }
             continue;
           }
-          if (thru(close, S.level, S.d, tie(pi))) { ev.push({ type: 'invalid', d: S.d, level: S.level, close, against: against(b), t }); S = promote(b, pi); } else { ev.push({ type: 'transitioning', d: S.d, level: S.level, against: against(b), t }); S = { mode: 'transitioning', old: S, against: b }; }
+          if (thru(close, S.level, S.d, tie(pi))) { ev.push({ type: 'invalid', d: S.d, level: S.level, close, against: against(b), t }); S = promoted(b, pi); } else { ev.push({ type: 'transitioning', d: S.d, level: S.level, against: against(b), t }); S = { mode: 'transitioning', old: S, against: b }; }
           continue;
         }
         if (b.d === S.against.d) {
-          if (thru(close, S.old.level, S.old.d, tie(pi))) { ev.push({ type: 'invalid', d: S.old.d, level: S.old.level, close, against: against(b), t }); S = promote(b, pi); } else { ev.push({ type: 'turn-confirmed', d: b.d, kind: b.kind, level: b.level, old: S.old.level, t }); S = b.prot ? biasOf(b) : { mode: 'none' }; }
+          if (thru(close, S.old.level, S.old.d, tie(pi))) { ev.push({ type: 'invalid', d: S.old.d, level: S.old.level, close, against: against(b), t }); S = promoted(b, pi); } else { ev.push({ type: 'turn-confirmed', d: b.d, kind: b.kind, level: b.level, old: S.old.level, t }); S = b.prot ? withTurn(biasOf(b), { way: legSide(b.d), choch: { kind: S.against.kind, at: S.against.at }, bos: { at: b.at }, since: null, bosCount: 1 }) : { mode: 'none' }; }
         } else {
           ev.push({ type: 'resumed-by-break', d: b.d, kind: b.kind, level: b.level, t });
           key += 1;
-          S = b.prot ? { ...S.old, key, level: b.prot.level, protI: b.prot.i, brk: brkOf(b), via: 'break' } : { ...S.old, key };
+          S = b.prot ? { ...S.old, key, level: b.prot.level, protI: b.prot.i, brk: brkOf(b), via: 'break', turn: counted(S.old.turn, b) } : { ...S.old, key };
         }
       }
       if (S.mode === 'bias' && thru(close, S.level, S.d, tie(pi))) { ev.push({ type: 'invalid', d: S.d, level: S.level, close, against: null, t }); S = { mode: 'none' }; } else if (S.mode === 'transitioning') {
-        if (thru(close, S.old.level, S.old.d, tie(pi))) { ev.push({ type: 'invalid', d: S.old.d, level: S.old.level, close, against: against(S.against), t }); S = promote(S.against, pi); } else if (pi > S.against.i && S.against.prot && thru(close, S.against.prot.level, S.against.d, tie(pi))) {
+        if (thru(close, S.old.level, S.old.d, tie(pi))) { ev.push({ type: 'invalid', d: S.old.d, level: S.old.level, close, against: against(S.against), t }); S = promoted(S.against, pi); } else if (pi > S.against.i && S.against.prot && thru(close, S.against.prot.level, S.against.d, tie(pi))) {
           ev.push({ type: 'choch-invalidated', d: S.old.d, level: S.against.prot.level, close, against: against(S.against), t });
           key += 1;
           S = { ...S.old, key, via: 'choch invalidated' };
@@ -229,7 +248,7 @@ function framed(c, { prims, k }) {
  * One level over the base bars: one forward pass, rows[j] for each j `keep(j)` accepts (all by default). A row is
  * { parent, inst, closedNow, last, evs, setupLast, warning, count } with plain copies (a later bar never changes it).
  */
-function levelSeries({ exec, base, level, equalAtr, k, prims = defaultPrims(), cache = new Map(), keep = () => true }) {
+function levelSeries({ exec, base, level, equalAtr, k, prims = defaultPrims(), cache = new Map(), keep = () => true, trackEarly = false }) {
   const n = exec.length;
   const frame = m => {
     const key = `frame:${m}`;
@@ -244,8 +263,8 @@ function levelSeries({ exec, base, level, equalAtr, k, prims = defaultPrims(), c
   const P = cache.get(pKey);
   const hi = (b, D) => (D > 0 ? b.h : b.l);
   const lo = (b, D) => (D > 0 ? b.l : b.h);
-  const par = X => (!X || X.mode === 'none' ? null : X.mode === 'bias' ? { D: X.d, prot: X.level, protI: X.protI, legFrom: X.legFrom, key: X.key, via: X.via || 'break', brk: X.brk, against: null, failedBreak: null }
-    : { D: X.old.d, prot: X.old.level, protI: X.old.protI, legFrom: X.old.legFrom, key: X.old.key, via: X.old.via || 'break', brk: X.old.brk, against: X.against, failedBreak: X.failedBreak || null });
+  const par = X => (!X || X.mode === 'none' ? null : X.mode === 'bias' ? { D: X.d, prot: X.level, protI: X.protI, legFrom: X.legFrom, key: X.key, via: X.via || 'break', brk: X.brk, turn: X.turn || null, against: null, failedBreak: null }
+    : { D: X.old.d, prot: X.old.level, protI: X.old.protI, legFrom: X.old.legFrom, key: X.old.key, via: X.old.via || 'break', brk: X.old.brk, turn: X.old.turn || null, against: X.against, failedBreak: X.failedBreak || null });
   const rows = new Array(n).fill(null);
   const instances = [];
   let inst = null;
@@ -257,6 +276,15 @@ function levelSeries({ exec, base, level, equalAtr, k, prims = defaultPrims(), c
   let setupLast = null;
   let lastS = null; // the latest setup candle known: { i, close, j }
   let lastT = null; // the latest timing candle known
+  // P1, the pullback's rank in its parent leg: the setup pullbacks (DEVELOPING) since the parent's last break its way
+  // (`brk`: a BOS or CHoCH that set or continued the way, the turn confirmed, a break that resumed it, or the CHoCH promoted
+  // after the old protected swing broke). A CHoCH against while transitioning keeps the old leg (its brk).
+  const legKeyOf = X => (X && X.brk ? `${X.D}:${X.brk.at}` : null);
+  let rankLeg = null;
+  let rankN = 0;
+  // P1, the impulse the pullback came from (its context): the last setup break the parent's way, from its protected swing
+  // (the leg protectedLevel defines), frozen on the instance at DEVELOPING; reset when the parent leg changes.
+  let lastPush = null;
   const recomputeExt = (pp, upto) => {
     ext = null; extBar = -1;
     for (let q = Math.max(0, pp.legFrom); q <= upto; q += 1) { const v = hi(exec[q], pp.D); if (ext === null || pp.D * (v - ext) > 0) { ext = v; extBar = q; } }
@@ -273,7 +301,10 @@ function levelSeries({ exec, base, level, equalAtr, k, prims = defaultPrims(), c
   const open = (j, D, stage, by) => {
     seq += 1;
     const l = lowFrom(D, extBar + 1, j);
-    inst = { id: seq, D, stage, openedAt: j, openedBy: by, potential: null, developing: null, established: null, weakening: null, reversing: null, confirmed: null, conservative: null, impulse: null, low: l.v, lowAt: l.at, lowAtWeak: null, protHigh: null, protMoves: [], minor: null, resets: [], closed: null };
+    // P1: a POTENTIAL's rank is the one it takes if it develops (the leg's next pullback); DEVELOPING confirms it.
+    const lk0 = legKeyOf(par(j > 0 ? P.series[j - 1] : null));
+    const pp0 = par(j > 0 ? P.series[j - 1] : null);
+    inst = { id: seq, D, stage, openedAt: j, openedBy: by, push: null, rank: lk0 ? (lk0 === rankLeg ? rankN : 0) + 1 : null, leg: lk0 ? { kind: pp0.brk.kind, at: pp0.brk.at } : null, early: null, lowAtEarly: null, potential: null, developing: null, established: null, weakening: null, reversing: null, confirmed: null, conservative: null, impulse: null, low: l.v, lowAt: l.at, lowAtWeak: null, protHigh: null, protMoves: [], minor: null, resets: [], closed: null };
     instances.push(inst);
   };
   for (let j = 0; j < n; j += 1) {
@@ -301,6 +332,9 @@ function levelSeries({ exec, base, level, equalAtr, k, prims = defaultPrims(), c
           inst.stage = 'ESTABLISHED'; inst.weakening = null; inst.reversing = null; inst.lowAtWeak = null;
           evs.push('reset');
         }
+        // P1: an early candidate (POTENTIAL or DEVELOPING) resets the same way: a timing close past the low it was taken at.
+        // P1: early candidates are an MTF arm's only; today's record never carries their events.
+        if (trackEarly && inst && inst.early && through(Tf.c[ti].c, inst.lowAtEarly, legSide(inst.D), tieAt(Tf.atr, ti, equalAtr))) { inst.early = null; inst.lowAtEarly = null; evs.push('early reset'); }
       }
       for (const b of Tf.breaksAt.get(j) || []) {
         if (!inst) {
@@ -309,6 +343,11 @@ function levelSeries({ exec, base, level, equalAtr, k, prims = defaultPrims(), c
         }
         const d = inst.D;
         const origin = b.prot ? b.prot.level : inst.low;
+        // P1, the early trigger (minStage): the first aligned timing CHoCH (or CISD, below) in POTENTIAL or DEVELOPING, after
+        // the stage began; kept per stage (DEVELOPING starts its own). Read only through an MTF entry mode's minStage.
+        if (trackEarly && (inst.stage === 'POTENTIAL' || inst.stage === 'DEVELOPING') && !inst.early && b.d === d && b.kind === 'CHoCH' && j > (inst.stage === 'DEVELOPING' ? inst.developing.j : inst.openedAt)) {
+          inst.early = { by: b.kind, j, level: b.level, origin, stage: inst.stage }; inst.lowAtEarly = inst.low;
+        }
         if (inst.stage === 'POTENTIAL') { if (b.kind === 'BOS' && b.d === d) closeNow('timing only'); continue; }
         if (inst.stage === 'ESTABLISHED' && b.d === d && WEAKENING_EVENTS.includes(b.kind) && j > inst.established.j) {
           inst.stage = 'WEAKENING'; inst.weakening = { by: b.kind, j, level: b.level, origin }; inst.lowAtWeak = inst.low; evs.push('weakening');
@@ -324,6 +363,10 @@ function levelSeries({ exec, base, level, equalAtr, k, prims = defaultPrims(), c
           }
         }
       }
+      if (trackEarly && inst && (inst.stage === 'POTENTIAL' || inst.stage === 'DEVELOPING') && !inst.early && j > (inst.stage === 'DEVELOPING' ? inst.developing.j : inst.openedAt)) {
+        const e = (Tf.cisdAt.get(j) || []).find(x => x.d === inst.D);
+        if (e) { inst.early = { by: 'CISD', j, level: e.level, origin: inst.low, stage: inst.stage }; inst.lowAtEarly = inst.low; }
+      }
       if (inst && inst.stage === 'ESTABLISHED' && WEAKENING_EVENTS.includes('CISD') && j > inst.established.j) {
         const e = (Tf.cisdAt.get(j) || []).find(x => x.d === inst.D);
         if (e) { inst.stage = 'WEAKENING'; inst.weakening = { by: 'CISD', j, level: e.level, origin: inst.low }; inst.lowAtWeak = inst.low; evs.push('weakening'); }
@@ -337,6 +380,7 @@ function levelSeries({ exec, base, level, equalAtr, k, prims = defaultPrims(), c
       // COMPLETED first (from DEVELOPING on): a close beyond the frozen impulse extreme closes the instance.
       if (inst && inst.impulse && Number.isFinite(inst.impulse.extreme) && through(c.c, inst.impulse.extreme, legSide(-inst.D), tie)) closeNow('completed', { close: c.c, level: inst.impulse.extreme });
       for (const b of (Sf.breaksAt.get(j) || []).filter(x => x.ci === si)) {
+        if (pd && b.d === pd && b.prot) lastPush = { level: b.prot.level, ci: b.prot.i, leg: legKeyOf(pp) };
         // I8: a setup BOS against the parent with no DEVELOPING open (no CHoCH inside this structure) changes no stage; the
         // fact stands until the next setup break.
         setupLast = (!inst || inst.stage === 'POTENTIAL') && pd && b.kind === 'BOS' && b.d === -pd ? { kind: b.kind, d: b.d, level: b.level, j } : null;
@@ -347,13 +391,21 @@ function levelSeries({ exec, base, level, equalAtr, k, prims = defaultPrims(), c
           if ((!inst || inst.stage === 'POTENTIAL') && b.kind === 'CHoCH') {
             if (!inst) open(j, d, 'DEVELOPING', 'setup CHoCH');
             inst.stage = 'DEVELOPING';
+            inst.early = null; inst.lowAtEarly = null;
             inst.developing = { j, level: b.level, origin: b.prot ? b.prot.level : null };
+            inst.push = lastPush && lastPush.leg === legKeyOf(pp) ? { level: lastPush.level, ci: lastPush.ci } : null;
+            const lk = legKeyOf(pp);
+            if (lk !== rankLeg) { rankLeg = lk; rankN = 0; }
+            rankN += 1;
+            inst.rank = lk ? rankN : null;
+            inst.leg = lk ? { kind: pp.brk.kind, at: pp.brk.at } : null;
             inst.impulse = { extreme: ext, j: extBar };
             const l = lowFrom(d, extBar + 1, j);
             inst.low = l.v; inst.lowAt = l.at;
             evs.push('developing');
           } else if (inst && inst.stage === 'DEVELOPING' && b.kind === 'BOS') {
             inst.stage = 'ESTABLISHED';
+            inst.early = null; inst.lowAtEarly = null;
             inst.established = { j, level: b.level };
             inst.protHigh = b.prot ? b.prot.level : inst.developing.origin;
             evs.push('established');
@@ -394,6 +446,8 @@ function levelSeries({ exec, base, level, equalAtr, k, prims = defaultPrims(), c
       last: lastClosed && lastClosed !== closedNow ? { why: lastClosed.closed.why, j: lastClosed.closed.j } : (closedNow && inst ? { why: closedNow.closed.why, j } : null),
       evs,
       setupLast: setupLast ? { ...setupLast } : null,
+      ext: pn && ext !== null ? { v: ext, j: extBar } : null,
+      push: lastPush && pn && lastPush.leg === legKeyOf(pn) ? { level: lastPush.level, ci: lastPush.ci } : null,
       warning,
       count: P.count[j],
     };
@@ -407,6 +461,7 @@ function required(o) {
   if (!Array.isArray(o.depth) || o.depth.length !== DEPTH_CLASSES.length || !o.depth.every(Number.isFinite)) throw new Error('mtf-structure: depth is required ([shallow, moderate, deep] upper bounds, config)');
   if (!Array.isArray(o.levels) || !o.levels.length) throw new Error('mtf-structure: levels is required (levelsOf on the config\'s hierarchy)');
   if (!SIDE_MODES.includes(o.sideMode)) throw new Error(`mtf-structure: sideMode must be one of ${SIDE_MODES.join(', ')}`);
+  if (o.mode && !Object.prototype.hasOwnProperty.call(MIN_STAGES, o.mode.minStage)) throw new Error(`mtf-structure: minStage must be one of ${Object.keys(MIN_STAGES).join(', ')} (config mtfEntry.minStage)`);
 }
 
 const ET_TZ = 'America/New_York';
@@ -445,6 +500,13 @@ function levelRecord(L, R, j, o, ctx) {
     biasRead,
     differs: biasRead !== null && biasRead !== wayOf(pn.D),
   } : null;
+  // P1: the parent leg's anchor (its last break the way's, the rank's reset), as the break candle's close.
+  if (parent && o.mode) {
+    parent.leg = pn.brk ? legWhen(pn.brk, L.parent, today) : null;
+    const tn = pn.turn;
+    const w = x => (x && x.at ? strip(legWhen({ kind: null, at: x.at }, L.parent, today)) : null);
+    parent.turn = tn ? { way: tn.way, choch: tn.choch ? { kind: tn.choch.kind, ...w(tn.choch) } : null, bos: w(tn.bos), since: w(tn.since), bosCount: tn.bosCount } : null;
+  }
   const raw = row.inst || row.closedNow;
   const stage = row.inst ? row.inst.stage : row.closedNow && row.closedNow.closed.why === 'completed' ? 'COMPLETED' : row.closedNow && row.closedNow.closed.why === 'invalidated' ? 'INVALIDATED' : 'NONE';
   // An event with its time (the window-relative bar index left out: a record never depends on where the window starts).
@@ -465,15 +527,31 @@ function levelRecord(L, R, j, o, ctx) {
       depth, depthClass: depth === null ? null : cls(depth),
       closed: i.closed ? at(i.closed) : null,
     };
+    if (o.mode) {
+      // P1: the pullback's rank in its parent leg and that leg's break (its candle's close, ET).
+      instance.rank = Number.isInteger(i.rank) ? i.rank : null;
+      instance.leg = i.leg ? legWhen(i.leg, L.parent, today) : null;
+    }
   }
   const last = !row.inst && row.closedNow && stage === 'NONE' ? { why: row.closedNow.closed.why, ...when(j) } : row.last ? { why: row.last.why, ...when(row.last.j) } : null;
   const sa = row.setupLast;
   const setupAgainst = pn && sa && sa.d === -pn.D && sa.kind === 'BOS' && (stage === 'NONE' || stage === 'POTENTIAL') ? { kind: sa.kind, direction: wayOf(sa.d), level: sa.level, ...when(sa.j) } : null;
   const warning = row.warning ? { frame: tfLabel(row.warning.frame), close: row.warning.close, ...when(row.warning.j) } : null;
   const out = { name: L.name, role: L.role, frames, partial, parent, setupAgainst, stage, instance, last, warning, event: row.evs.slice(), entry: null, entryWithheld: null, stopTraded: null };
+  // P1: every setup pullback's DEVELOPING time so far in the bars (the window bounds it): a lower hierarchy's rank in the 1h leg.
+  if (o.mode) out.pullbacks = R.instances.filter(x => x.developing && x.developing.j <= j).map(x => ({ at: when(x.developing.j).at, way: wayOf(-x.D) }));
   if (stage === 'INVALIDATED' && raw && raw.closed) out.invalidated = { close: raw.closed.close, level: raw.closed.level, way: wayOf(raw.D) };
-  if (L.role === 'primary' && !partial && raw && row.inst) entryOf(out, row.inst, j, o, when);
+  if (L.role === 'primary' && !partial && raw && row.inst) entryOf(out, row.inst, j, { ...o, series: R }, when);
   return out;
+}
+
+const strip = x => (x ? { at: x.at, et: x.et } : null);
+/** A parent break's time as its candle's close: { kind, at (ISO), et ('HH:MM', or 'MM-DD HH:MM' before today) }. */
+function legWhen(leg, parentMinutes, today) {
+  const ms = Date.parse(leg.at) + parentMinutes * 60000;
+  if (!Number.isFinite(ms)) return { kind: leg.kind, at: null, et: null };
+  const p = etParts(ms);
+  return { kind: leg.kind, at: new Date(ms).toISOString(), et: p.date === today ? p.hm : `${p.md} ${p.hm}` };
 }
 
 /** The primary level's entry-ready candidate and why it is withheld (spec 2.4). */
@@ -487,18 +565,73 @@ function entryOf(out, i, j, o, when) {
   if (i.stage === 'WEAKENING' && i.weakening) { model = 'aggressive'; ev = i.weakening; }
   else if (i.stage === 'REVERSING' && i.reversing) { model = 'balanced'; ev = i.reversing; also = i.weakening ? { what: 'aggressive', stop: stopOf(i.weakening.origin) } : null; }
   else if (i.stage === 'CONFIRMED REVERSAL' && i.conservative && i.conservative.bos) { model = 'conservative'; ev = i.conservative.bos; also = { what: '15m CHoCH origin', level: i.low, stop: stopOf(i.low) }; }
-  if (!model || !i.established) return;
+  // P1, minStage: an early aggressive candidate in POTENTIAL or DEVELOPING (the mode's stages only), the same trigger.
+  let early = null;
+  if (!model && o.mode && i.early && MIN_STAGES[o.mode.minStage].includes(i.stage) && i.early.stage === i.stage) { model = 'aggressive'; ev = i.early; early = i.stage; }
+  if (!model || (!i.established && !early)) return;
   const stop = stopOf(ev.origin);
   out.entry = { model, side: sideOfD(D), since: when(ev.j), stop, stopTicks: Math.round(Math.abs(o.exec[j].c - stop) / o.tick), also };
+  if (early) out.entry.early = early;
+  if (o.mode) out.entry.by = ev.by || 'BOS'; // P1: the trigger's kind (WEAKENING's CHoCH or CISD, an early one's; a BOS otherwise)
+  if (o.mode) {
+    // P1: the structural level before the buffer, and the target the exit option reads: the parent impulse extreme (the
+    // COMPLETED level), with its R from this close by this stop (null when either distance is not the trade's way).
+    const close = o.exec[j].c;
+    const target = i.impulse && Number.isFinite(i.impulse.extreme) ? i.impulse.extreme : null;
+    const risk = D * (close - stop);
+    const reward = target === null ? NaN : D * (target - close);
+    Object.assign(out.entry, { origin: ev.origin, target, targetR: risk > 0 && reward >= 0 ? r2(reward / risk) : null, triggerClose: o.exec[ev.j].c, context: contextOf(i, j, o) });
+  }
   // B2: a base bar since the event that traded through the structural stop (a wick counts: a stop fills on a trade).
   for (let q = ev.j + 1; q <= j; q += 1) if (D > 0 ? o.exec[q].l <= stop : o.exec[q].h >= stop) { out.stopTraded = when(q); break; }
+  // P1: the farthest close past the trigger's close since the trigger, the trade's way,
+  // in points (causal: the closes up to this bar; 0 on the trigger's own bar). Once past the void, always past it.
+  if (o.mode) {
+    let run = 0;
+    for (let q = ev.j + 1; q <= j; q += 1) run = Math.max(run, D * (o.exec[q].c - o.exec[ev.j].c));
+    out.entry.maxRun = r2(run);
+  }
+}
+
+/**
+ * P1, an entry's CONTEXT (mtf-context.js): the impulse's quality on the setup frame's completed candles, as known at bar j: the frozen impulse (DEVELOPING on),
+ * else the extreme so far (the row's); never a later high.
+ */
+function contextOf(i, j, o) {
+  const MC = require('./mtf-context');
+  const R = o.series;
+  const row = R.rows[j];
+  const pn = row.parent;
+  if (!pn) return { impulse: null };
+  const D = i.D;
+  const ext = i.impulse && Number.isFinite(i.impulse.extreme) ? { v: i.impulse.extreme, j: i.impulse.j } : row.ext;
+  let impulse = null;
+  const S = R.frames.setup;
+  if (ext && Number.isInteger(ext.j) && ext.j >= 0) {
+    // From the last push's protected swing (the instance's, frozen at DEVELOPING; else the row's so far); none: the leg's.
+    const push = i.developing ? i.push : row.push;
+    const known = S.c.map((c, k) => k).filter(k => S.c[k].known <= j);
+    const legFrom = known.find(k => S.c[k].first <= pn.legFrom && (k === S.c.length - 1 || S.c[k + 1].first > pn.legFrom));
+    const to = known.filter(k => S.c[k].first <= ext.j).pop();
+    // A push after the leg's extreme (a lower high: the extreme came earlier) is not the impulse: the leg's start then.
+    const usePush = push && Number.isInteger(push.ci) && Number.isInteger(to) && push.ci <= to;
+    const from = usePush ? push.ci : legFrom;
+    const start = usePush ? push.level : pn.prot;
+    if (Number.isInteger(from) && Number.isInteger(to) && to >= from) {
+      // The displacement label: the one rule (cisd.js strongCandle, which displacement.js reads as candleDisplaced), on the
+      // ATR known at the candle before, as displacement.js strengthAt reads it.
+      const { strongCandle } = require('./cisd');
+      impulse = MC.impulseQuality({ candles: S.c, from, to, start, extreme: ext.v, dir: D, atr: S.atr, displaced: k => strongCandle(S.c[k], k > 0 ? S.c[k - 1] : null, D, k > 0 ? S.atr[k - 1] : NaN).strong });
+    }
+  }
+  return { impulse };
 }
 
 /** Every level over the bars (one pass each, the candles shared). */
 function computeAll(o) {
   const cache = new Map();
   const prims = o.prims || defaultPrims();
-  const series = o.levels.map(L => levelSeries({ exec: o.bars, base: o.minutes, level: L, equalAtr: o.equalAtr, k: o.k, prims, cache, keep: o.keep }));
+  const series = o.levels.map(L => levelSeries({ exec: o.bars, base: o.minutes, level: L, equalAtr: o.equalAtr, k: o.k, prims, cache, keep: o.keep, trackEarly: Boolean(o.mode) }));
   return series;
 }
 
@@ -507,7 +640,15 @@ function recordFrom(series, j, o, ctx) {
   const primary = levels.find(l => l.role === 'primary');
   const pD = primary && primary.parent ? primary.parent.way : null;
   const sides = { rule: ctx.sides ? ctx.sides.rule : null, parent: pD === 'up' ? 'long' : pD === 'down' ? 'short' : null };
-  return { hierarchy: o.hierarchy || null, sideMode: o.sideMode, side: sides[o.sideMode] || null, sides, levels };
+  const rec = { hierarchy: o.hierarchy || null, sideMode: o.sideMode, side: sides[o.sideMode] || null, sides, levels };
+  if (o.mode) {
+    // P1: the entry arm the record was built under, and the level above's parent structure (the 4h: context only).
+    const above = levels.find(l => l.role === 'above');
+    rec.mode = { ...o.mode };
+    rec.windowStart = o.bars[0].t; // the bars' first: a lower hierarchy's rank is unknown for a leg begun before it
+    rec.context = above ? { frame: above.frames.parent, way: !above.partial && above.parent ? above.parent.way : null } : null;
+  }
+  return rec;
 }
 
 /** The side at a bar: `sideAt(j)` or the constant `side` ('long' | 'short' | null, the entry rule's: biasSides). */
@@ -561,11 +702,11 @@ const CUTS = Object.freeze(['belowShort', 'origin', 'depth', 'last', 'early', 'p
 const cutOut = (cut, name) => CUTS.indexOf(name) < cut;
 const LAST_WORDS = { 'timing only': (S, T) => `a ${T}-only move, no ${S} break`, 'ended before established': () => 'ended before ESTABLISHED', completed: () => 'COMPLETED', invalidated: () => 'INVALIDATED', superseded: () => 'superseded by a new pullback', 'parent turned': (S, T, P) => `the ${P} turned` };
 
-function headOf(lv, cut, L) {
+function headOf(lv, cut, L, mode = null) {
   const p = lv.parent;
   const { parent: P } = lv.frames;
   const w = p.way;
-  const differ = p.differs ? ` (its break record; the Bias line reads the ${P} ${p.biasRead}: the side is the Bias line's)` : '';
+  const differ = !p.differs ? '' : mode ? ` (its break record; the Bias line reads the ${P} ${p.biasRead}: in this entry mode the side is the ${P} structure's)` : ` (its break record; the Bias line reads the ${P} ${p.biasRead}: the side is the Bias line's)`;
   const origin = cutOut(cut, 'origin') ? '' : ` (the origin of the last ${P} break)`;
   const status = lv.warning ? `not broken on a ${P} close; WARNING: a ${lv.warning.frame} close ${L(lv.warning.close)} ${belowAbove(w)} it at ${lv.warning.et} (the ${P} close decides)` : `holds on ${P} closes`;
   const ch = p.against && !cutOut(cut, 'parentChoch') ? ` (${P} ${p.against.kind} ${p.against.direction} at ${L(p.against.level)}: a warning, not a reversal)` : '';
@@ -581,10 +722,12 @@ const pbPhrase = (lv, primary) => {
   return `${primary ? '' : `below ${P} > ${S}: `}${S} pullback against the ${P}`;
 };
 
-function bodyOf(lv, cut, L, primary, sideText) {
+function bodyOf(lv, cut, L, primary, sideText, mode = null) {
   const { parent: P, setup: S, timing: T } = lv.frames;
   const PB = pbPhrase(lv, primary);
-  const E = s => (primary ? ` Entry: ${s}.` : '');
+  // P1, an MTF entry arm: the primary line names no model (the candidate lines carry the ready ones and the waiting clause;
+  // a "NOT ready" model here read as an offer, measured on #348).
+  const E = s => (!primary ? '' : mode ? ' Entry: on the MTF candidate lines.' : ` Entry: ${s}.`);
   if (lv.partial) return `stage NONE. Not enough ${P} history.${E('none')}`;
   const i = lv.instance;
   if (lv.stage === 'INVALIDATED' && lv.invalidated) {
@@ -593,7 +736,7 @@ function bodyOf(lv, cut, L, primary, sideText) {
   }
   if (!lv.parent) return `stage NONE. ${P} structure: none (its protected swing broke; waiting for the next ${P} break). No ${S} pullback read.${E('none')}`;
   const w = lv.parent.way;
-  const head = headOf(lv, cut, L);
+  const head = headOf(lv, cut, L, mode);
   const lastText = () => {
     const parts = [];
     if (lv.last) {
@@ -603,6 +746,17 @@ function bodyOf(lv, cut, L, primary, sideText) {
     return parts;
   };
   const against = lv.setupAgainst ? `${S} last break: ${lv.setupAgainst.kind} ${lv.setupAgainst.direction}, against the ${P}; no CHoCH inside this structure` : null;
+  const e = lv.entry;
+  const why = () => {
+    const r = lv.entryWithheld;
+    if (r === 'no side') return mode ? `none: no side (no ${mode.sideFrame} structure)` : 'none: no side (4h and 1h not aligned)';
+    if (r === 'against the side') return mode ? `none: against the ${mode.sideFrame} structure (${sideText} only)` : `none: against the side (Bias: ${sideText} only)`;
+    if (r === 'warning') return `none: a close is through the ${P} protected ${lowHigh(w)} (the ${P} close decides)`;
+    if (r === 'stop traded') return `none: the ${e.model} structural stop ${L(e.stop)} traded through at ${lv.stopTraded.et}`;
+    return null;
+  };
+  const age = s => (s.barsAgo === 0 ? 'new this bar' : `since ${s.et} (${s.barsAgo} ${s.barsAgo === 1 ? 'bar' : 'bars'})`);
+  const ready = extra => why() || `${e.model} ready ${e.side.toUpperCase()} ${age(e.since)}, structural stop ${L(e.stop)} (a structure level, not an order stop)${extra}`;
   if (lv.stage === 'NONE' || !i) {
     const parts = [...lastText(), ...(against ? [against] : [])];
     return `stage NONE. ${head}. ${PB}: NONE${parts.length ? ` (${parts.join('; ')})` : ''}.${E('none')}`;
@@ -610,25 +764,17 @@ function bodyOf(lv, cut, L, primary, sideText) {
   if (lv.stage === 'COMPLETED') return `stage COMPLETED. ${head}. ${PB}: NONE now (the last one, ${UPW(opp(w))}, is finished: a ${S} close ${L(i.closed.close)} ${aboveBelow(w)} the ${P} impulse ${highLow(w)} ${L(i.impulseExtreme)}; the ${P} ${w} trend continued).${E('none')}`;
   if (lv.stage === 'POTENTIAL') {
     const no = against ? `no ${S} CHoCH ${opp(w)} yet (${against})` : `no ${S} break ${opp(w)} yet`;
+    // P1 (minStage potential): an early ready prints in place of `Monitor only.`, its trigger named.
+    if (e && e.early) return `stage POTENTIAL. ${head}. ${PB}: NONE yet (only a ${T} CHoCH ${opp(w)} ${i.potential.et} against the ${P}; ${no}). ${T} turning back ${UPW(w)}: ${e.since.et}.${E(ready(''))}`;
     return `stage POTENTIAL. ${head}. ${PB}: NONE yet (only a ${T} CHoCH ${opp(w)} ${i.potential.et} against the ${P}; ${no}).${primary ? ' Monitor only.' : ''}${E('none')}`;
   }
   const depth = primary && i.depth !== null && !cutOut(cut, 'depth') ? `; depth ${i.depthClass} (${i.depth})` : '';
   const pb = `${PB}: ${UPW(opp(w))} (${S} CHoCH ${opp(w)} ${i.developing.et}`;
+  if (lv.stage === 'DEVELOPING' && e && e.early) return `stage DEVELOPING. ${head}. ${pb}, no ${S} BOS ${opp(w)} yet: not established); pullback ${lowHigh(w)} ${L(i.extreme)}${depth}. ${T} turning back ${UPW(w)}: ${e.since.et}.${E(ready(''))}`;
   if (lv.stage === 'DEVELOPING') return `stage DEVELOPING. ${head}. ${pb}, no ${S} BOS ${opp(w)} yet: not established); pullback ${lowHigh(w)} ${L(i.extreme)}${depth}; price has not turned back ${w}.${primary ? ' Track only.' : ''}${E('none')}`;
   const prot = primary && Number.isFinite(i.protected) && !cutOut(cut, 'protected') ? `; its protected ${highLow(w)} ${L(i.protected)}` : '';
   const est = `${pb}, BOS ${opp(w)} ${i.established.et}); pullback ${lowHigh(w)} ${L(i.extreme)}${depth}${prot}`;
   const minor = primary && i.minor && !cutOut(cut, 'early') ? ` Early weakening: a ${S} close ${aboveBelow(w)} the minor ${highLow(w)} ${L(i.minor.level)}.` : '';
-  const e = lv.entry;
-  const why = () => {
-    const r = lv.entryWithheld;
-    if (r === 'no side') return 'none: no side (4h and 1h not aligned)';
-    if (r === 'against the side') return `none: against the side (Bias: ${sideText} only)`;
-    if (r === 'warning') return `none: a close is through the ${P} protected ${lowHigh(w)} (the ${P} close decides)`;
-    if (r === 'stop traded') return `none: the ${e.model} structural stop ${L(e.stop)} traded through at ${lv.stopTraded.et}`;
-    return null;
-  };
-  const age = s => (s.barsAgo === 0 ? 'new this bar' : `since ${s.et} (${s.barsAgo} ${s.barsAgo === 1 ? 'bar' : 'bars'})`);
-  const ready = extra => why() || `${e.model} ready ${e.side.toUpperCase()} ${age(e.since)}, structural stop ${L(e.stop)} (a structure level, not an order stop)${extra}`;
   if (lv.stage === 'ESTABLISHED') {
     const r = i.resets.length ? i.resets[i.resets.length - 1] : null;
     const m3 = !T ? '' : r ? ` ${T}: the turn ${w} failed (a ${T} close ${belowAbove(w)} the pullback ${lowHigh(w)} ${L(r.extreme)} at ${r.et}: reset); price has not turned back ${w}.` : ` ${T}: price has not turned back ${w} (no ${T} CHoCH or CISD ${w} yet).`;
@@ -701,9 +847,13 @@ function mtfLines(rec, { lineBytes = Infinity, primaryBytes = Infinity, level = 
   if (!primary || !below) return [];
   const sideText = rec.side || 'no';
   const sp = n => n.replace('>', ' > ');
+  // P1: an MTF entry arm's record (rec.mode) adds its clauses to the primary line; without one, today's lines exactly.
+  const mode = isObj(rec.mode) ? { ...rec.mode, sideFrame: primary.frames.parent } : null;
+  // P1: the below line is an early read in an MTF entry arm (37.7% false ESTABLISHED on the hold-out): labelled so.
+  const early = mode ? ` (early read; ${below.frames.setup}, noisy: the ${below.frames.parent} line decides the pullback, the ${below.frames.setup} only times it)` : '';
   const build = cut => {
-    const one = `- MTF structure ${sp(primary.name)} (primary): ${bodyOf(primary, cut, L, true, sideText)}`;
-    const two = `- MTF structure below: ${sp(below.name)} (context): ${cutOut(cut, 'belowShort') ? belowShort(below) : bodyOf(below, cut, L, false, sideText)}`;
+    const one = `- MTF structure ${sp(primary.name)} (primary): ${bodyOf(primary, cut, L, true, sideText, mode)}`;
+    const two = `- MTF structure below${early}: ${sp(below.name)} (context): ${cutOut(cut, 'belowShort') ? belowShort(below) : bodyOf(below, cut, L, false, sideText)}`;
     return [one, two];
   };
   if (Number.isInteger(atCut)) return build(atCut); // one cut level (tests: the order, step by step)

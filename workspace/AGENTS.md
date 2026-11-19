@@ -212,6 +212,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - `micro-mini-specs` (skills/micro-mini-specs/SKILL.md): Use when sanity-checking a contract's tick size and value, a micro against its mini.
 - `momentum-and-volume` (skills/momentum-and-volume/SKILL.md): Trader-process steps 3 and 5 - whether a move has push behind it from the trigger bar and the last few bars' range, close and volume. A read, never a veto.
 - `mtf-bias-filter` (skills/mtf-bias-filter/SKILL.md): Use when filtering a rules strategy by the higher-timeframe trend (mtf_bias in its rules, backtested).
+- `mtf-entry` (skills/mtf-entry/SKILL.md): An MTF entry arm (replay only) - select among code-surfaced valid pullbacks (ENTER, WAIT or PASS); structural stop; trail. Never against the 1h.
 - `multi-timeframe-analysis` (skills/multi-timeframe-analysis/SKILL.md): Use when reading each timeframe's trend and the trend rule the gate enforces (never counter).
 - `news-blackouts` (skills/news-blackouts/SKILL.md): Use when setting today's news blackouts (event times, windows, blackouts_add).
 - `order-failures` (skills/order-failures/SKILL.md): What to do when an order or read call errors or times out - never resend, the [order-pending] hold, and protecting an uncovered position first.

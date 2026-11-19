@@ -21,6 +21,7 @@
  */
 
 const { snapStop } = require('./trail');
+const PH = require('./prev-high-exit');
 const { lockOf, tradeFold } = require('./exit-trail');
 const { label } = require('./mtf');
 const { zonedParts } = require('./clock');
@@ -58,6 +59,7 @@ function readOf(t, { held = null, why = null, asOf = null, bars = [], tick = nul
       basis: 'held', peakR: Math.max(0, Number(held.peakR) || 0), troughR: Math.min(0, Number(held.troughR) || 0), bestPrice: fin(held.bestPrice) ? held.bestPrice : null,
       bestBarT: held.bestBarT || null, armed: Boolean(held.armed), target: fin(held.target) ? held.target : null, plan, lastClose: fin(held.lastClose) ? held.lastClose : null,
       lastBarT: held.lastBarT || null, swingClass: held.swingClass && typeof held.swingClass === 'object' ? held.swingClass : null,
+      prevHigh: held.prevHigh && typeof held.prevHigh === 'object' ? held.prevHigh : null,
     };
   } else {
     if (!Array.isArray(bars)) return { unavailable: 'no bars for this contract this cycle' };
@@ -88,6 +90,8 @@ function readOf(t, { held = null, why = null, asOf = null, bars = [], tick = nul
     swingClass: mode === 'target_then_trail' ? f.swingClass : null,
     tf: f.plan && f.plan.afterTarget && f.plan.afterTarget.swingMinutes ? label(f.plan.afterTarget.swingMinutes) : null,
     trailR: f.plan && f.plan.afterTarget ? f.plan.afterTarget.trailR : null,
+    // P1: the exit option's previous high or low and its state (only an MTF entry under prev_high_or_trail holds one).
+    ...(f.prevHigh ? { prevHigh: f.prevHigh } : {}),
   };
 }
 
@@ -134,7 +138,8 @@ function lineOf(p, { level = x => String(r2(x)), et = hhmm } = {}) {
       : p.targetOrder !== null ? `target order ${level(p.targetOrder)} (${sR(R(p.targetOrder))})` : 'no target order';
   const cls = p.mode === 'target_then_trail' && !noTarget ? classText(p.swingClass, p, level) : null;
   const tail = p.basis === 'fold' ? ` (not runner-managed: ${p.why || 'no held trade'}; risk from ${p.riskFrom === 'working' ? 'the working stop' : 'the journal stop'})` : '';
-  return `${head}; ${now}; ${mfe}; ${mae}; ${give}; ${stop}; ${exit}${cls ? `; code floor: ${cls}` : ''}${tail}.`;
+  const ph = p.prevHigh ? PH.clause(p.prevHigh, level) : null;
+  return `${head}; ${now}; ${mfe}; ${mae}; ${give}; ${stop}; ${exit}${cls ? `; code floor: ${cls}` : ''}${ph ? `; ${ph}` : ''}${tail}.`;
 }
 
 function positionLine(read, opts = {}) {

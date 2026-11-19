@@ -27,6 +27,7 @@
     "freshPriceTimeoutMs": 3000
   },
   "lifecycle": { "maxSize": 100 },
+  "mtfEntry": { "arm": "D", "exitMode": "trail", "minStage": "established", "models": ["aggressive", "balanced", "conservative"] },
   "account": {
     "snapshotMaxAgeMs": 600000,
     "balanceToleranceUsd": 0.01,
@@ -106,7 +107,7 @@
     "brokerFieldsBytes": 600,
     "brokerFieldChars": 250,
     "cycleDataMaxBytes": 48000,
-    "situationalSkillBytes": 82971,
+    "situationalSkillBytes": 90431,
     "maxPromptBytes": 126976,
     "cacheTtlMinutes": { "5m": 5, "1h": 60 }
   },

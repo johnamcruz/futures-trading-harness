@@ -94,15 +94,18 @@ test('tunables: a missing, unreadable, non-JSON, incomplete, unknown-keyed or mi
 });
 
 test('tunables: the MTF structure read\'s keys (analysis.mtfStructure) load, BUILT_IN carries them, a mistyped one is refused, and sideMode is pinned exactly at rule', () => {
-  const want = { hierarchy: 'intraday', hierarchies: { scalping: [15, 5, 1], intraday: [60, 15, 3], day: [240, 60, 15], swing: [1440, 240, 60] }, sideMode: 'rule', depth: [0.3, 0.75, 1], warmBars: 20, lineBytes: T.analysis().mtfStructure.lineBytes, primaryBytes: T.analysis().mtfStructure.primaryBytes };
+  const A = T.analysis().mtfStructure;
+  const want = { hierarchy: 'intraday', hierarchies: { scalping: [15, 5, 1], intraday: [60, 15, 3], day: [240, 60, 15], swing: [1440, 240, 60], execution: [15, 3, 1] }, sideMode: 'rule', depth: [0.3, 0.75, 1], warmBars: 20, lineBytes: A.lineBytes, primaryBytes: A.primaryBytes, entryLineBytes: A.entryLineBytes, entryPrimaryBytes: A.entryPrimaryBytes, candidateBytes: A.candidateBytes, voidDriftR: 0.5, maxAgeMin: 60 };
   assert.deepStrictEqual(clone(T.analysis().mtfStructure), want);
   assert.deepStrictEqual(clone(T.BUILT_IN.analysis.mtfStructure), want);
   assert.ok(want.primaryBytes > 0 && want.lineBytes > want.primaryBytes);
+  // P1: the MTF entry modes' own budgets (their primary line carries the rank, the 4h and the target clauses).
+  assert.ok(want.entryPrimaryBytes >= want.primaryBytes && want.entryLineBytes >= want.lineBytes && want.entryLineBytes > want.entryPrimaryBytes);
   const dir = tmp();
   const f = path.join(dir, 'a.json');
   for (const [k, bad, re] of [['mtfStructure.hierarchy', 3, /mtfStructure\.hierarchy: a string/], ['mtfStructure.sideMode', 'both', /mtfStructure\.sideMode: one of rule, parent/],
     ['mtfStructure.depth', [0.3, 0.75], /mtfStructure\.depth: a list of 3 to 3/], ['mtfStructure.warmBars', 0, /mtfStructure\.warmBars: a whole number/],
-    ['mtfStructure.hierarchies.intraday', [60, 15], /mtfStructure\.hierarchies\.intraday: a list of 3 to 3/], ['mtfStructure.lineBytes', 'x', /mtfStructure\.lineBytes: a whole number/]]) {
+    ['mtfStructure.hierarchies.intraday', [60, 15], /mtfStructure\.hierarchies\.intraday: a list of 3 to 3/], ['mtfStructure.lineBytes', 'x', /mtfStructure\.lineBytes: a whole number/], ['mtfStructure.voidDriftR', 0, /mtfStructure\.voidDriftR: /]]) {
     fs.writeFileSync(f, JSON.stringify(writeAt(clone(committed('analysis')), k, bad)));
     assert.throws(() => T.load('analysis', f), re, k);
   }
@@ -116,6 +119,33 @@ test('tunables: the MTF structure read\'s keys (analysis.mtfStructure) load, BUI
   // Another hierarchy loads (the briefing refuses it: tests/lib/mtf-structure-briefing.test.js).
   fs.writeFileSync(f, JSON.stringify(writeAt(clone(committed('analysis')), 'mtfStructure.hierarchy', 'day')));
   assert.strictEqual(T.load('analysis', f).mtfStructure.hierarchy, 'day');
+});
+
+test('tunables: the MTF entry arm (runner.mtfEntry, P1) loads with today\'s defaults, BUILT_IN carries it, and a bad arm, mode or combination is refused (critical, fail closed)', () => {
+  const want = { arm: 'D', exitMode: 'trail', minStage: 'established', models: ['aggressive', 'balanced', 'conservative'] };
+  assert.deepStrictEqual(clone(T.runner().mtfEntry), want);
+  assert.deepStrictEqual(clone(T.BUILT_IN.runner.mtfEntry), want);
+  const f = path.join(tmp(), 'r.json');
+  const at = over => { fs.writeFileSync(f, JSON.stringify(writeAt(clone(committed('runner')), 'mtfEntry', { ...want, ...over }))); return () => T.load('runner', f); };
+  for (const arm of ['A', 'B', 'AB', 'D']) assert.strictEqual(at({ arm })().mtfEntry.arm, arm);
+  assert.strictEqual(at({ arm: 'A', exitMode: 'prev_high_or_trail' })().mtfEntry.exitMode, 'prev_high_or_trail');
+  assert.throws(at({ arm: 'E' }), /mtfEntry\.arm: one of A, B, AB, D/);
+  assert.throws(at({ arm: 'a' }), /mtfEntry\.arm: one of A, B, AB, D/);
+  assert.throws(at({ exitMode: 'target' }), /mtfEntry\.exitMode: one of trail, prev_high_or_trail/);
+  // REVIEW-3 O1: no first-pullback rule (the rank is a fact, not a preference); the old key is refused like any unknown one.
+  assert.throws(at({ entryPullback: 'first' }), /mtfEntry\.entryPullback: not a known key/);
+  // The owner's spec: the entry models (all three by default, none preferred); some of the three, each once.
+  assert.deepStrictEqual(at({ arm: 'B', models: ['balanced'] })().mtfEntry.models, ['balanced']);
+  assert.throws(at({ models: [] }), /mtfEntry\.models/);
+  assert.throws(at({ models: ['eager'] }), /mtfEntry\.models/);
+  assert.throws(at({ models: ['balanced', 'balanced'] }), /mtfEntry\.models: each entry model at most once/);
+  for (const minStage of ['developing', 'potential']) assert.strictEqual(at({ arm: 'A', minStage })().mtfEntry.minStage, minStage);
+  assert.throws(at({ arm: 'A', minStage: 'weakening' }), /mtfEntry\.minStage: one of established, developing, potential/);
+  assert.throws(at({ arm: 'D', minStage: 'developing' }), /mtfEntry: arm D \(today\) takes exitMode trail and minStage established/);
+  // Today's arm has no MTF entry: the exit option has nothing to act on there.
+  assert.throws(at({ arm: 'D', exitMode: 'prev_high_or_trail' }), /mtfEntry: arm D \(today\) takes exitMode trail and minStage established/);
+  fs.writeFileSync(f, JSON.stringify(dropAt(clone(committed('runner')), 'mtfEntry.arm')));
+  assert.throws(() => T.load('runner', f), /mtfEntry\.arm: missing/);
 });
 
 test('tunables: fingerprints name each file\'s version and canonical hash (what runs and ledger entries record)', () => {

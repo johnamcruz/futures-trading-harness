@@ -19,7 +19,8 @@
  * the record's) makes the order exactly the smaller; the brackets are the record's, the risk worked out for the size
  * ordered (the gate's composed-reads takes exactly that). In an attempt a cut under the floor is no trade.
  *
- *   composedOrder({ home, root, side, now, cycleBars, strategy, strategies, accounts, specOf, accountId, selected, size, approved, orderMax })
+ *   composedOrder({ home, root, side, now, cycleBars, strategy, strategies, accounts, specOf, accountId, selected, size, approved, orderMax, mtfMode })
+ *       (mtfMode: the MTF entry arm on the caller's env, P1: the record re-checked as the gate re-checks it)
  *       { args, line, plan, policy, account, verdict } or throws the refusal (plan: suggestedSize and translatedSize in an attempt)
  */
 
@@ -45,7 +46,7 @@ function attemptPolicy(home, strategy, strategies, root) {
   return p;
 }
 
-function composedOrder({ home, root, side, now = new Date(), cycleBars = {}, strategy, strategies = [], accounts = [], specOf, accountId = null, selected = null, paper = false, size = null, approved = null, orderMax = null }) {
+function composedOrder({ home, root, side, now = new Date(), cycleBars = {}, strategy, strategies = [], accounts = [], specOf, accountId = null, selected = null, paper = false, size = null, approved = null, orderMax = null, mtfMode = null }) {
   const cycleBar = (cycleBars || {})[familyRoot(root)] || null;
   if (!cycleBar) throw new Error(`no cycle bar for ${familyRoot(root)} (FTH_CYCLE_BARS): a composed trade is planned only in the runner's cycle, on its bar`);
   const got = briefingFor(home, root, { cycleBar, now });
@@ -74,7 +75,7 @@ function composedOrder({ home, root, side, now = new Date(), cycleBars = {}, str
   // The reads and the plan as the gate re-checks them, at the record's own size (its plan stands as written).
   // The policy's entry rule (entry-rule.js), as the gate's re-check holds it.
   const entryRule = policy ? entryRuleOf(policy.entry) : null;
-  const first = composedRefusal({ name: strategy.name, strategy, home, root, input: { ...draft, size: stated, ...brackets }, now, cycleBars, entries: [], specOf, attempt: Boolean(policy), entryRule, cited });
+  const first = composedRefusal({ name: strategy.name, strategy, home, root, input: { ...draft, size: stated, ...brackets }, now, cycleBars, entries: [], specOf, attempt: Boolean(policy), entryRule, cited, mtfMode });
   if (first.message) throw new Error(`the order gate would refuse it: [composed-reads] ${first.message}`);
   const p = first.plan;
   const tick = spec.tickSize;
@@ -114,7 +115,7 @@ function composedOrder({ home, root, side, now = new Date(), cycleBars = {}, str
   if (floor) throw new Error(`[min-contracts] ${floor}${cutWhy ? ` (${cutWhy} to ${ordered}: no trade)` : ''}`);
   if (policy || cutWhy) {
     // The gate's own composed-reads check on the exact size: the same translation, the cut, nothing else.
-    const again = composedRefusal({ name: strategy.name, strategy, home, root, input: { ...draft, size: ordered, ...brackets }, now, cycleBars, entries: [], specOf, approvedSize: cutWhy ? ordered : null, translate, entryRule, cited });
+    const again = composedRefusal({ name: strategy.name, strategy, home, root, input: { ...draft, size: ordered, ...brackets }, now, cycleBars, entries: [], specOf, approvedSize: cutWhy ? ordered : null, translate, entryRule, cited, mtfMode });
     if (again.message) throw new Error(`the order gate would refuse it: [composed-reads] ${again.message}`);
   }
   const tag = policy ? `setup:${policy.name} ${side} ${strategy.name}` : `setup:${strategy.name} ${side}`;

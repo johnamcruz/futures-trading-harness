@@ -621,6 +621,160 @@ test('order gate hook: a trade-lifecycle entry with the 15m setup and no 3m read
   assert.match(gate(orderPayload(LC.order()), env).stderr, /\[composed-reads\] .*steps not stated: setup/);
 });
 
+test('order gate hook (P1): under the committed arm (D, today) an MTF compose record is refused through the hook: its reads are not in the mode and [mtf-trend] binds (no exemption); its exit goes', () => {
+  const MF = require('../fixtures/mtf-entry');
+  const LC = require('../fixtures/lifecycle');
+  const { env } = setup([{ ts: '2026-10-07T13:59:30.000Z', kind: 'plan', contractId: 'MNQ', text: 'plan' }],
+    { FTH_STRATEGIES_DIRS: path.join(REPO, 'strategies'), FTH_TEST_NOW: '2026-10-07T14:00:02.000Z', FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }) });
+  // The record as an arm A replay's compose_check would write it, on a briefing with the MTF record (the 4h EMA down).
+  const mtfDir = path.join(env.FTH_HOME, 'mtf');
+  fs.mkdirSync(mtfDir, { recursive: true });
+  fs.writeFileSync(path.join(mtfDir, 'MNQ.json'), JSON.stringify({ symbol: 'MNQ', asOf: '2026-10-07T13:57:00.000Z', closedAt: '2026-10-07T13:57:00.000Z', biases: { 240: -1, 60: 1, 15: 1 } }));
+  LC.writeScenario(env.FTH_HOME, { b: MF.briefing(), reads: MF.READS, mtfMode: MF.MODE('A') });
+  const entry = gate(orderPayload(MF.order()), env);
+  assert.strictEqual(entry.code, 2, entry.stderr);
+  assert.match(entry.stderr, /\[composed-reads\] .*not in this entry mode \(arm D, today\)/);
+  assert.match(entry.stderr, /\[mtf-trend\]/);
+  assert.doesNotMatch(entry.stderr, /\[entry-mode\]/, 'today refuses nothing for its mode');
+  const exit = gate(orderPayload({ ...EXIT_BASE, side: 'sell', rationale: '[exit] close the trade_lifecycle long' }), env);
+  assert.strictEqual(exit.code, 0, exit.stderr);
+});
+
+// ---- the replay-only rule through the real wiring. A tree copy whose committed config/runner.json
+// sets arm A (no env override for the arm, none exists), its own hook and gateway: the mode is derived where production
+// derives it (loadConfig on the caller's env; harness-now's replay clock).
+const MTF_TREES = {};
+const mtfTree = arm => MTF_TREES[arm] || (MTF_TREES[arm] = require('../helpers').treeCopy(tmpDir(), root => {
+  const f = path.join(root, 'config', 'runner.json');
+  const cfg = JSON.parse(fs.readFileSync(f, 'utf8'));
+  cfg.mtfEntry = { ...cfg.mtfEntry, arm, minStage: 'established' };
+  fs.writeFileSync(f, JSON.stringify(cfg, null, 2));
+}));
+const gateIn = (root, payload, env) => {
+  const res = spawnSync(process.execPath, [path.join(root, 'scripts', 'hooks', 'run-with-flags.js'), 'pre:trading:order-gate', 'scripts/hooks/trading-order-gate.js', 'minimal,standard,strict'], {
+    input: JSON.stringify(payload), encoding: 'utf8', env: { PATH: process.env.PATH, HOME: process.env.HOME, CLAUDE_PLUGIN_ROOT: root, ...env },
+  });
+  return { code: res.status, stderr: res.stderr };
+};
+/** The MTF world in a home: the MTF briefing and record (composed under arm A, as a replay's compose_check writes it). */
+function mtfWorld({ replay = true, replayBroker = true, reads = null } = {}) {
+  const MF = require('../fixtures/mtf-entry');
+  const LC = require('../fixtures/lifecycle');
+  const day = '2026-10-07';
+  const { dir, env } = setup([{ ts: '2026-10-07T13:59:30.000Z', kind: 'plan', contractId: 'MNQ', text: 'plan' }],
+    { FTH_STRATEGIES_DIRS: path.join(REPO, 'strategies'), FTH_TEST_NOW: '2026-10-07T14:00:02.000Z', FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }) });
+  fs.writeFileSync(path.join(env.FTH_HOME, 'mtf', 'MNQ.json'), JSON.stringify({ symbol: 'MNQ', asOf: LC.BAR, closedAt: LC.BAR, biases: { 240: -1, 60: 1, 15: 1 } }));
+  recordBrokerSpecs(env.FTH_HOME, { broker: 'fake', day });
+  if (reads !== false) LC.writeScenario(env.FTH_HOME, { b: MF.briefing(), reads: reads || MF.READS, mtfMode: MF.MODE('A') });
+  const brokers = JSON.parse(fs.readFileSync(FAKE_BROKERS, 'utf8'));
+  if (replayBroker) brokers.brokers.fake.replay = true;
+  const bf = path.join(dir, 'brokers-replay.json');
+  fs.writeFileSync(bf, JSON.stringify(brokers));
+  return { MF, LC, env: { ...env, FTH_BROKERS_FILE: bf, ...(replay ? { FTH_REPLAY_NOW: '2026-10-07T14:00:02.000Z' } : {}) } };
+}
+
+test('order gate hook , arm A committed: an MTF entry goes in a replay; refused with no replay clock and with FTH_REPLAY_NOW but no replay broker; [entry-mode] refuses a non-MTF entry; an exit and a stop move go', { timeout: 120000 }, () => {
+  const root = mtfTree('A');
+  const ok = mtfWorld();
+  const go = gateIn(root, orderPayload(ok.MF.order()), ok.env);
+  assert.doesNotMatch(go.stderr, /\[(entry-mode|mtf-trend|composed-reads)\]/, go.stderr);
+  const live = mtfWorld({ replay: false });
+  const r = gateIn(root, orderPayload(live.MF.order()), live.env);
+  assert.strictEqual(r.code, 2, 'no replay clock');
+  assert.match(r.stderr, /\[entry-mode\] MTF entry arm A runs only in a replay until the owner opts in/);
+  assert.match(r.stderr, /\[mtf-trend\]/, 'no exemption');
+  // FTH_REPLAY_NOW with no replay broker: the clock itself is refused first ([replay-clock]); no entry (the mode line's
+  // own rule, a live broker is no replay, is pinned in tests/lib/mtf-entry.test.js replayRun).
+  const nb = mtfWorld({ replayBroker: false });
+  const rn = gateIn(root, orderPayload(nb.MF.order()), nb.env);
+  assert.strictEqual(rn.code, 2);
+  assert.match(rn.stderr, /\[replay-clock\]/);
+  // A non-MTF compose record under mtf_only, in the replay: [entry-mode].
+  const plain = mtfWorld({ reads: false });
+  plain.LC.writeScenario(plain.env.FTH_HOME, { b: plain.MF.briefing(), mtfMode: plain.MF.MODE('A') });
+  const np = gateIn(root, orderPayload(plain.LC.order()), plain.env);
+  assert.strictEqual(np.code, 2);
+  assert.match(np.stderr, /\[entry-mode\] entry mode mtf_only \(arm A\): only an MTF ready entry/);
+  // Risk-reducing actions go under mtf_only, live and in replay.
+  for (const w of [ok, mtfWorld({ replay: false })]) {
+    const exit = gateIn(root, orderPayload({ ...EXIT_BASE, side: 'sell', rationale: '[exit] close the trade_lifecycle long' }), w.env);
+    assert.strictEqual(exit.code, 0, exit.stderr);
+    const move = gateIn(root, { tool_name: 'mcp__broker__modify_order', tool_input: { accountId: 1, orderId: 9, stopPrice: 21530, rationale: '[protect] stop up to 21530' } }, w.env);
+    assert.doesNotMatch(move.stderr, /\[(entry-mode|mtf-trend)\]/, move.stderr);
+  }
+});
+
+test('the gate\'s fallback mode (a config built without mtfMode) judges the arm on NO env: in an arm-A tree under a replay clock in the process env, an MTF entry is still refused [entry-mode] (runs only in a replay)', { timeout: 120000 }, () => {
+  const root = mtfTree('A');
+  const w = mtfWorld();
+  const script = `
+    const path = require('path');
+    const OG = require('./scripts/lib/trading/order-gate');
+    const { loadConfig } = require('./scripts/lib/trading/config');
+    const { loadStrategies } = require('./scripts/lib/trading/strategies');
+    const MF = require(${JSON.stringify(path.join(REPO, 'tests', 'fixtures', 'mtf-entry'))});
+    const LC = require(${JSON.stringify(path.join(REPO, 'tests', 'fixtures', 'lifecycle'))});
+    const cfg = { ...loadConfig(process.env), home: process.env.FTH_HOME, cycleBars: { MNQ: LC.BAR } };
+    const withMode = OG.evaluateOrder({ input: MF.order(), entries: [{ ts: '2026-10-07T13:59:30.000Z', kind: 'plan', contractId: 'MNQ' }], now: new Date('2026-10-07T14:00:02.000Z'), config: cfg, strategies: loadStrategies('.', process.env).strategies });
+    delete cfg.mtfMode;
+    const fallback = OG.evaluateOrder({ input: MF.order(), entries: [{ ts: '2026-10-07T13:59:30.000Z', kind: 'plan', contractId: 'MNQ' }], now: new Date('2026-10-07T14:00:02.000Z'), config: cfg, strategies: loadStrategies('.', process.env).strategies });
+    process.stdout.write(JSON.stringify({ withMode: withMode.violations.map(v => v.check + ' ' + v.message), fallback: fallback.violations.map(v => v.check + ' ' + v.message) }));`;
+  const res = spawnSync(process.execPath, ['-e', script], { cwd: root, encoding: 'utf8', env: { PATH: process.env.PATH, HOME: w.env.FTH_HOME, ...w.env } });
+  assert.strictEqual(res.status, 0, res.stderr);
+  const out = JSON.parse(res.stdout);
+  assert.ok(!out.withMode.some(v => /^entry-mode/.test(v)), `the caller's env (a replay): ${JSON.stringify(out.withMode)}`);
+  assert.ok(out.fallback.some(v => /^entry-mode .*MTF entry arm A runs only in a replay/.test(v)), `no env: ${JSON.stringify(out.fallback)}`);
+});
+
+test('compose_check , arm A committed: the MTF reads compose in a replay; with no replay clock the record refuses them (runs only in a replay)', { timeout: 120000 }, () => {
+  const root = mtfTree('A');
+  const TL = require('../../scripts/lib/trading/trade-lifecycle');
+  const run = w => {
+    require('../../scripts/lib/trading/briefing').writeBriefing(w.env.FTH_HOME, w.MF.briefing());
+    const r = spawnSync(process.execPath, [path.join(root, 'scripts', 'compose-check.js'), '--symbol', 'MNQ', '--side', 'long', '--size', '1', '--reads', JSON.stringify(w.MF.READS)], { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: w.env.FTH_HOME, ...w.env } });
+    return { out: r.stdout + r.stderr, rec: TL.readRecords(w.env.FTH_HOME, 'MNQ').at(-1) };
+  };
+  const ok = run(mtfWorld({ reads: false }));
+  assert.equal(ok.rec.ok, true, ok.out);
+  assert.equal(ok.rec.mtf.model, 'aggressive');
+  const live = run(mtfWorld({ reads: false, replay: false }));
+  assert.equal(live.rec.ok, false);
+  assert.ok(live.rec.problems.some(p => /MTF entry arm A runs only in a replay/.test(p)) || live.rec.reads.some(x => /runs only in a replay/.test(x.fact)), live.out);
+});
+
+test('compose_check\'s own [mtf-stop] (arm A, a replay): a plan whose stop is not the candidate\'s structural stop (the record\'s buffer not the plan\'s) is NOT OK, named', { timeout: 120000 }, () => {
+  const root = mtfTree('A');
+  const TL = require('../../scripts/lib/trading/trade-lifecycle');
+  const w = mtfWorld({ reads: false });
+  // The candidate's origin 21530 but its structural stop 21528.75 (five ticks beyond, not the plan's one): the read at the
+  // origin plans 21529.75, not the candidate's stop.
+  const b = w.MF.briefing({ mtf: { entry: { origin: 21530, stop: 21528.75 } } });
+  require('../../scripts/lib/trading/briefing').writeBriefing(w.env.FTH_HOME, b);
+  const reads = w.MF.READS.map(x => (x.step === 'stop' ? { ...x, read: 'stop mtf 21530' } : x));
+  const r = spawnSync(process.execPath, [path.join(root, 'scripts', 'compose-check.js'), '--symbol', 'MNQ', '--side', 'long', '--size', '1', '--reads', JSON.stringify(reads)], { encoding: 'utf8', env: { PATH: process.env.PATH, HOME: w.env.FTH_HOME, ...w.env } });
+  const rec = TL.readRecords(w.env.FTH_HOME, 'MNQ').at(-1);
+  assert.equal(rec.ok, false, r.stdout + r.stderr);
+  assert.ok(rec.problems.some(p => /^\[mtf-stop\] the plan's stop 21529\.75 is not the MTF candidate's structural stop 21528\.75/.test(p)), JSON.stringify(rec.problems));
+});
+
+test('MCP gateway , arm A committed and no replay clock: the MTF entry is refused [entry-mode]; an exit goes', { timeout: 120000 }, async () => {
+  const root = mtfTree('A');
+  const w = mtfWorld({ replay: false });
+  const { spawn } = require('child_process');
+  const gw = spawn(process.execPath, [path.join(root, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'fake-mcp-server.js')], { env: { PATH: process.env.PATH, HOME: w.env.FTH_HOME, ...w.env } });
+  let out = '';
+  gw.stdout.on('data', c => { out += c; });
+  const call = (id, name, args) => ({ jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: args } });
+  gw.stdin.write(`${JSON.stringify(call(1, 'place_order', w.MF.order()))}\n`);
+  gw.stdin.write(`${JSON.stringify(call(2, 'place_order', { ...EXIT_BASE, side: 'sell', rationale: '[exit] close the trade_lifecycle long' }))}\n`);
+  gw.stdin.end();
+  await new Promise(resolve => gw.on('close', resolve));
+  const byId = Object.fromEntries(out.trim().split('\n').filter(Boolean).map(l => JSON.parse(l)).map(r => [r.id, r]));
+  const text = r => JSON.stringify(r);
+  assert.match(text(byId[1]), /entry-mode/, text(byId[1]));
+  assert.doesNotMatch(text(byId[2]), /entry-mode|mtf-trend/, text(byId[2]));
+});
+
 test('order gate hook: a trade-lifecycle entry reads its cycle bar\'s day shard alone; that shard unreadable refuses it (fails closed); its exit goes', () => {
   const LC = require('../fixtures/lifecycle');
   const TL = require('../../scripts/lib/trading/trade-lifecycle');

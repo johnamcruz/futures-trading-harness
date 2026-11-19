@@ -294,7 +294,8 @@ function briefingRecorder(home, cfg, now, env = process.env, { frames = [], data
   // The latest closed 1m bars per symbol (a 1m lane's, this pass's when it closed with the first lane's bar): the
   // runner's briefing builds the timeframes its own bars can't (5m from 3m) from them; another contract's never.
   const fine = new Map();
-  const record = (item, results, scanError = null) => {
+  // positionOpen: the runner holds a trade on the item's contract (runner.js briefItem): an MTF arm marks its candidates.
+  const record = (item, results, scanError = null, { positionOpen = false } = {}) => {
     if (item.lane > 0) {
       const roundSteps = roundStepsAt(closeOf(item.bars, item.minutes));
       // A lane's briefing that can't be built: the lane's setups have no room read (fail closed: no entry on this bar).
@@ -302,7 +303,7 @@ function briefingRecorder(home, cfg, now, env = process.env, { frames = [], data
       return error ? { error } : null;
     }
     const roundSteps = roundStepsAt(closeOf(item.bars, cfg.timeframe));
-    const file = firstBriefing(item, results, scanError, roundSteps);
+    const file = firstBriefing(item, results, scanError, roundSteps, positionOpen);
     for (const m of built) frame(item, m, { bars: () => wholeBars(item.bars, m), roundSteps });
     return file;
   };
@@ -311,14 +312,14 @@ function briefingRecorder(home, cfg, now, env = process.env, { frames = [], data
   };
   return record;
 
-  function firstBriefing(item, results, scanError, roundSteps) {
+  function firstBriefing(item, results, scanError, roundSteps, positionOpen = false) {
     try {
       const { blackouts, clock } = facts();
       const f = fine.get(item.symbol);
       const fineBars = f && f.contractId === (item.contractId || null) ? f.bars : null;
       // A roll between the lanes' contract lookups: the briefing says "no 1m bars configured"; the log says why.
       if (f && !fineBars) log(`${item.symbol}: the 1m bars are of another contract (${f.contractId}, the bar's ${item.contractId || 'none'}): no 5m facts from them this bar`, 'error');
-      return writeBriefing(home, buildBriefing({ symbol: item.symbol, contractId: item.contractId || null, bars: item.bars, minutes: cfg.timeframe, fineBars, prev: readBriefing(home, item.symbol), scan: results, scanError, blackouts, clock, roundSteps, now: now() }));
+      return writeBriefing(home, buildBriefing({ symbol: item.symbol, contractId: item.contractId || null, bars: item.bars, minutes: cfg.timeframe, fineBars, prev: readBriefing(home, item.symbol), scan: results, scanError, blackouts, clock, roundSteps, now: now(), positionOpen }));
     } catch (err) {
       removeBriefing(home, item.symbol);
       // The timeframes built from it share its parts: none without it.

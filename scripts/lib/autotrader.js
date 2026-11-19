@@ -550,13 +550,15 @@ function recentBarsText(symbol, bars, timeframe) {
  * entered, so nothing is listed; under a policy strategy's verdict the fired
  * strategies are its components, entered only as the verdict says.
  */
-function signalsText(symbol, scan, { manageOnly = false, verdicts = [], notEntries = [], lane = false, entryBlocked = null, cited = [] } = {}) {
+function signalsText(symbol, scan, { manageOnly = false, verdicts = [], notEntries = [], lane = false, entryBlocked = null, cited = [], mtfOnly = null } = {}) {
   // Manage-only is stated once, in the instruction's mode; a lane that fails closed (its briefing can't be built) says
   // its own "no entry on this bar", never an invitation to compose there.
   if (manageOnly || entryBlocked) return '';
   // No scan: the reason is in the "Context unavailable" line.
   if (!Array.isArray(scan)) return '';
   const fired = scan.filter(r => r.candidate && r.direction && r.signal === 'rules');
+  // P1 (coordinator 2026-11-18): an mtf_only arm (A, B, AB): today's setups are context, never an offer.
+  if (mtfOnly) return ` ${symbol}: MTF entry arm ${mtfOnly.arm}: the only entries are the briefing's MTF candidate lines${fired.length ? `; rules setups fired (${fired.map(r => `${r.name} ${r.direction}`).join(', ')}): context only` : ''}.`;
   // No candidate is no rules signal, never no setup: a composed setup is the model's to read (a model read "no
   // candidates" as "no setup" and composed on 2 of 80 cycles). With no rules strategy at all, the scan is empty by design.
   if (!fired.length && !scan.some(r => r.signal === 'rules')) return ` ${symbol}: no rules strategy is active, so the scan lists no candidates; every setup is one you compose and check (trade-lifecycle, compose_check).`;
@@ -839,6 +841,13 @@ function prompts(cfg, now, root = '') {
   // (A trade cycle's prompt in the stable-first order, TRADE_ORDER, puts the cycle's time later, after its instructions.)
   // New York time, as the bars, sessions, and strategies read it; UTC once, for tools that take it.
   const head = `${stableHead(root)} The cycle's time: ${etStamp(now)} (${now.toISOString()}).`;
+  // P1: an mtf_only MTF entry arm (cfg.mtfMode, else the config's under this process's clock); today's arm D: null.
+  const mtfOnly = (() => {
+    try {
+      const m = cfg.mtfMode !== undefined ? cfg.mtfMode : require('./trading/mtf-entry').modeOf(TUN.mtfEntry, process.env);
+      return m && m.mtf && !m.refused && m.entryMode === 'mtf_only' ? m : null;
+    } catch (_err) { return null; }
+  })();
   return {
     premarket: (symbol, { state = null } = {}) => `${head}${accountText(state)} Run the premarket skill for ${symbol}${acct}, for the trading day ending ${dayKey(now)} (from 18:00 ET the evening before until 16:00 ET that day): today's calendar means that day's.${RESULT_LINE}`,
     /**
@@ -857,7 +866,7 @@ function prompts(cfg, now, root = '') {
         + (bar.plan && !repeat ? ` ${sentence(bar.plan)}` : '')
         + (bar.day && !repeat ? ` ${sentence(bar.day)}` : '')
         + recentBarsText(symbol, bar.recent, minutes)
-        + signalsText(repeat ? `${symbol} ${minutes}m` : symbol, scan, { manageOnly, verdicts: verdicts || [], notEntries: notEntries || [], lane: minutes !== cfg.timeframe, entryBlocked, cited: cited || [] }));
+        + signalsText(repeat ? `${symbol} ${minutes}m` : symbol, scan, { manageOnly, verdicts: verdicts || [], notEntries: notEntries || [], lane: minutes !== cfg.timeframe, entryBlocked, cited: cited || [], mtfOnly }));
       const symbols = [...new Set(list.map(x => x.symbol))].join(', ');
       const mode = [
         cfg.paper ? 'paper mode (plan only, no orders)' : '',

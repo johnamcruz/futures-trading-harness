@@ -302,6 +302,18 @@ side and stand on its bar (its candle the last completed one, or the CISD
 or compression still live); an entry read stated is still checked (true,
 the side's way). `composed-reads.js` REQUIRED_STEPS.*
 
+**The MTF entry arm (P1, replay only).** In an MTF entry arm (`config/runner.json` `mtfEntry`; trading/mtf-entry.js)
+two more forms exist: `mtf ready <model> long|short` (setup step: the briefing's chosen MTF candidate, its side the 1h
+structure's) and `stop mtf <price>` (its structural stop; the plan adds the D3 buffer to its origin once). On such an
+entry the policy's 4h+1h entry rule and the gate's `[mtf-trend]` give way to the 1h structure's side, checked by the
+same code in compose_check and the gate; arms A, B and AB refuse every other entry (`[entry-mode]`), and today's arm
+(D) refuses the MTF forms. In arms A, B and AB today's setups print as context only (no compose instruction, no
+Standard plan, no prepared "Possible at the next close" candidate). A ready candidate is void for good once any close
+since its trigger ran past the trigger by more than `analysis.mtfStructure.voidDriftR` (0.5) of its own stop; a trigger
+older than `maxAgeMin` (60) minutes, or from an earlier session, is void; one whose drift can't be read is void too
+(fails closed). `stop mtf` is an MTF entry's stop only, in every arm (`[mtf-stop]`). The stop is the trigger
+structure's invalidation point, never moved. The mtf-entry skill teaches them.
+
 ### 3.3 The composed record
 
 `compose_check` checks the reads against the cycle bar's briefing, with

@@ -13,7 +13,7 @@
  *   briefing(over)             the briefing (deep-merged over m3 data with `over.m3`)
  *   READS                      the six reads, one per step, each true on it for a long
  *   writeScenario(home, o)     writes the briefing and the compose record compose_check would ({ reads, side, size, at, b,
- *                              validBars: the strategy's valid_bars, 2 as shipped }) to home;
+ *                              validBars: the strategy's valid_bars, 2 as shipped; mtfMode: the MTF entry arm, P1 }) to home;
  *                              returns the record
  *   order(over)                the place_order the record gives: a limit buy 1 at 21540.25, 111 / 231 ticks
  *   s2Briefing(), S2_READS, s2Order(over), writeS2(home, o)   the cited setup's (momentum_continuation) scenario on
@@ -90,8 +90,8 @@ const s2Order = (over = {}) => ({
 });
 
 /** The record compose_check writes for these reads on this briefing (harness-tools/compose.js, its steps); `cited`: the setups it may cite. */
-function composeRecord({ reads = READS, side = 'long', size = 1, at = '2026-10-07T13:59:50.000Z', b = briefing(), minRR = 2, maxRiskUsd = 300, validBars = 2, cited = null } = {}) {
-  const checked = checkReads({ reads, side, briefing: b, tick: 0.25, cited });
+function composeRecord({ reads = READS, side = 'long', size = 1, at = '2026-10-07T13:59:50.000Z', b = briefing(), minRR = 2, maxRiskUsd = 300, validBars = 2, cited = null, mtfMode = null } = {}) {
+  const checked = checkReads({ reads, side, briefing: b, tick: 0.25, cited, mtfMode });
   const planned = checked.stop && checked.target ? planOf({ checked, briefing: b, side, size, tick: 0.25, tickValue: 0.5, minRR, maxRiskUsd, stopRule: lifecycleStopRule() }) : null;
   return buildRecord({ at, root: 'MNQ', symbol: 'MNQ', side, briefing: b, checked, planned, validBars });
 }

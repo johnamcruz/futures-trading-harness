@@ -535,7 +535,8 @@ test('every setup form that names a candle is enterable on its own candle: a CIS
   // hints' setup times); an OTE zone and a sweep name none and point no side as a setup; a cited setup's fired read is
   // the scan's trigger on the bar itself.
   assert.deepStrictEqual([...CR.SETUP_CANDLE].filter(k => CR.STEP_KINDS[k].includes('setup')).sort(), ['cisd', 'compression', 'pattern', 'relation']);
-  assert.deepStrictEqual(Object.keys(CR.STEP_KINDS).filter(k => CR.STEP_KINDS[k].includes('setup') && !CR.SETUP_CANDLE.has(k)).sort(), ['fired', 'ote', 'swept']);
+  // P1: an MTF ready read (`mtf ready <model> <side>`) names no candle either: its trigger is in the MTF record.
+  assert.deepStrictEqual(Object.keys(CR.STEP_KINDS).filter(k => CR.STEP_KINDS[k].includes('setup') && !CR.SETUP_CANDLE.has(k)).sort(), ['fired', 'mtf', 'ote', 'swept']);
   const cisd = SCENARIO_1.map(x => (x.step === 'setup' ? { ...x, skill: 'cisd', read: '15m cisd up' } : x));
   const at = confirmedClose => {
     const b = scenario1();

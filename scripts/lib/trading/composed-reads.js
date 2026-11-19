@@ -116,6 +116,7 @@
 
 const { trendRuleOf } = require('./reasons');
 const { entryProblems, entryRuleOf, topDown, BIAS_FRAMES, TREND_TF, NEUTRAL } = require('./entry-rule');
+const ME = require('./mtf-entry');
 // The trail target's condition (the owner: always trail; never block a trend entry for lack of a fixed target): every
 // side the shipped entry rule allows (BG, bias_agree neutral-15m-declared: a trending 4h or 1h the side's way, none
 // against; both ranging, the 15m and the declared trend its way), the entry rule's own check.
@@ -136,6 +137,7 @@ const STEP_KINDS = {
   relation: ['setup'], pattern: ['setup', 'entry'], cisd: ['setup'], ote: ['setup'], swept: ['setup'], compression: ['setup'],
   close: ['entry'], momentum: ['entry'], volume: ['entry'], participation: ['entry'], absorption: ['entry'],
   fired: ['setup'],
+  mtf: ['setup'],
 };
 // The confirming candle patterns the entry step takes, and the side each confirms.
 const ENTRY_PATTERNS = { hammer: 'long', 'bullish engulfing': 'long', 'shooting star': 'short', 'bearish engulfing': 'short' };
@@ -233,6 +235,9 @@ function parseRead(text) {
   if (tf && b === 'absorption' && c === 'at' && w.length >= 5 && ['up', 'down'].includes(w[w.length - 1])) {
     return out('absorption', { tf, level: w.slice(3, -1).join(' '), value: w[w.length - 1] });
   }
+  // P1, an MTF ready candidate (mtf-entry.js): its model and side, as the candidate line prints them.
+  const mtf = /^mtf ready (aggressive|balanced|conservative) (long|short)$/.exec(form);
+  if (mtf) return out('mtf', { model: mtf[1], value: mtf[2] });
   // A rules strategy's scan setup that fired on this bar (its name as the briefing's candidates name it).
   const fired = /^([a-z0-9][a-z0-9_-]*) fired (up|down)$/.exec(form);
   if (fired) return out('fired', { name: fired[1], value: fired[2] });
@@ -603,7 +608,7 @@ function relationsOf(c, tf, level) {
  * One parsed read checked against the briefing: { check: true | false | 'unchecked', fact, field, value, dir }. dir:
  * the side the read points to (null: none). A stop or target carries the briefing's price for it (`price`).
  */
-function checkRead(p, b, { tick = 0.25, side = null, riskPts = null } = {}) {
+function checkRead(p, b, { tick = 0.25, side = null, riskPts = null, mtfMode = null, mtfEntry = false } = {}) {
   const res = (check, fact, extra = {}) => ({ check, fact, field: null, value: null, dir: null, ...extra });
   if (p.kind === 'ambiguous') return res(false, 'a negation, a bracket or a character outside plain ASCII: state each read plainly');
   if (p.kind === 'unknown') return res('unchecked', p.why || 'not a form this check knows (the forms: trading/composed-reads.js)');
@@ -821,6 +826,14 @@ function checkRead(p, b, { tick = 0.25, side = null, riskPts = null } = {}) {
       return res(ok, `the ${p.tf} candle: range ${rangeAtr} ATR, volume ${volRatio}x, close ${loc} third (momentum ${p.value}: range >= ${MOMENTUM.rangeAtr} ATR, volume >= ${MOMENTUM.volRatio}x, close ${far} third)`,
         { field: `m3.candles.${p.tf}`, value: `${rangeAtr} ATR, ${volRatio}x, ${loc}`, dir: dirSide(p.value) });
     }
+    case 'mtf': {
+      // P1: TRUE only when the MTF entry check passes on this briefing (mtf-entry.js readyOf: the arm's mode, the 1h
+      // structure's side, the chosen candidate not withheld, this model); anything else is false (fails closed).
+      const r = ME.readyOf({ briefing: b, side: p.value, mode: mtfMode, model: p.model });
+      const c = r.candidate;
+      return res(r.ok, r.ok ? `the MTF ${c.model} candidate ${p.value} at stage ${c.stage}${c.early ? ' (early)' : ''}, trigger ${c.trigger.frame} ${c.trigger.kind || 'break'} ${c.trigger.et}, structural stop ${c.stop}` : r.problem,
+        { field: 'm3.mtfStructure', value: c ? `${c.model} ${c.side}` : null, dir: p.value });
+    }
     case 'fired': {
       // The scan's candidates on this bar (briefing.js candidate); null: the scan failed or the bar wasn't scanned.
       if (!Array.isArray(m3.candidates)) return res('unchecked', `what fired on this bar is unknown (${m3.scanError || m3.setups || 'no scan'})`);
@@ -838,6 +851,12 @@ function checkRead(p, b, { tick = 0.25, side = null, riskPts = null } = {}) {
         // TRUE only when the briefing names no target the side's way at all: a named level ahead is the target (the first
         // at the minimum R or more), and one short of it in the way is no room, never the mark.
         if (!SIDES.includes(side)) return res('unchecked', 'the 2R mark is the side\'s: no side given', { field: 'm3 targets' });
+        if (p.trail && mtfEntry) {
+          // P1: on an MTF entry the trail's side is the 1h structure's (the entry's own check), not the 4h+1h rule.
+          const r = ME.readyOf({ briefing: b, side, mode: mtfMode, anyModel: true });
+          if (!r.ok) return res(false, `the trail target needs the MTF entry's side: ${r.problem}`, { field: 'm3.mtfStructure' });
+          return res(true, `the MTF entry's side (the 1h structure ${r.side1h}): the target is the trail (the 2R mark from the plan's entry arms it; past it the runner trails)`, { field: 'm3.mtfStructure', value: 'trail', price: null, dir: side, mark: true });
+        }
         if (p.trail) {
           const why = entryProblems({ briefing: b, side, reads: [], rule: TRAIL_RULE });
           if (why.length) return res(/not in the briefing|can't be read/.test(why[0]) ? 'unchecked' : false, `the trail target needs a side the entry rule allows (htf-to-ltf): ${why[0].replace(/^entry rule: /, '')}`, { field: 'h1 trends' });
@@ -846,6 +865,17 @@ function checkRead(p, b, { tick = 0.25, side = null, riskPts = null } = {}) {
         const ahead = targetsAhead(b, side, { tick, riskPts });
         if (ahead.length) return res(false, `the briefing names ${ahead[0].read.replace(/^target /, '')} ${side === 'long' ? 'above' : 'below'} price ${ref}: the target is the first named level at the minimum R or more; the 2R mark only with none named`, { field: 'm3 targets', value: ahead[0].price });
         return res(true, `no named level ${side === 'long' ? 'above' : 'below'} price ${ref}: the target is the 2R mark (the plan's entry plus the minimum R times its stop)`, { field: 'm3 targets', value: '2r', price: null, dir: side, mark: true });
+      }
+      if (p.kind === 'stop' && p.source === 'mtf') {
+        // P1: the chosen MTF candidate's structural stop: its origin is the stop read's level (the plan adds the D3 buffer
+        // once, giving the printed stop); the model may cite either within one tick.
+        if (!SIDES.includes(side)) return res('unchecked', 'the MTF stop is the side\'s candidate\'s: no side given', { field: 'm3.mtfStructure' });
+        const r = ME.readyOf({ briefing: b, side, mode: mtfMode, anyModel: true });
+        if (!r.ok) return res(false, `stop mtf: ${r.problem}`, { field: 'm3.mtfStructure' });
+        const c = r.candidate;
+        if (num(c.origin) === null) return res(false, 'stop mtf: the candidate has no structural origin', { field: 'm3.mtfStructure' });
+        if (!within(c.origin, p.price, tick) && !within(c.stop, p.price, tick)) return res(false, `mtf is ${c.origin} (its structural stop ${c.stop}), not ${p.price} (within one tick, ${tick})`, { field: 'm3.mtfStructure', value: c.origin });
+        return res(true, `mtf is ${c.origin} (the ${c.model} candidate's origin; its structural stop ${c.stop}); price ${ref}`, { field: 'm3.mtfStructure', value: c.origin, price: c.origin, dir: side });
       }
       const { field, prices, why, spent, bad, trigger, label, note = '' } = sourcePrices(p.kind, p.source, b, base, { tick, ref });
       if (spent) return res(false, spent, { field });
@@ -920,7 +950,7 @@ function contextOf(b, side) {
  * folders that exist (a read naming another is refused); tick: the contract's (0.25 when not given); entryRule: the
  * policy's entry rule (entry-rule.js entryRuleOf; null: none), its problems refuse the combination.
  */
-function checkReads({ reads, side, briefing, skills = null, tick = 0.25, entryRule = null, cited = null } = {}) {
+function checkReads({ reads, side, briefing, skills = null, tick = 0.25, entryRule = null, cited = null, mtfMode = null } = {}) {
   const problems = [];
   if (!SIDES.includes(side)) problems.push('side must be long or short');
   const list = Array.isArray(reads) ? reads : [];
@@ -930,9 +960,11 @@ function checkReads({ reads, side, briefing, skills = null, tick = 0.25, entryRu
   const m3 = data(briefing, 'm3');
   const reference = m3 ? num(m3.price) : null;
   const seen = new Set();
+  // P1: an MTF entry's combination (an MTF setup read stated): its stop and trail reads are the MTF candidate's.
+  const mtfEntry = list.some(r => isObj(r) && r.step === 'setup' && parseRead(r.read).kind === 'mtf');
   // The combination's stop distance (its first TRUE stop read's price from the reference): the room rule's R.
   const stopAt = list.map(r => (isObj(r) && r.step === 'stop' ? parseRead(r.read) : null)).filter(p => p && p.kind === 'stop')
-    .map(p => checkRead(p, briefing, { tick })).find(c => c.check === true);
+    .map(p => checkRead(p, briefing, { tick, side, mtfMode, mtfEntry })).find(c => c.check === true);
   const riskPts = stopAt && reference !== null ? Math.abs(reference - stopAt.price) : null;
   const checked = list.slice(0, MAX_READS).map((r, i) => {
     const x = isObj(r) ? r : {};
@@ -956,7 +988,7 @@ function checkReads({ reads, side, briefing, skills = null, tick = 0.25, entryRu
     if (entryPattern && !ENTRY_PATTERNS[p.value]) return bad(`an entry pattern is one of ${Object.keys(ENTRY_PATTERNS).join(', ')}`);
     if (p.form && seen.has(p.form)) return bad('the same read twice: each read is stated once, in one step');
     if (p.form) seen.add(p.form);
-    const c = checkRead(p, briefing, { tick, side, riskPts });
+    const c = checkRead(p, briefing, { tick, side, riskPts, mtfMode, mtfEntry });
     return { ...row, ...c, agrees: true };
   });
   // Side agreement (D12): a read pointing against the side never agrees (never counter: no reversal tier excuses one).
@@ -967,6 +999,9 @@ function checkReads({ reads, side, briefing, skills = null, tick = 0.25, entryRu
   }
   // A cited setup (a TRUE `<strategy> fired` read of a strategy in `cited`): the plan takes its own entry, stop and target.
   const setup = citedSetup({ checked, side, m3, cited, problems });
+  // an MTF entry cites no setup (its plan is the candidate's, never a cited setup's market plan).
+  const mtfCited = mtfEntry && checked.some(r => r.kind === 'fired' && r.step === 'setup');
+  if (mtfCited) problems.push('[mtf-cited] an MTF entry cites no setup: state the "mtf ready" read without a "<strategy> fired" read (or the setup without the MTF read); no entry');
   const missingSteps = REQUIRED_STEPS.filter(s => !checked.some(r => r.step === s));
   if (missingSteps.length) problems.push(`steps not stated: ${missingSteps.join(', ')} (every step needs a read, D7)`);
   // The reaction points the trade's way: the setup needs a true read whose direction is the side (reads without a
@@ -982,14 +1017,32 @@ function checkReads({ reads, side, briefing, skills = null, tick = 0.25, entryRu
     // candle). The 15m trend itself may run against the side (a 15m pullback): only the setup read's frame is held.
     const setups = pointing('setup');
     const setupTf = entryRule && entryRule.chain ? entryRule.chain.setup : '15m';
-    if (topDown(entryRule) && setups.length && !setups.some(r => r.kind === 'fired' || (TF_MIN[String(r.form || '').split(' ')[0]] || 0) >= (TF_MIN[setupTf] || Infinity))) {
+    if (topDown(entryRule) && setups.length && !setups.some(r => r.kind === 'fired' || r.kind === 'mtf' || (TF_MIN[String(r.form || '').split(' ')[0]] || 0) >= (TF_MIN[setupTf] || Infinity))) {
       problems.push(`entry rule: the setup must be on the ${setupTf} or higher (a ${entryRule.chain ? entryRule.chain.entry : '3m'} read only times the entry): state the ${(l => (l.length > 1 ? `${l.slice(0, -1).join(', ')} or ${l[l.length - 1]}` : l[0]))(LADDER.slice(LADDER.indexOf(setupTf)))} reaction or break the ${side}'s way, or pass`);
     }
   }
   // The policy's entry rule (entry-rule.js, its rulebook's `entry`): the bias frames, the regime, the leg turned, on
   // the same briefing. No policy (or every key off): no BG check here; never counter outside a policy is the order
   // gate's [mtf-trend] (mtf.js trendRule), which refuses any entry against a trending 4h or 1h.
-  if (SIDES.includes(side)) problems.push(...entryProblems({ briefing, side, reads: checked, rule: entryRule }));
+  // P1: an MTF entry (a TRUE `mtf ready` read pointing the side) in an MTF arm: the side is the 1h structure's, checked
+  // by that read (mtf-entry.js readyOf), and the policy's 4h+1h entry rule does not bind it; every other entry as before.
+  // The arm's own refusals: mtf_only refuses a non-MTF entry, today (no arm, the default) refuses the MTF reads.
+  const isMtf = !mtfCited && !setup && checked.some(r => r.kind === 'mtf' && r.step === 'setup' && r.check === true && r.dir === side);
+  const mode = isObj(mtfMode) ? mtfMode : null;
+  if (SIDES.includes(side) && !(isMtf && mode && mode.mtf && !mode.refused)) problems.push(...entryProblems({ briefing, side, reads: checked, rule: entryRule }));
+  if (mode || mtfEntry) problems.push(...ME.entryModeProblems({ mtf: mtfEntry, mode: mode || ME.TODAY }));
+  // An MTF entry's stop is its candidate's structural stop (the coordinator's decision 1), never another level.
+  const mtfStopOff = mtfEntry && checked.some(r => r.kind === 'stop' && r.step === 'stop' && r.slug !== 'mtf');
+  if (mtfStopOff) problems.push('an MTF entry\'s stop is its candidate\'s structural stop: state "stop mtf <price>" (the candidate line\'s structural stop)');
+  // "stop mtf" belongs to an MTF entry only, in every arm; a non-MTF entry takes its own
+  // setup's stop (an MTF candidate's stop never substitutes for it).
+  if (!mtfEntry && checked.some(r => r.kind === 'stop' && r.slug === 'mtf')) problems.push('[mtf-stop] "stop mtf" is an MTF entry\'s stop only (with an "mtf ready" setup read): this entry takes its own setup\'s stop');
+  // Its target is the trail (the exit option manages the rest: today's trail, or the previous high's rule).
+  const mtfTargetOff = mtfEntry && checked.some(r => r.kind === 'target' && r.step === 'target' && r.slug !== 'trail');
+  if (mtfTargetOff) problems.push('[mtf-target] an MTF entry\'s target is "target trail" (the exit option manages the rest); no other target form');
+  // The MTF candidate the entry takes, for the record (the exit option's target, the rank, the trigger and its lag).
+  const mtfPick = isMtf && !mtfStopOff && !mtfTargetOff && mode && mode.mtf && !mode.refused ? ME.readyOf({ briefing, side, mode, anyModel: true }) : null;
+  const mtf = mtfPick && mtfPick.ok ? { arm: mode.arm, exitMode: mode.exitMode, ...mtfPick.candidate, side1h: mtfPick.side1h, context: mtfPick.context } : null;
   for (const k of ['stop', 'target']) {
     const n = checked.filter(r => r.kind === k && r.step === k).length;
     if (n > 1) problems.push(`${n} ${k} reads: state exactly one`);
@@ -999,7 +1052,7 @@ function checkReads({ reads, side, briefing, skills = null, tick = 0.25, entryRu
   const ok = !problems.length && checked.length > 0 && checked.every(r => r.check === true && r.agrees);
   const signed = checked.filter(r => STEPS.includes(r.step) && r.skill);
   return {
-    ok, side, reference, reads: checked, problems, missingSteps, ...(setup ? { setup } : {}),
+    ok, side, reference, reads: checked, problems, missingSteps, ...(setup ? { setup } : {}), ...(mtf ? { mtf } : {}),
     stop: stopRead ? { source: stopRead.slug, level: stopRead.price } : null,
     target: targetRead ? { source: targetRead.slug, level: targetRead.mark ? null : targetRead.price, ...(targetRead.mark ? { mark: true } : {}) } : null,
     signature: readSignature(signed, { reference }), skillSignature: skillSignature(signed),

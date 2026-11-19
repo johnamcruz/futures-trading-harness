@@ -152,3 +152,28 @@ test('order_plan, a cited setup in an attempt: the policy sizes the record (its 
   // The $300 cap all in: (46 + 1) x $0.50 + $0.74 = $24.24 a micro, 12 fit ($290.88); the record's 3 is a suggestion.
   assert.deepStrictEqual([r.args.size, r.plan.suggestedSize, r.plan.translatedSize], [12, 3, 12]);
 });
+
+test('P1: an MTF compose record plans under its arm\'s mode (the caller\'s, as the gate re-checks it); without it (today\'s) the order_plan refuses its MTF reads', () => {
+  const MF = require('../fixtures/mtf-entry');
+  const home = trendHome();
+  LC.writeScenario(home, { b: MF.briefing(), reads: MF.READS, mtfMode: MF.MODE('A') });
+  const plain = { name: 'trade_lifecycle', ...require('../../scripts/lib/trading/strategies').loadStrategies(require('path').resolve(__dirname, '..', '..'), {}).strategies.find(s => s.name === 'trade_lifecycle') };
+  const run = mtfMode => composedOrder({ home, root: 'MNQ', side: 'long', now: new Date('2026-10-07T14:00:02Z'), cycleBars: { MNQ: LC.BAR }, strategy: plain, strategies: [plain], accounts: [], specOf: SPEC, accountId: 7, selected: ['MNQ'], mtfMode });
+  const r = run(MF.MODE('A'));
+  assert.equal(r.args.stopLossBracket.ticks, 46);
+  assert.throws(() => run(undefined), /would refuse it: \[composed-reads\].*not in this entry mode \(arm D, today\)/);
+});
+
+test('an MTF record in a prop ATTEMPT plans through the POLICY under its arm\'s mode on BOTH re-checks (the second, on the translated size, too); without the mode it is refused as arm D\'s', () => {
+  const MF = require('../fixtures/mtf-entry');
+  const { home, rec } = P.propHome({ size: 3, b: MF.briefing(), reads: MF.READS, mtfMode: MF.MODE('A') });
+  assert.ok(rec.ok && rec.mtf, JSON.stringify(rec.problems));
+  const strategies = P.registry();
+  const r = order(home, { strategy: P.LC_DOC, strategies, mtfMode: MF.MODE('A') });
+  assert.strictEqual(r.policy.name, 'prop_portfolio');
+  assert.match(r.args.rationale, /^setup:prop_portfolio long trade_lifecycle limit 21540\.25/);
+  // The structural stop's 46 ticks; the translated size (the $300 cap all in: 47 x $0.50 + $0.74 = $24.24 a micro, 12).
+  assert.deepStrictEqual([r.args.stopLossBracket.ticks, r.args.size], [46, 12]);
+  const fresh = P.propHome({ size: 3, b: MF.briefing(), reads: MF.READS, mtfMode: MF.MODE('A') });
+  assert.throws(() => order(fresh.home, { strategy: P.LC_DOC, strategies }), /\[composed-reads\].*not in this entry mode \(arm D, today\)/);
+});

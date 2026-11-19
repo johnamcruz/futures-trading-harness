@@ -44,7 +44,8 @@ function world({ per = 5, base = 3, keys, events = [], atr = {}, overrides = {},
   const prims = {
     breaksOf: c => {
       const r = roleOf(c);
-      return events.filter(e => e.f === r && !e.cisd).map(e => {
+      // Only the breaks on candles these bars hold (a prefix of the world's bars: the non-repainting checks).
+      return events.filter(e => e.f === r && !e.cisd && idx(r, e.at) < c.length).map(e => {
         const i = idx(r, e.at);
         const sw = idx(r, e.swing);
         const dir = mirror ? -e.dir : e.dir;

@@ -44,6 +44,8 @@ const { entryRuleOf } = require('./entry-rule');
 const { lateEntryCheck, ageLimitOf } = require('./late-entry');
 const { protectRefusal, restingExitRefusal } = require('./bracket-rule');
 const GATE = require('../tunables').runner().gate; // config/runner.json: the bracket tolerances (tighten-only)
+const RUNNER_CFG = require('../tunables').runner(); // config/runner.json mtfEntry (P1)
+const ME = require('./mtf-entry');
 
 const RISK_REDUCING = /^\s*\[(exit|protect)\]/i;
 // The setup tag must open the rationale, so text like "not setup:orb" can't satisfy it.
@@ -344,6 +346,16 @@ const MANAGED_CYCLE_REFUSAL = 'A managed cycle (it started with a position or wo
  * account profiles: a strategy that trades an account gets the hard `combine`
  * and `policy` checks (prop-state.js), which no setting can skip.
  */
+/**
+ * P1: a verified MTF entry's stamp (the runner's exit option and the trade record read it): the candidate's key (its
+ * instance id, the cycle bar), its arm, model, stage, rank, trigger (time, its bar's close), structural stop, the previous high or low (the exit target) and its R at compose.
+ */
+function mtfStamp(m, bar = null) {
+  // The coordinator's ruling 3: the candidate's key (its pullback instance id, the trigger's time, the cycle bar) joins the
+  // trade to the candidate lines and facts offline.
+  return { instanceId: m.instanceId ?? null, bar, arm: m.arm, exitMode: m.exitMode, hierarchy: m.hierarchy, model: m.model, stage: m.stage, early: m.early || null, rank: m.rank, trigger: { kind: m.trigger.kind, frame: m.trigger.frame, at: m.trigger.at, price: m.trigger.price ?? null }, stop: m.stop, prevHigh: m.target, targetR: m.targetR };
+}
+
 function evaluateOrder({ input = {}, entries = [], now = new Date(), config, blackouts = { items: [] }, strategies = null, accounts = [], journalTruncated = false, transcriptPath = null }) {
   if (isRiskReducing(input.rationale)) {
     // The bracket rule (bracket-rule.js): a [protect] limit is a stand-alone target, refused here from the order alone;
@@ -353,6 +365,11 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   }
 
   const rationale = String(input.rationale || '');
+  // P1, the MTF entry arm (mtf-entry.js; config/runner.json mtfEntry, the gate config's mtfMode): today's (arm D) when
+  // unset. An MTF arm outside a replay is refused (every entry: [entry-mode] below).
+  // The caller's env (loadConfig's mtfMode: the hook's and gateway's configs always carry it). A config built without
+  // it is judged on no env at all: never a replay, so an MTF arm refuses every entry (fails closed).
+  const mtfMode = config.mtfMode || ME.modeOf(RUNNER_CFG.mtfEntry, {});
   // The broker's tick specs: the translator's file of the selected broker under this harness home.
   const contractsFile = config.contractsFile !== undefined ? config.contractsFile : contractsFileFor(config.home);
   const specOf = brokerSpecs(contractsFile);
@@ -440,7 +457,7 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
     const cutCheck = translate ? ({ approved, base, riskUsd }) => P2C.phase2Cut({ approved, base, riskUsd, facts: P2C.cutFacts({ home: config.home, account: cutAccount, policy: named, now }) }) : null;
     composedCheck = composedRefusal({ name: composed, strategy: doc, home: config.home, root: contractRoot(input.contractId), input, now, cycleBars: { ...(config.cycleBars || {}), ...(config.cycleBriefingBars || {}) }, entries, specOf, approvedSize: p2Size(), translate, entryRule, cutCheck,
       // The setups its record may cite (strategies.js citedSetups): no registry, none (a cited record is refused).
-      cited: strategies ? citedSetups(strategies, composed) : null });
+      cited: strategies ? citedSetups(strategies, composed) : null, mtfMode });
     // `expired`: the record's time ran out (the cycle-timing count of entries lost to expiry: cycle-timing.js).
     if (composedCheck.message) violations.push({ check: 'composed-reads', message: composedCheck.message, ...(composedCheck.expired ? { expired: true } : {}) });
     // Inside a policy (the prop attempt's account layer): its verdict is the one sized on this very record.
@@ -458,6 +475,14 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
       if (late) violations.push({ check: 'late-entry', message: `setup:${composed}: ${late.message}. Exits, protective stops and stop moves still go.`, late: { ...late.late, record: composedCheck.record ? composedCheck.record.id : null } });
     }
   }
+  // P1: a VERIFIED MTF entry: the composed re-check above passed with a TRUE `mtf ready` read on the cycle bar's
+  // briefing (composed-reads.js checked.mtf, never the record's own field), in an MTF arm that is not refused. Only it is
+  // exempt from [mtf-trend] below; anything else (a failed, forged or unreadable re-check) keeps every check.
+  const mtfVerified = Boolean(mtfMode && mtfMode.mtf && !mtfMode.refused && composedCheck && !composedCheck.message && composedCheck.check && composedCheck.check.mtf);
+  // Hard rule [entry-mode]: an MTF arm outside a replay refuses every entry; mtf_only refuses every entry that is not a
+  // verified MTF one (a non-MTF compose record, a rules setup, a policy entry that is not composed). Exits never reach it.
+  const modeWhy = ME.entryModeProblems({ mtf: mtfVerified, mode: mtfMode }).filter(m => !/MTF entry reads are not in this entry mode/.test(m));
+  if (modeWhy.length) violations.push({ check: 'entry-mode', message: `${modeWhy[0]}. Exits, protective stops and stop moves still go.` });
   // Hard rule: a policy's entry rule (its rulebook's `entry`) holds every entry of the policy, not only a composed one
   // (whose re-check above holds it on the record's reads): any other entry under it (a rules component's verdict, or
   // none) is checked on the briefing, with no reads; unreadable, refused (fails closed).
@@ -481,7 +506,8 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
     if (retiredMsg) violations.push({ check: 'retired-lane', message: retiredMsg });
     // Never counter: every entry, whatever its setup's style, is held to the trend rule (mtf.js trendRule).
     const msg = checkTrend(config.home, { root, side: input.side, style: 'trend', strategy: judge.name, now, maxAgeMin: config.mtfMaxAgeMin });
-    if (msg) violations.push({ check: 'mtf-trend', message: msg });
+    // P1: a verified MTF entry's side is the 1h structure's (its re-check), the 4h context only: the EMA rule does not bind it.
+    if (msg && !mtfVerified) violations.push({ check: 'mtf-trend', message: msg });
     // Hard rule: a rules strategy enters only on its own trigger, fired on the side ordered on a
     // recent bar (signal-state.js): no relabelled setup tag, no stale signal (age in bars of its own timeframe).
     // Hard rule: a setup a composed trade cites (strategies.js citingPolicies) enters only through that trade's compose
@@ -652,7 +678,7 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   // A composed entry the gate let through: the record it judged, its expiry, its entry, stop and target prices (the
   // runner re-anchors a fill's stop to the plan's and flattens a fill beyond it: lifecycle-runner.js fillGuard), for
   // the gateway's stamp.
-  const composedOut = composedCheck && !composedCheck.message ? { composed: { record: composedCheck.record.id, expiresAt: composedCheck.expiresAt, entry: composedCheck.plan.entry.price, stop: composedCheck.plan.stop.price, target: composedCheck.plan.target.price, side: { buy: 'long', sell: 'short' }[String(input.side || '').toLowerCase()] || null } } : {};
+  const composedOut = composedCheck && !composedCheck.message ? { composed: { record: composedCheck.record.id, expiresAt: composedCheck.expiresAt, entry: composedCheck.plan.entry.price, stop: composedCheck.plan.stop.price, target: composedCheck.plan.target.price, side: { buy: 'long', sell: 'short' }[String(input.side || '').toLowerCase()] || null, ...(mtfVerified ? { mtf: mtfStamp(composedCheck.check.mtf, composedCheck.record.bar || null) } : {}) } } : {};
   return { intent: 'entry', violations, ...composedOut };
 }
 

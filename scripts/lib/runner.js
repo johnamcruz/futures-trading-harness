@@ -72,6 +72,10 @@ const famOf = contractId => familyRoot(contractRoot(contractId));
 const etTime = iso => { const p = zonedParts(new Date(iso), 'America/New_York'); return `${String(p.hour).padStart(2, '0')}:${String(p.minute).padStart(2, '0')} ET`; };
 const { trailStep } = require('./trading/trail');
 const { afterTargetStep, liveTarget, swingAtBar, extremeStep, swingClassOf } = require('./trading/exit-trail');
+const PH = require('./trading/prev-high-exit'); // P1: the exit option prev_high_or_trail
+const EQUAL_ATR = require('./tunables').analysis().marketState.equalAtr; // the protected-status tie (config/analysis.json)
+// The frame whose close past the previous high rides (the MTF read's setup frame: mtf-entry.js setupMinutes, the 15m).
+const SETUP_MINUTES = require('./trading/mtf-entry').setupMinutes();
 const { tradingDayStart, inMarketHours, sessionMinuteOf, MARKET_CLOSE_MIN, MARKET_TZ, parseWindows, inWindow } = require('./trading/clock');
 
 /** Whether a session window of the runner's is open at `now` (a trade cycle could run). */
@@ -720,8 +724,14 @@ function createRunner(deps) {
       // Past the target: the trade's own target (its bracket), whose resting order is cancelled so the trail can run.
       const ok = managed && tick > 0 && risk >= RUN.minManagedRiskTicks * tick - 1e-9;
       const after = ok && plan.afterTarget ? liveTarget({ rec, entry, sign, tick, orders, contractId: cid }) : null;
+      // P1, the exit option prev_high_or_trail on an MTF entry (the gate's stamp: prev-high-exit.js): its previous high or
+      // low, stamped at the entry; any other entry, or the trail mode, has none (today's exit).
+      const mtfStamp = rec && rec.composed && rec.composed.mtf && typeof rec.composed.mtf === 'object' ? rec.composed.mtf : null;
+      // The same predicate as the gate's verified MTF entry: its stamp's structural stop is the plan's stop.
+      const verifiedMtf = mtfStamp && planStop !== null && Number(mtfStamp.stop) === planStop;
+      const prevHigh = ok && verifiedMtf && mtfStamp.exitMode === 'prev_high_or_trail' ? PH.initial({ target: mtfStamp.prevHigh, sign, entry }) : null;
       t = ok
-        ? { key, setup: rec.setup, sign, entry, risk, stop: entry - sign * risk, peakR: 0, troughR: 0, barsHeld: 0, plan, maxRunnerBars, since: fillAt, lastBarT: null, ...(after ? { target: after.price, armed: false } : {}) }
+        ? { key, setup: rec.setup, sign, entry, risk, stop: entry - sign * risk, peakR: 0, troughR: 0, barsHeld: 0, plan, maxRunnerBars, since: fillAt, lastBarT: null, ...(after ? { target: after.price, armed: false } : {}), ...(prevHigh ? { prevHigh } : {}) }
         : { key, skip: true };
       if (after && after.price === null) log(`${item.symbol}: ${rec.setup}: no target to trail past (${after.why}); the stop holds until its own exit`, 'error');
       for (const o of after ? after.cancel : []) {
@@ -738,7 +748,7 @@ function createRunner(deps) {
       if (ok) {
         const how = [plan.trailActivateR !== null ? `activate ${plan.trailActivateR}R, give back ${plan.trailGivebackR}R` : '', plan.afterTarget ? `${Number.isFinite(plan.afterTarget.lockAtR) ? `from +${plan.afterTarget.lockAtR}R the stop to the entry plus ${plan.afterTarget.lockToTicks} ticks; ` : ''}past the target ${t.target}: lock at its R less ${plan.afterTarget.lockGivebackR}R${plan.afterTarget.ratchet ? ' (ratchet on: from the best R reached)' : ''}, trail ${plan.afterTarget.trailBy === 'structure' ? `behind a ${plan.afterTarget.swingMinutes}m swing once one confirms beyond the lock (${plan.afterTarget.trailR}R only with no swing in the bars)` : `${plan.afterTarget.trailR}R`}` : '', plan.maxBars ? `time stop ${plan.maxBars} ${strategy.timeframe} bars = ${maxRunnerBars} ${cfg.timeframe}m bars` : ''].filter(Boolean).join('; ');
         log(`${item.symbol}: managing ${rec.setup} ${sign > 0 ? 'long' : 'short'} from ${entry}, 1R = ${risk} (${how})`);
-        emit('position_managed', { symbol: item.symbol, contractId: cid, setup: rec.setup, side: sign > 0 ? 'long' : 'short', size: Number(p.size), entry, risk, stop: entry - sign * risk, plan, maxRunnerBars });
+        emit('position_managed', { symbol: item.symbol, contractId: cid, setup: rec.setup, side: sign > 0 ? 'long' : 'short', size: Number(p.size), entry, risk, stop: entry - sign * risk, plan, maxRunnerBars, ...(t.prevHigh ? { prevHigh: t.prevHigh } : {}) });
       } else if (managed) log(`${item.symbol}: ${rec.setup} position not managed (no trail, no time stop): no usable initial stop (1R ${risk}, needs 4+ ticks)`, 'error');
     }
     if (t.skip) return;
@@ -787,6 +797,8 @@ function createRunner(deps) {
     let ext = { bestPrice: t.bestPrice ?? null, bestBarT: t.bestBarT ?? null, worstPrice: t.worstPrice ?? null, stallBars: t.stallBars || 0 };
     let swingClass = t.swingClass || null;
     let lastClose = Number.isFinite(t.lastClose) ? t.lastClose : null;
+    let prevHigh = t.prevHigh || null;
+    let prevHighExit = null;
     for (const bar of bars) {
       // A level the resting stop never reached (a modify that failed or came
       // too late) protects nothing: a bar through it means out at market.
@@ -809,6 +821,15 @@ function createRunner(deps) {
       target = step.stop;
       if (step.close) { cross = { bar, stop: step.stop }; break; }
       barsHeld += 1;
+      // P1: the previous-high exit, after today's step on the same closed bar (prev-high-exit.js): a 15m close past it
+      // rides; a 3m rejection of it closes at market. Once broken or rejected, it reads nothing more.
+      if (prevHigh && prevHigh.state === 'pending') {
+        const was = prevHigh.state;
+        const { exit: out, ...nextPh } = PH.step(prevHigh, { bar, ...PH.at15({ bars: item.bars, bar, equalAtr: EQUAL_ATR, minutes: SETUP_MINUTES }) });
+        prevHigh = nextPh;
+        if (prevHigh.state !== was) log(`${item.symbol}: ${prevHigh.why}`);
+        if (out) { prevHighExit = { bar, why: prevHigh.why }; break; }
+      }
     }
     const lastBarT = bars[bars.length - 1].t;
     const closeOut = async why => {
@@ -835,6 +856,11 @@ function createRunner(deps) {
       await closeOut(`trail: price went through the new stop ${cross.stop} (resting ${resting ?? 'none'})`);
       return;
     }
+    if (prevHighExit) {
+      t = { ...t, prevHigh };
+      await closeOut(prevHighExit.why);
+      return;
+    }
     // The strategy's time stop (exit.max_bars), as the backtester applies it.
     const maxBars = t.maxRunnerBars || t.plan.maxBars;
     if (maxBars && barsHeld >= maxBars) {
@@ -842,7 +868,7 @@ function createRunner(deps) {
       return;
     }
     if (fellBack && !t.fellBackSaid) log(`${item.symbol}: structure trail: ${wrongSide ? `the last ${t.plan.afterTarget.swingMinutes}m swing is on the wrong side of the close (its stop would be through the market)` : `no ${t.plan.afterTarget.swingMinutes}m swing in the bars at all`}; trailing ${t.plan.afterTarget.trailR}R behind the best price (the fallback)`);
-    save({ ...t, peakR, troughR, barsHeld, lastBarT, armed, fellBackSaid: Boolean(t.fellBackSaid || fellBack), ...ext, swingClass, lastClose });
+    save({ ...t, peakR, troughR, barsHeld, lastBarT, armed, fellBackSaid: Boolean(t.fellBackSaid || fellBack), ...ext, swingClass, lastClose, ...(prevHigh ? { prevHigh } : {}) });
     if (!stopOrder) {
       if (sign * (target - t.stop) < tick - 1e-9) return;
       log(`${item.symbol}: trail wants the stop at ${target} but there is no single working stop order to move`, 'error');
@@ -1358,7 +1384,8 @@ function createRunner(deps) {
     if (item.lane > 0 && !frameLanes.has(item.lane)) return;
     try {
       // A lane's briefing that couldn't be built (its setups' room unread): no entry on that bar (laneBlocked).
-      const r = recordBriefing(item, results, scanError);
+      // P1: a trade the runner holds on this contract: an MTF arm's candidate lines say "position open: not a pick".
+      const r = recordBriefing(item, results, scanError, { positionOpen: Boolean(item.contractId && (state.trails || {})[item.contractId]) });
       if (item.lane > 0 && r && r.error) item.briefError = r.error;
     } catch (err) {
       log(`${item.symbol}: no bar briefing this bar (${err.message}); the roles read the tools themselves`, 'error');

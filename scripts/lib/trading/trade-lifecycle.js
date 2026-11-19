@@ -249,8 +249,10 @@ function buildRecord({ at, root, symbol, side, briefing = null, checked = null, 
     ok, problems: all, reads, signature: checked ? checked.signature : null, skillSignature: checked ? checked.skillSignature : null,
     context: checked ? checked.context : null, plan: planned ? planned.plan : null,
   };
+  // P1: an MTF entry's candidate (composed-reads.js checked.mtf), only on such a record (every other record unchanged).
+  if (checked && isObj(checked.mtf)) body.mtf = checked.mtf;
   const id = crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex').slice(0, 16);
-  return Object.fromEntries(RECORD_KEYS.map(k => [k, k === 'id' ? id : body[k]]));
+  return Object.fromEntries([...RECORD_KEYS, ...(body.mtf ? ['mtf'] : [])].map(k => [k, k === 'id' ? id : body[k]]));
 }
 
 /** Append one record (one line) to its day's shard; the file and its folder made as needed. */

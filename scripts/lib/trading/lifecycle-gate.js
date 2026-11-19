@@ -42,7 +42,8 @@
  *   composedName({ setupName, named, strategies, home, root })   the composed strategy the order enters by, or null
  *   limitRefusal({ side, type, limitPrice, reference, tick })    why the entry isn't a limit at the reference or better
  *   marketRefusal({ type, reference, setup })   why a cited setup's entry (its plan: at market) isn't a market order
- *   composedRefusal({ name, strategy, home, root, input, now, cycleBars, entries, specOf, pluginRoot, approvedSize, entryRule, cutCheck })
+ *   composedRefusal({ name, strategy, home, root, input, now, cycleBars, entries, specOf, pluginRoot, approvedSize, entryRule, cutCheck, mtfMode })
+ *                                   (mtfMode: the MTF entry arm, P1 mtf-entry.js; null: today's, the MTF reads refused)
  *                                   { message: why it is refused | null, check, record, plan, room, expiresAt, briefing, restored? }
  *                                   (`briefing`: the cycle bar's, the one the reads were checked on)
  *                                   (`expired: true` when the record's time ran out: the cycle-timing count)
@@ -146,7 +147,7 @@ const quote = r => `"${r.read}"`;
 /** The room a phase-2 room fact is checked against (fact-claims.js): the plan's first level in the way, in its R, against the R its target needs. */
 const roomOf = (p, tick) => ({ stopPoints: p.stop.ticks * tick, needR: p.rr, inTheWay: p.inTheWay ? { name: p.inTheWay.name, R: p.inTheWay.R } : null });
 
-function composedRefusal({ name, strategy = null, home, root, input = {}, now = new Date(), cycleBars = {}, entries = [], specOf = () => null, pluginRoot = PLUGIN_ROOT, approvedSize = null, translate = null, attempt = false, entryRule = null, cited = null, cutCheck = null }) {
+function composedRefusal({ name, strategy = null, home, root, input = {}, now = new Date(), cycleBars = {}, entries = [], specOf = () => null, pluginRoot = PLUGIN_ROOT, approvedSize = null, translate = null, attempt = false, entryRule = null, cited = null, cutCheck = null, mtfMode = null }) {
   const say = (why, check = null) => ({ message: `setup:${name}: ${why}. Exits, protective stops and stop moves still go.`, check });
   try {
     const side = { buy: 'long', sell: 'short' }[String(input.side || '').toLowerCase()];
@@ -177,7 +178,7 @@ function composedRefusal({ name, strategy = null, home, root, input = {}, now = 
     const tick = spec && spec.tickSize > 0 ? spec.tickSize : null;
     if (!tick || !(spec.tickValue > 0)) return say('no tick specs for the contract, so the plan can\'t be checked');
     // The checker again, on the reads as stated, against this bar's briefing: never the record's `ok` or checks.
-    const check = checkReads({ reads: readsOf(rec), side, briefing: b, skills: skillFolders(pluginRoot), tick, entryRule, cited });
+    const check = checkReads({ reads: readsOf(rec), side, briefing: b, skills: skillFolders(pluginRoot), tick, entryRule, cited, mtfMode });
     const wrong = check.reads.filter(r => r.check === false);
     const unchecked = check.reads.filter(r => r.check === 'unchecked');
     const against = check.reads.filter(r => r.check === true && !r.agrees);
@@ -197,6 +198,9 @@ function composedRefusal({ name, strategy = null, home, root, input = {}, now = 
     const planned = planOf({ checked: check, briefing: b, side, size: stated, tick, tickValue: spec.tickValue, minRR: risk.min_rr ?? null, maxRiskUsd: risk.max_risk_usd ?? null, stopRule: stopRuleOf(risk), suggestion: Boolean(translate || attempt) });
     if (!planned.plan || planned.problems.length) return say(`the plan doesn't stand: ${planned.problems.join('; ') || 'it can\'t be worked out'}`, check);
     const p = planned.plan;
+    // an MTF entry's plan stop is the candidate's structural stop, the buffer added once ([mtf-stop]).
+    const mtfOff = require('./mtf-entry').mtfPlanProblems(check, p);
+    if (mtfOff.length) return say(mtfOff.join('; '), check);
     const same = held && isObj(held.entry) && isObj(held.stop) && isObj(held.target) && held.entry.price === p.entry.price && (held.entry.type || 'limit') === p.entry.type && held.stop.ticks === p.stop.ticks && held.target.ticks === p.target.ticks;
     if (!same) {
       const show = x => (x && isObj(x.stop) && isObj(x.target) && isObj(x.entry) ? `${x.stop.ticks}-tick stop, ${x.target.ticks}-tick target from ${x.entry.price}${x.entry.type === 'market' ? ' at market' : ''}` : 'none');
