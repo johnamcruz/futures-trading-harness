@@ -127,6 +127,12 @@ test('the reading audit (E1): in an MTF arm the Trend rule line drops its refusa
   }
   assert.match(lineOf(d, /^ {2}trendRule: /), /; no (long|short) against it\.$/, 'arm D: the detail keeps it');
   assert.equal(require('../../scripts/lib/trading/mtf-entry').mtfBiasText('Bias: long only (4h up, 1h up; short refused)'), 'Bias: long only (4h up, 1h up)');
+  // Both sides, both helpers (a mutant that handles one side only survived without these).
+  const MEx = require('../../scripts/lib/trading/mtf-entry');
+  assert.equal(MEx.mtfBiasText('Bias: short only (4h down, 1h down; long refused)'), 'Bias: short only (4h down, 1h down)');
+  assert.equal(MEx.mtfTrendRuleText('Trend rule: SHORT allowed (prevailing 4h down); no long against it.'), 'Trend rule: SHORT allowed (prevailing 4h down).');
+  assert.equal(MEx.mtfTrendRuleText('Trend rule: LONG allowed (prevailing 4h up); no short against it'), 'Trend rule: LONG allowed (prevailing 4h up)');
+  assert.equal(MEx.mtfBiasText('Bias: no side yet (15m down, declared short: no)'), 'Bias: no side yet (15m down, declared short: no)', 'nothing to drop: as is');
   // The cycle prompt's bar line (the record for the gate) carries the same fence in an MTF arm, none in arm D.
   const { prompts, validateConfig } = require('../../scripts/lib/autotrader');
   const cfg = validateConfig({ harness: 'claude', symbols: ['MNQ'], timeframe: 3 });
