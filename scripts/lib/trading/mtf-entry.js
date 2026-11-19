@@ -78,7 +78,7 @@ const sameMode = (rec, mode) => isObj(rec) && isObj(rec.mode) && ['arm', 'entryM
 const ms = iso => (typeof iso === 'string' ? Date.parse(iso) : NaN);
 
 /** One hierarchy's candidate from its record's primary (null when it holds no entry). */
-function candidateFrom(lv, { hierarchy, mode, leg1h, since, windowStart = null }) {
+function candidateFrom(lv, { hierarchy, leg1h, since, windowStart = null }) {
   if (!isObj(lv) || !isObj(lv.entry)) return null;
   const e = lv.entry;
   const i = isObj(lv.instance) ? lv.instance : null;
@@ -141,9 +141,9 @@ function candidatesOf(rec, mode, { at = null, price = null } = {}) {
   const leg1h = p && isObj(p.parent) && isObj(p.parent.leg) ? p.parent.leg : null;
   const list = [];
   for (const h of mode.hierarchies || []) {
-    if (h === 'intraday') { const c = candidateFrom(p, { hierarchy: h, mode }); if (c) list.push(c); }
+    if (h === 'intraday') { const c = candidateFrom(p, { hierarchy: h }); if (c) list.push(c); }
     if (h === 'execution' && isObj(rec) && isObj(rec.execution) && isObj(rec.execution.record)) {
-      const c = candidateFrom(primaryOf(rec.execution.record), { hierarchy: h, mode, leg1h, since: rec.execution.since, windowStart: rec.execution.record.windowStart });
+      const c = candidateFrom(primaryOf(rec.execution.record), { hierarchy: h, leg1h, since: rec.execution.since, windowStart: rec.execution.record.windowStart });
       if (c) list.push(c);
     }
   }
