@@ -370,15 +370,15 @@ function questionText(quiz, q) {
 // An ANSWER line: the label, then its colon (markdown around either aside). A line that only starts with the word
 // ("Answering ...", "**Answer (short side):** ...") is none (review 1: a later such line must never be graded).
 // "FINAL ANSWER:" is one too (review 2, N2).
-const ANSWER_LINE = /^\s*\**\s*(?:FINAL\s+)?ANSWER\b\s*\**\s*:\**\s*(.*)$/gmi;
 // Any labelled answer line: the label and a colon, or whitespace then a dash, an en or an em dash ("Answer-wise" is
 // prose, review 3), markdown around them. It never picks a
 // choice item's graded line; a free-text item's every-line rule and the split count read it (review 2, N1).
-const LABEL_LINE = /^\s*\**\s*(?:FINAL\s+)?ANSWER\b\s*\**\s*(?::|\s+[-–—])\**\s*(.*)$/gmi;
+// Both are label-line.js labelLines (the rule shared with the selection decision line).
+const ANSWER_LABEL = '(?:FINAL\\s+)?ANSWER';
 /** Every ANSWER line's text, in order. */
-const answerLines = answer => [...String(answer || '').matchAll(ANSWER_LINE)].map(m => m[1].trim());
+const answerLines = answer => require('../label-line').labelLines(answer, ANSWER_LABEL, { ignoreCase: true, colonOnly: true });
 /** Every labelled answer line's text (a colon or a dash), in order. */
-const labelLines = answer => [...String(answer || '').matchAll(LABEL_LINE)].map(m => m[1].trim());
+const labelLines = answer => require('../label-line').labelLines(answer, ANSWER_LABEL, { ignoreCase: true });
 // The last ANSWER line (quiz accuracy C2): a choice item, asked reason first, is graded on its last one (the live head's
 // rule: its last CYCLE RESULT line). No ANSWER line: the first line.
 function answerLine(answer) {
