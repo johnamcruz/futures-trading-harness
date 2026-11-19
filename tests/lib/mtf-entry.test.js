@@ -32,7 +32,7 @@ const closeOfRec = rec => { const p = rec && rec.levels ? rec.levels.find(l => l
 const briefingOf = rec => ({ symbol: 'MNQ', minutes: 3, closedAt: closeOfRec(rec), sections: { m3: { data: { price: trigOf(rec), mtfStructure: rec } } } });
 const withExec = (m, j, rec = recsOf(m)[j], x = {}) => ({ ...rec, execution: { record: execOf(m, j), since: close(j - 1), ...x } });
 
-test('modeOf: the five arms; D is today; an MTF arm outside a replay is refused (live is the owner\'s call), never a silent fallback', () => {
+test('modeOf: the four arms; D is today; an MTF arm outside a replay is refused (live is the owner\'s call), never a silent fallback', () => {
   assert.deepEqual(Object.keys(ME.ARMS), ['A', 'B', 'AB', 'D']);
   assert.deepEqual(ME.ARMS.A.hierarchies, ['intraday']);
   assert.deepEqual(ME.ARMS.B.hierarchies, ['execution']);

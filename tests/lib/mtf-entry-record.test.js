@@ -29,6 +29,28 @@ test('withEntry: an MTF entry\'s fill carries its stamp and the lag (seconds, po
 
 test('fingerprints: today\'s arm (the committed default) adds nothing; the arm is named only when another', () => {
   assert.equal('mtfEntry' in fingerprints(null, { code: 'x' }), false);
-  assert.deepEqual(fingerprints(null, { code: 'x', mtfEntry: { arm: 'B', exitMode: 'trail', entryPullback: 'any', minStage: 'potential' } }).mtfEntry, { arm: 'B', exitMode: 'trail', entryPullback: 'any', minStage: 'potential' });
-  assert.equal('mtfEntry' in fingerprints(null, { code: 'x', mtfEntry: { arm: 'D', exitMode: 'trail', entryPullback: 'any', minStage: 'established' } }), false);
+  assert.deepEqual(fingerprints(null, { code: 'x', mtfEntry: { arm: 'B', exitMode: 'trail', minStage: 'potential' } }).mtfEntry, { arm: 'B', exitMode: 'trail', minStage: 'potential' });
+  assert.equal('mtfEntry' in fingerprints(null, { code: 'x', mtfEntry: { arm: 'D', exitMode: 'trail', minStage: 'established' } }), false);
+});
+
+test('the replay run\'s hash (replay/config.js configHash) names the MTF entry arm by value only when it is not arm D: arm D hashes as a run with no arm, and every MTF arm differs from it and from each other', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const { tmpDir } = require('../helpers');
+  const { resolveReplay, configHash } = require('../../scripts/lib/replay/config');
+  const ROOT = path.resolve(__dirname, '..', '..');
+  const dir = tmpDir();
+  const live = path.join(dir, 'live');
+  fs.mkdirSync(live);
+  fs.writeFileSync(path.join(live, 'brokers.json'), JSON.stringify({ brokers: { sim: { command: [process.execPath, '/opt/sim/server.js'], replay: true, journalEnv: 'SIM_JOURNAL' } } }));
+  const env = { PATH: process.env.PATH, FTH_HOME: live, FTH_BROKERS_FILE: path.join(live, 'brokers.json') };
+  const run = resolveReplay({ runId: 'r1', workDir: path.join(dir, 'replays'), broker: 'sim', start: '2026-10-07T13:31:00Z', end: '2026-10-07T13:40:00Z', autotrader: { harness: 'custom', command: ['true', '{prompt}'], symbols: ['MNQ'], account: '7', timeframe: 3, sessions: ['09:30-15:50@America/New_York'], eodAt: '15:50@America/New_York' } }, { env, home: dir, root: ROOT });
+  require('../../scripts/lib/replay/driver').seedRunHome(run, { root: ROOT, userEnv: env });
+  const arm = (a, o = {}) => ({ arm: a, exitMode: 'trail', minStage: 'established', models: ['aggressive', 'balanced', 'conservative'], ...o });
+  const h = m => configHash(run, env, m);
+  assert.strictEqual(h(arm('D')), h(null), 'arm D: the hash a run had before the arm existed');
+  assert.strictEqual(configHash(run, env), h(arm('D')), 'the committed arm is D');
+  assert.notStrictEqual(h(arm('A')), h(arm('D')));
+  assert.notStrictEqual(h(arm('A')), h(arm('B')));
+  assert.notStrictEqual(h(arm('A')), h(arm('A', { exitMode: 'prev_high_or_trail' })), 'by value');
 });

@@ -567,7 +567,8 @@ function runSettings(run, base = process.env) {
 
 const MTF_ENTRY = require('../tunables').runner().mtfEntry;
 
-function configHash(run, base = process.env) {
+// `mtfEntry`: the run's MTF entry arm (config/runner.json, the default); a parameter so a test can hold both directions.
+function configHash(run, base = process.env, mtfEntry = MTF_ENTRY) {
   const { gate, brokerEntry, brokerSettings } = runSettings(run, base);
   const body = {
     cfg: run.cfg, broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), everyNth: run.everyNth,
@@ -577,7 +578,7 @@ function configHash(run, base = process.env) {
     // The training stage, named only when set, so a run without one keeps the hash it had.
     ...(run.stage ? { stage: run.stage } : {}),
     // P1: the MTF entry arm (config/runner.json mtfEntry) by value, named only when not today's (arm D).
-    ...(MTF_ENTRY && MTF_ENTRY.arm !== 'D' ? { mtfEntry: { ...MTF_ENTRY } } : {}),
+    ...(mtfEntry && mtfEntry.arm !== 'D' ? { mtfEntry: { ...mtfEntry } } : {}),
     // The node binary that starts an entry is no part of the run (a Node upgrade isn't a new run).
     // Its allowlist is in brokerSettings, by value (so a run's hash is the one it had before the list existed).
     brokerEntry, brokerSettings,

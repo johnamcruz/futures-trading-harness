@@ -61,9 +61,9 @@ const STAGES = Object.freeze(['NONE', 'POTENTIAL', 'DEVELOPING', 'ESTABLISHED', 
 const OPEN_PULLBACK = Object.freeze(['ESTABLISHED', 'WEAKENING', 'REVERSING']);
 const SIDE_MODES = Object.freeze(['rule', 'parent']);
 const LEVEL_FRAMES = Object.freeze(['parent', 'setup', 'timing']); // a hierarchy's minutes, in this order
-const DEPTH_CLASSES = Object.freeze(['shallow', 'moderate', 'deep']);
+const DEPTH_CLASSES = Object.freeze(['shallow', 'moderate', 'deep']); // config depth: each class's upper bound; past the last: breached
 /** P1, mtfEntry.minStage: the earliest stage a ready may fire at, and the stages each lets an early candidate fire in. */
-const MIN_STAGES = Object.freeze({ established: Object.freeze([]), developing: Object.freeze(['DEVELOPING']), potential: Object.freeze(['POTENTIAL', 'DEVELOPING']) }); // config depth: each class's upper bound; past the last: breached
+const MIN_STAGES = Object.freeze({ established: Object.freeze([]), developing: Object.freeze(['DEVELOPING']), potential: Object.freeze(['POTENTIAL', 'DEVELOPING']) });
 const sgn = d => (d === 'up' ? 1 : -1);
 const legSide = d => (d > 0 ? 'up' : 'down');
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
@@ -848,7 +848,7 @@ function mtfLines(rec, { lineBytes = Infinity, primaryBytes = Infinity, level = 
   const sideText = rec.side || 'no';
   const sp = n => n.replace('>', ' > ');
   // P1: an MTF entry arm's record (rec.mode) adds its clauses to the primary line; without one, today's lines exactly.
-  const mode = isObj(rec.mode) ? { ...rec.mode, sideFrame: rec.sideFrame || primary.frames.parent } : null;
+  const mode = isObj(rec.mode) ? { ...rec.mode, sideFrame: primary.frames.parent } : null;
   // P1: the below line is an early read in an MTF entry arm (37.7% false ESTABLISHED on the hold-out): labelled so.
   const early = mode ? ` (early read; ${below.frames.setup}, noisy: the ${below.frames.parent} line decides the pullback, the ${below.frames.setup} only times it)` : '';
   const build = cut => {

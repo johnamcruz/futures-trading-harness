@@ -43,9 +43,9 @@ const { composedName, composedRefusal, policyRuleRefusal } = require('./lifecycl
 const { entryRuleOf } = require('./entry-rule');
 const { lateEntryCheck, ageLimitOf } = require('./late-entry');
 const { protectRefusal, restingExitRefusal } = require('./bracket-rule');
-const GATE = require('../tunables').runner().gate;
+const GATE = require('../tunables').runner().gate; // config/runner.json: the bracket tolerances (tighten-only)
 const RUNNER_CFG = require('../tunables').runner(); // config/runner.json mtfEntry (P1)
-const ME = require('./mtf-entry'); // config/runner.json: the bracket tolerances (tighten-only)
+const ME = require('./mtf-entry');
 
 const RISK_REDUCING = /^\s*\[(exit|protect)\]/i;
 // The setup tag must open the rationale, so text like "not setup:orb" can't satisfy it.

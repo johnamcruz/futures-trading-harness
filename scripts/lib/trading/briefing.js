@@ -128,9 +128,10 @@ const { stateOf, marketStateLine, stateThresholds } = require('./market-state');
 const STATE_TH = stateThresholds(require('../tunables').analysis());
 const { pullbackRead, pullbackLine } = require('./pullback-read');
 // The multi-timeframe nested structure read (mtf-structure.js): the pullback against the 1h's break record, staged on the
-// 15m, timed on the 3m, with the 4h above and the 15m > 3m below, printed as two lines under the Market state line; a read:
-// nothing in the gate, compose_check, order_plan, the trend rule or the Market state reads it
-// (tests/plugin/market-state-readers.test.js).
+// 15m, timed on the 3m, with the 4h above and the 15m > 3m below, printed as two lines under the Market state line; in
+// arm D (today) a read: nothing in the gate, compose_check, order_plan, the trend rule or the Market state reads it. In an
+// MTF entry arm (replay only) compose_check and the gate read its candidates (mtf-entry.js readyOf;
+// tests/plugin/market-state-readers.test.js says which).
 const MTF = require('./mtf-structure');
 const ME = require('./mtf-entry');
 const RUNNER_STATE = require('../tunables').runner(); // config/runner.json mtfEntry (P1: the MTF entry arm)
@@ -276,7 +277,7 @@ function mtfEntryRecordOf({ bars, minutes, tick, fresh, fine, closedAt, symbol, 
   return rec;
 }
 
-/** Arm B's (and AB's, C's) 1m execution record, or { unavailable: reason }. */
+/** Arm B's (and AB's) 1m execution record, or { unavailable: reason }. */
 function executionOf({ common, fine, closedAt, minutes, side, mode, cfg }) {
   if (!Array.isArray(fine) || !fine.length) return { unavailable: `no 1m bars: arm ${mode.arm} needs the runner's 1m data lane (a lane of timeframe 1, trigger data)` };
   const lastClose = Date.parse(fine[fine.length - 1].t) + 60000;
@@ -907,8 +908,9 @@ function buildBriefing({ symbol, contractId = null, bars: raw, minutes, fineBars
     fresh.m3.data.layers = marketLayers({ bars, minutes, setupMinutes: parseInt(BIAS_RULE.chain.setup, 10), closedAt: closedAt.toISOString(), pullback: fresh.m3.data.pullback, p: AN_STATE.marketState, floor: AN_STATE.daySoFar.minBars, ibBars: AN_STATE.dayContext.ibMinutes / minutes });
   }
   // The MTF structure read (mtf-structure.js), on the chain's entry frame only, beside the Market state: its side the entry
-  // rule's, its stop buffer the lifecycle strategy's. A presented fact (SUMMARY_FIELDS: its two lines say it); nothing in
-  // the gate, compose_check, order_plan, the trend rule or the Market state reads it.
+  // rule's, its stop buffer the lifecycle strategy's. A presented fact (SUMMARY_FIELDS: its two lines say it); in arm D
+  // nothing in the gate, compose_check, order_plan, the trend rule or the Market state reads it; in an MTF entry arm
+  // compose_check and the gate read its candidates (mtf-entry.js readyOf).
   if (!own && tfLabel(minutes) === BIAS_RULE.chain.entry) fresh.m3.data.mtfStructure = mtfRecordOf({ bars, minutes, tick, fresh, fine, closedAt, symbol, mtfMode });
   // P1: a position open at this bar (the runner's held trade): an MTF arm's candidate lines are context,
   // marked "position open: not a pick". An MTF record only: today's record never carries it.

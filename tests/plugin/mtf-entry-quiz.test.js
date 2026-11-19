@@ -58,7 +58,7 @@ test('the items cannot drift: every MTF line an item prints is the REAL briefing
   const et = ms => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(ms)).replace(',', '');
   const wanted = new Set(qs.flatMap(q => [...q.text.matchAll(/\((?:real, )?(\d{4}-\d\d-\d\d \d\d:\d\d) ET/g)].map(m => m[1])));
   const at = new Map();
-  // The goal fixture's blocks and the four real MTF fixtures (the strong-context lines come from 2022-04-18).
+  // The goal fixture's blocks and the four real MTF fixtures.
   const extra = ['2022-03-07', '2022-04-11', '2022-04-25', '2022-07-12'].map(d => GF.decodeBars(JSON.parse(zlib.gunzipSync(fs.readFileSync(path.join(ROOT, 'tests', 'fixtures', 'mtf-structure', `${d}.json.gz`)))).bars));
   for (const bars of [...DOC.blocks.map(b => GF.decodeBars(b.bars)), ...extra]) {
     bars.forEach((bar, j) => {
