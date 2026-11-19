@@ -44,12 +44,12 @@ test('pins, shrink-only: sentences stating an arm D refusal in the MTF render', 
 
 test('reconciled pairs: while an arm D rule stands, its reconciling text is in the MTF prompt', () => {
   const PAIRS = [
-    { id: 'C1', a: /never counter/i, by: ['These arm D rules are facts here, never refusals', 'every never-counter rule'] },
+    { id: 'C1', a: /never counter/i, by: ['Arm D (default) rules are facts here, never refusals', 'never counter'] },
     { id: 'C2', a: /the side is the\s+Bias line's/i, by: ['Side: the 1h structure\'s.', 'For a candidate the side is the 1h structure\'s.'] },
-    { id: 'C3', a: /\bchop\b[^.]{0,40}sit out/i, by: ['the Market state class and the class table', 'Any class rule (sit out, no trend trade, avoid trend entries, a take needs the class and your 4h and 1h) is arm D\'s.'] },
-    { id: 'C4', a: /wait for the 15m turn/i, by: ['the Pullback setup (wait for the 15m turn)', 'the 15m-turn rule and the 3m-trigger rule do not apply'] },
-    { id: 'C20', a: /never (enter )?against the 1h/i, by: ['Never enter against the 1h structure. The 1h trend label is context.'] },
-    { id: 'C21', a: /\bPOTENTIAL\b[^\n]{0,90}monitor/, by: ['bos-vs-choch\'s stage actions describe the primary line.'] },
+    { id: 'C3', a: /\bchop\b[^.]{0,40}sit out/i, by: ['the class and class table', 'any class rule is arm D\'s'] },
+    { id: 'C4', a: /wait for the 15m turn/i, by: ['the Pullback setup and 15m turn', 'the 15m-turn rule and the 3m-trigger rule do not apply'] },
+    { id: 'C20', a: /never (enter )?against the 1h/i, by: ['Never enter against the 1h structure; its trend label is context.'] },
+    { id: 'C21', a: /\bPOTENTIAL\b[^\n]{0,90}monitor/, by: ['bos-vs-choch\'s stage actions and `Entry:` describe the primary line'] },
   ];
   const mtf = norm(cycle);
   for (const p of PAIRS) {

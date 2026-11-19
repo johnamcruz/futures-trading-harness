@@ -115,9 +115,9 @@ test('choose: stage order under the budget, nothing the prompt already holds, th
   // a negative drift, the 1m trigger, the trend rule and the class; +827, the measured need; arm D never embeds it).
   // 91776 with the reading audit on feat/p1-lessons (the take rule and class table fenced, the (early) candidate, the
   // candidate's own stage; +518, the measured need; arm D never embeds it).
-  // 92711 with the conflict audit's MTF-arm fixes and the cold read's (A2-A8, W10-W14 and the cold-read rewrites in the
-  // mtf-entry skill; +935 over 91776, the measured need).
-  assert.strictEqual(require('../../scripts/lib/tunables').runner().prompt.situationalSkillBytes, 92711);
+  // 91485 with the conflict audit's MTF-arm fixes and the cold read's, then trimmed so every real MTF cycle keeps its
+  // skills (tests/lib/mtf-skill-fit.test.js; -291 under 91776, the measured need).
+  assert.strictEqual(require('../../scripts/lib/tunables').runner().prompt.situationalSkillBytes, 91485);
 });
 
 test('the Setups-to-check line: a compression break on an allowed side (at its key level when its box sits at one) and a tradeable 15m or 1h CISD, the stronger first; nothing against the trend rule, on the 3m or 5m, or outside the window', () => {

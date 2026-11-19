@@ -101,7 +101,7 @@ test('the reading lesson (the six mornings: 7 of 13 SELECTION lines): an MTF arm
   for (const arm of ['A', 'B', 'AB']) {
     const p = prompts({ ...cfg, mtfMode: mode(arm) }, at, '/r').trade([{ symbol: 'MNQ', bar, scan: [] }]);
     assert.ok(p.endsWith(RESULT_LINE), arm);
-    assert.match(p, /Write the trader-process skill's PLAN \(1 HTF to 9 Manage\), then, with an MTF candidate line printed, your SELECTION line on its own line \(`SELECTION: ENTER\|WAIT\|PASS - <side> <model> <trigger time>: <reason>`; WAIT only on a 3m trigger; the mtf-entry skill: the one that counts\), then the result line\./, arm);
+    assert.match(p, /Write the trader-process skill's PLAN \(1 HTF to 9 Manage\), then, with an MTF candidate line printed, your SELECTION line on its own line \(`SELECTION: ENTER\|WAIT\|PASS - <side> <model> <trigger time>: <reason>`, the one that counts\), then the result line\./, arm);
   }
   const d = prompts(cfg, at, '/r').trade([{ symbol: 'MNQ', bar, scan: [] }]);
   assert.match(d, / Write the trader-process skill's PLAN \(1 HTF to 9 Manage\) before the result line\./);
@@ -150,7 +150,7 @@ test('the conflict audit (A1, with E2-E4): an MTF arm\'s prompt ends with the pr
   const cfg = require('../../scripts/lib/autotrader').validateConfig({ harness: 'claude', symbols: ['MNQ'], timeframe: 3 });
   const at = new Date('2026-10-07T14:00:02Z');
   const bar = { t: '2026-10-07T13:57:00.000Z', c: 21540 };
-  assert.equal(MTF_PRECEDENCE, ' An MTF candidate printed: `mtf-entry` decides it. Arm D means the default (non-MTF) entry rules. For a candidate, mtf-entry\'s side, class, pullback and selection rules override every other skill\'s. The window, account, size and management rules still apply. Side: the 1h structure\'s. These arm D rules are facts here, never refusals: the 4h; the Trend rule, Bias and Alignment lines; the Market state class and the class table; the take rule (your 4h and 1h too); every never-counter rule; the Pullback setup (wait for the 15m turn) and pullback-vs-reversal\'s three lines; the 3m pullback trigger; late or far past value; a level ahead; a 3m or 1m break is never the setup; a valid setup is the trade; the count\'s take or pass; a pass from your STATE read. The candidate\'s own line gives its stage, trigger, age, drift and stop. No entry when the line prints `candidate void`, or when a compose_check or gate reply this cycle refuses it (never predict a refusal). Else select ENTER, WAIT or PASS, with your reason, on the SELECTION line. WAIT only on a 3m trigger; a WAIT on a 1m trigger counts as a PASS.');
+  assert.equal(MTF_PRECEDENCE, ' An MTF candidate printed: `mtf-entry` decides it; its side, class, pullback and selection rules override other skills\'. Window, account, size and management rules still apply. Side: the 1h structure\'s. Arm D (default) rules are facts here, never refusals: the 4h; the Trend rule, Bias and Alignment lines; the class and class table; the take rule; never counter; the Pullback setup and 15m turn; the 3m trigger; late entry; a level ahead; a valid setup is the trade; the count; a STATE-read pass. No entry: `candidate void` printed, or a reply this cycle refuses it (never predict one). Else ENTER, WAIT (3m trigger only; on 1m it is a PASS) or PASS, with your reason, on the SELECTION line.');
   const READS = '\n=== end of this cycle\'s reads ===\n';
   for (const arm of ['A', 'B', 'AB']) {
     const p = prompts({ ...cfg, mtfMode: mode(arm) }, at, '/r').trade([{ symbol: 'MNQ', bar, scan: [] }]);

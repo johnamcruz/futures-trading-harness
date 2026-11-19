@@ -200,7 +200,6 @@ const POINTERS = [
 const PROMPT_TEXT = [
   ...['trader-process', 'autonomous-trading', 'premarket', 'trade-session', 'prop-challenge-pacing', 'end-of-day', 'trade-lifecycle'].map(skill => ({ file: 'scripts/lib/autotrader.js', skill })),
   // An MTF arm's closing instruction names the mtf-entry skill's SELECTION line (autotrader.js MTF_PLAN_TEXT): prompt text.
-  { file: 'scripts/lib/autotrader.js', skill: 'mtf-entry' },
   { file: 'scripts/lib/harness-sync.js', skill: 'tool-arguments' },
   // The prepare and confirm prompts name the prepare-ahead skill (prepare-ahead.js SKILL_NOTE): prompt text, no refusal.
   { file: 'scripts/lib/prepare-ahead.js', skill: 'prepare-ahead' },
