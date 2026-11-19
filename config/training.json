@@ -55,6 +55,7 @@
     "reps": 1000,
     "seed": 1
   },
+  "mtfReadCheck": { "bar": 0.95 },
   "skillCaps": { "skillBytes": 3459, "setupSkillBytes": 4000, "perSkill": { "candle-reading": 7637, "pullback-vs-reversal": 10455, "trend-vs-range": 5715, "bos-vs-choch": 9972 } },
   "compose": { "maxExpects": 300, "maxWhy": 1000 },
   "lessons": { "maxLines": 8, "maxChars": 1200, "refusedChars": 160 },

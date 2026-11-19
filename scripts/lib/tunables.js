@@ -93,6 +93,8 @@ const TRAINING = {
   // pointer to it): bos-vs-choch 8996, pullback-vs-reversal 10455, at the measured need; then bos-vs-choch 10181 (SPEC v3, owner-approved 2026-11-18: the
   // clean CHoCH invalidation, the reading-direction and Above bullets, the Entry stop clause), at the measured need; then
   // bos-vs-choch 9972 (lowered, SPEC v4 2026-11-18: the Above bullet removed, the below line's frame named), the measured need.
+  // P1: the MTF candidate lines' read check (eval/mtf-readcheck.js): each field's share of right answers must reach it.
+  mtfReadCheck: { bar: frac() },
   skillCaps: { skillBytes: int(1), setupSkillBytes: int(1), perSkill: { 'candle-reading': int(1), 'pullback-vs-reversal': int(1), 'trend-vs-range': int(1), 'bos-vs-choch': int(1) } },
   compose: { maxExpects: int(1), maxWhy: int(1) },
   lessons: { maxLines: int(1), maxChars: int(1), refusedChars: int(1) },
@@ -149,6 +151,9 @@ const REPLAY = {
   curatedMoments: { leadSetup: int(0), firstBar: int(0) },
   windowBars: int(1),
   setupLibrary: { minRR: pos() },
+  // P1, the selection scorecard (replay/selection-score.js): the pick table's by-session bootstrap (draws, interval, seed);
+  // the secondary legs table counts a trend leg at minLegR or more (the owner's 2R+).
+  selection: { minLegR: pos(), bootstrapReps: int(100), ci: frac(), seed: int() },
   trendCapture: { minMoveAtr: pos(), catchShare: pos(1), messageChars: int(1), curationSessions: list(str(), { min: 1 }), censusBatch: int(1), sizeEdges: list(num({ min: 1 }), { min: 1 }) },
   exitScore: { cutR: pos(), rightR: pos(), lateGivebackR: pos(), horizonBars: int(1), matchBars: int(0) },
   setupMoments: { setupTf: int(1), quietSample: frac(), seed: int(), levels: str(['key', 'wide']), setupTfs: list(int(1), { min: 1 }) },
@@ -164,6 +169,18 @@ const REPLAY = {
   scorecard: { giveBackMinMfeR: nonneg(), giveBackShare: frac(), maxMissingStopShare: frac() },
 };
 
+const MTF_ARMS = Object.freeze(['A', 'B', 'AB', 'D']);
+const MTF_MODELS = Object.freeze(['aggressive', 'balanced', 'conservative']);
+const MTF_ENTRY_SHAPE = { arm: str(MTF_ARMS), exitMode: str(['trail', 'prev_high_or_trail']), entryPullback: str(['any', 'first']), minStage: str(['established', 'developing', 'potential']), models: list(str(MTF_MODELS)) };
+// The block's own check (after its keys' shapes): today's arm (D) holds no MTF entry, so it takes today's exit, any and
+// established (the module's own earliest ready).
+const MTF_ENTRY = shapes.custom(v => {
+  const errs = shapeErrors(MTF_ENTRY_SHAPE, v, 'mtfEntry');
+  if (errs.length) return errs;
+  if (!v.models.length) return 'mtfEntry.models: at least one entry model';
+  if (new Set(v.models).size !== v.models.length) return 'mtfEntry.models: each entry model at most once';
+  return v.arm === 'D' && (v.exitMode !== 'trail' || v.entryPullback !== 'any' || v.minStage !== 'established') ? 'arm D (today) takes exitMode trail, entryPullback any and minStage established' : null;
+}, 'the MTF entry arm');
 const RUNNER = {
   version: VERSION,
   gate: {
@@ -174,6 +191,10 @@ const RUNNER = {
     factsMinChecked: int(0), factsMaxItems: int(1), lateEntryDriftShare: frac(), freshPriceTimeoutMs: int(1),
   },
   lifecycle: { maxSize: int(1) }, // the stop's buffer and floor are the strategy's own: strategies/trade_lifecycle/STRATEGY.md risk
+  // P1, the MTF entry arm (trading/mtf-entry.js ARMS): A, B and AB enter only on an MTF ready candidate (1h/15m/3m,
+  // 15m/3m/1m, both), D is today. The exit option, the first-pullback rule, minStage and the entry models act only on MTF
+  // entries.
+  mtfEntry: MTF_ENTRY,
   account: { snapshotMaxAgeMs: int(1), balanceToleranceUsd: nonneg(), snapshotFutureToleranceMs: ms(), verdictsKept: int(1) },
   clock: { serverTimeToleranceMs: int(1), wallStartMaxAgeMs: int(1), wallStartAheadMs: ms() },
   cycle: { timeoutMinMinutes: int(1), timeoutBars: int(1), extraCyclesPerDay: int(0), maxConsecutiveErrors: int(1), slowFromMin: int(1), coalesceHoldMs: ms() },
@@ -264,7 +285,7 @@ const ANALYSIS = {
   // the depth classes' upper bounds (shallow, moderate, deep), the parent candles a level needs before its leg start (fewer:
   // partial), and the two lines' byte budgets (both lines, the primary alone; cut in a fixed order past them). Display
   // only: nothing decides on these.
-  mtfStructure: { hierarchy: str(), hierarchies: record(list(int(1), { min: 3, max: 3 })), sideMode: str(['rule', 'parent']), depth: list(frac(), { min: 3, max: 3 }), warmBars: int(1), lineBytes: int(1), primaryBytes: int(1) },
+  mtfStructure: { hierarchy: str(), hierarchies: record(list(int(1), { min: 3, max: 3 })), sideMode: str(['rule', 'parent']), depth: list(frac(), { min: 3, max: 3 }), warmBars: int(1), lineBytes: int(1), primaryBytes: int(1), entryLineBytes: int(1), entryPrimaryBytes: int(1), candidateBytes: int(1), voidDriftR: pos(), maxAgeMin: pos() },
   briefing: { equalK: int(1), cisdFrames: list(int(1), { min: 1 }) },
   tradeRead: { frames: list(int(1), { min: 1 }), deepPullback: frac(), minSigns: int(1) },
   pullbackRead: { minLegAtr: pos(), maxStateDepth: frac() },
@@ -351,6 +372,7 @@ const BUILT_IN = deepFreeze({
       factsMinChecked: 2, factsMaxItems: 20, lateEntryDriftShare: 0.25, freshPriceTimeoutMs: 3000,
     },
     lifecycle: { maxSize: 100 },
+    mtfEntry: { arm: 'D', exitMode: 'trail', entryPullback: 'any', minStage: 'established', models: ['aggressive', 'balanced', 'conservative'] },
     account: { snapshotMaxAgeMs: 600000, balanceToleranceUsd: 0.01, snapshotFutureToleranceMs: 60000, verdictsKept: 500 },
     clock: { serverTimeToleranceMs: 300000, wallStartMaxAgeMs: 86400000, wallStartAheadMs: 5000 },
     cycle: { timeoutMinMinutes: 3, timeoutBars: 2, extraCyclesPerDay: 10, maxConsecutiveErrors: 3, slowFromMin: 3, coalesceHoldMs: 10000 },
@@ -418,7 +440,7 @@ const BUILT_IN = deepFreeze({
     fvg: { frames: [5, 15, 60], window: 60, max: 3 },
     compression: { frames: [3, 5, 15, 60], nr: [7], maxWidthAtr: 2, poleBars: 3, expandAtr: 1, minBeyondAtr: 0.1, recentBars: 3, maxRunAtr: 1, levelBandAtr: 0.25, maxLevels: 3 },
     displacement: { bodyPrior: 10, recentEntry: 6, recentSetup: 2, lineBytes: 450 },
-    mtfStructure: { hierarchy: 'intraday', hierarchies: { scalping: [15, 5, 1], intraday: [60, 15, 3], day: [240, 60, 15], swing: [1440, 240, 60] }, sideMode: 'rule', depth: [0.3, 0.75, 1], warmBars: 20, lineBytes: 1074, primaryBytes: 654 },
+    mtfStructure: { hierarchy: 'intraday', hierarchies: { scalping: [15, 5, 1], intraday: [60, 15, 3], day: [240, 60, 15], swing: [1440, 240, 60], execution: [15, 3, 1] }, sideMode: 'rule', depth: [0.3, 0.75, 1], warmBars: 20, lineBytes: 1074, primaryBytes: 654, entryLineBytes: 1074, entryPrimaryBytes: 654, candidateBytes: 716, voidDriftR: 0.5, maxAgeMin: 60 },
     briefing: { equalK: 2, cisdFrames: [3, 5, 15, 60] },
     tradeRead: { frames: [15], deepPullback: 0.618, minSigns: 2 },
     pullbackRead: { minLegAtr: 1, maxStateDepth: 0.62 },

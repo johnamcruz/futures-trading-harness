@@ -148,6 +148,8 @@ const MAX_CONSECUTIVE_LOSSES = G.maxConsecutiveLosses;
 
 function loadConfig(env = process.env) {
   return {
+    // P1: the MTF entry arm from config/runner.json, judged on the caller's env (its replay clock), never another's.
+    mtfMode: require('./mtf-entry').modeOf(require('../tunables').runner().mtfEntry, env),
     // The runner's own gateway (broker/adapter.js openAdapter sets FTH_RUNNER_GATEWAY on that process only): its
     // cleanups may cancel bracket legs (account-gate.js evaluateCancel); a model's gateway never has it.
     runnerGateway: String(env.FTH_RUNNER_GATEWAY || '').trim() === '1',

@@ -27,6 +27,7 @@
     "freshPriceTimeoutMs": 3000
   },
   "lifecycle": { "maxSize": 100 },
+  "mtfEntry": { "arm": "D", "exitMode": "trail", "entryPullback": "any", "minStage": "established", "models": ["aggressive", "balanced", "conservative"] },
   "account": {
     "snapshotMaxAgeMs": 600000,
     "balanceToleranceUsd": 0.01,
