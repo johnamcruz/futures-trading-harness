@@ -1277,12 +1277,14 @@ function renderBriefing(b, { now = new Date() } = {}) {
   const et = v => etTimes(v, day);
   const lines = [`Bar briefing ${b.symbol} ${b.minutes}m, bar ${et(b.asOf)} ET closed ${et(b.closedAt)} ET (${day}), price ${b.price}; times in ET, distances in points and R (computed once per section; reuse it, don't recompute):`];
   lines.push(...summaryLines(b, et), '', 'Detail by timeframe:');
+  // The reading audit's E1: an MTF arm's 3m detail prints the trend rule without its refusal clause, as its summary does.
+  const mtfOnly = Boolean(mtfOnlyOf((b.sections.m3 || {}).data));
   for (const name of SECTIONS) {
     const s = b.sections[name];
     if (!s) continue;
     const stale = Date.parse(s.validUntil) <= now.getTime() ? ' EXPIRED (the next briefing replaces it)' : '';
     lines.push(`[${name}] version ${s.version}, valid until ${et(s.validUntil)} ET${stale}`);
-    for (const [k, v] of detailEntries(s.data)) lines.push(`  ${k}: ${fmt(et(v))}`);
+    for (const [k, v] of detailEntries(s.data)) lines.push(`  ${k}: ${fmt(et(mtfOnly && name === 'm3' && k === 'trendRule' ? ME.mtfTrendRuleText(v) : v))}`);
   }
   return `${lines.join('\n')}\n`;
 }

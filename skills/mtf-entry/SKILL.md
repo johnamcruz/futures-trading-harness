@@ -46,7 +46,7 @@ observable facts; you interpret them and select opportunities.
 - The Market state class describes the market: weigh it like any other fact. It is
   not a refusal and not a rule. trade-session's class table and its take rule ("your
   4h and 1h too") are arm D's: for a candidate the side is the 1h structure's. You
-  may still PASS on a chop day with your own reason; never cite the class as a rule.
+  may still PASS with your own reason; never cite the class as a rule.
 - Never substitute an unrelated stop for the verified structural invalidation level.
 - WAIT keeps an active candidate for a later bar (a 3m trigger); a 1m-trigger candidate
   lives one bar, so a WAIT on it is a pass. PASS rejects this opportunity.

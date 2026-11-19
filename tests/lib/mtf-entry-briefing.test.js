@@ -68,7 +68,11 @@ test('arm A (replay): the record carries the mode and the 1h-structure side; the
   const td = B.renderBriefing(d, { now: X.now }).split('\n');
   // Only the MTF lines differ, and today's setup lines, which an mtf_only arm prints as context (tests/lib/mtf-only-offers.test.js).
   const SETUPS = l => /^- (Setups to check|Standard plan|Rules setups|Setups)\b/.test(l);
-  assert.deepEqual(ta.filter(l => !IS_MTF(l) && !SETUPS(l)), td.filter(l => !IS_MTF(l) && !SETUPS(l)), 'only the MTF lines (and the setups as context) differ');
+  // And the reading audit's E1 (tests/lib/mtf-only-offers.test.js): the Trend rule line without its refusal clause, the
+  // Bias line without its refused side.
+  const E1 = l => (/^(- Trend rule|  trendRule): /.test(l) ? l.replace(/; no (long|short) against it\.$/, '.') : /^- Bias: /.test(l) ? l.replace(/; (long|short) refused\)/, ')') : l);
+  assert.deepEqual(ta.filter(l => !IS_MTF(l) && !SETUPS(l)), td.filter(l => !IS_MTF(l) && !SETUPS(l)).map(E1), 'only the MTF lines (and the setups as context) differ');
+  assert.ok(td.some(l => /^- Trend rule: .*; no (long|short) against it\.$/.test(l)), 'arm D keeps its refusal clause');
   assert.ok(ta.filter(SETUPS).every(l => /Context only: MTF entry arm A enters only on an MTF candidate line\.$/.test(l) || /^- Setups: /.test(l)), ta.filter(SETUPS).join('\n'));
   const i = ta.findIndex(l => l.startsWith('- MTF structure '));
   assert.ok(i > 0);
