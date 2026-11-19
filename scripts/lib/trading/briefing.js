@@ -1077,7 +1077,7 @@ function summaryLines(b, et) {
   // The base timeframe's timing against the side the entry rule allows (ltf-timing.js timingLine).
   const timing = timingLine(m3.timing, et, tf);
   // The cold read (finding 2, 6): in an MTF arm the timing and Pullback lines are arm D's facts, labelled so.
-  const ctx = l => (mtfOnlyOf(m3) && l ? l.replace(/^- ([^:(]+?) ?\(/, '- $1 (arm D context: ').replace(/^- (Pullback|[0-9]+m timing) (?!\()/, '- $1 (arm D context) ') : l);
+  const ctx = l => (mtfOnlyOf(m3) && l ? l.replace(/^- ([^:(]+?) ?\(/, '- $1 (arm D context: ') : l);
   if (timing) out.push(ctx(timing));
   // Price against the prevailing side on the 15m: the leg, its depth, swings, counter-move and breaks (pullback-read.js).
   const pullback = own ? null : pullbackLine(m3.pullback);

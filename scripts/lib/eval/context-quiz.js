@@ -277,10 +277,10 @@ function layersOf(spec) {
 
 function briefingOfText(text, layers = null) {
   const t = String(text || '');
-  const bias = /\n- Bias: ([^\n]*)/.exec(t);
+  const bias = /\n- Bias(?: \(context here\))?: ([^\n]*)/.exec(t);
   if (!bias) return null;
   const fr = /\(4h (up|down|range), 1h (up|down|range)/.exec(bias[1]);
-  const [h4, h1] = fr ? [fr[1], fr[2]] : /^(neutral|no side yet)/.test(bias[1]) ? ['range', 'range'] : [null, null];
+  const [h4, h1] = fr ? [fr[1], fr[2]] : /^(neutral|no side)/.test(bias[1]) ? ['range', 'range'] : [null, null];
   const clock = /synthetic, (\d{1,2}:\d{2}) ET/.exec(t);
   const now = clock ? minOf(clock[1]) : null;
   const m3 = {};

@@ -1,6 +1,6 @@
 {
- "about": "The conflict check's shrink-only pins (tests/plugin/rule-conflicts.test.js): sentences matching each pattern in the rendered MTF-arm text, the head system prompt and an MTF-arm cycle prompt with the mtf-entry skill. A count may only go down; the cycle's matches are the precedence paragraph's list of arm D's rules (a fence, not a rule).",
+ "about": "The conflict check's pins (tests/plugin/rule-conflicts.test.js): sentences matching each pattern in the head system prompt and in an MTF-arm cycle prompt (no briefing) with the mtf-entry skill, pinned at today's exact counts. A count may only go down (a raise is a review finding); the cycle's one never-counter match is the precedence paragraph's list of arm D rules (a fence, not a rule).",
  "NEVER_COUNTER_4H": { "system": 10, "cycle": 1 },
  "CLASS_REFUSAL": { "system": 2, "cycle": 0 },
- "TURN_REQUIRED": { "system": 1, "cycle": 1 }
+ "TURN_REQUIRED": { "system": 1, "cycle": 0 }
 }

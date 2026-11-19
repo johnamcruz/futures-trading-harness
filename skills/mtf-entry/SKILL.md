@@ -23,7 +23,7 @@ observable facts; you interpret them and select opportunities.
 
 1. The parent trend and its protected structure. The side is the primary line's
    "1h structure UP" or "DOWN". The 4h "(context)" is a fact, never a refusal.
-2. The MTF 15m pullbacks (the primary line): active and completed.
+2. The MTF pullbacks (arm A: 15m; arm B: 3m): active and completed.
 3. The setup timeframe's structure relative to the parent (the 15m line decides the
    pullback; the 3m line only times it).
 4. The execution timeframe's CHoCH and BOS aligned with the parent.
@@ -40,7 +40,7 @@ observable facts; you interpret them and select opportunities.
 - The rank is a fact, not a preference: do not prefer the first pullback because of
   its rank.
 - Do not require order blocks, FVGs or Fibonacci retracements.
-- A void candidate stays void.
+- Do not reuse invalidated confirmations: a void candidate stays void.
 - Never enter against the 1h structure; its trend label is context. For a candidate
   the side is the 1h structure's. The Trend rule line does not refuse a verified MTF
   candidate (the gate exempts it from `[mtf-trend]`).
@@ -53,8 +53,8 @@ observable facts; you interpret them and select opportunities.
 - Room: in the candidate's own R (its structural stop).
 
 **State your decision** on its own line, before the CYCLE RESULT line:
-`SELECTION: ENTER|WAIT|PASS - <side> <model> <trigger time>: <reason>`. The last such
-line counts; none is an unlabelled decision. Step 8 says the same (ENTER: take; WAIT
+`SELECTION: ENTER - <side> <model> <trigger time>: <reason>`, or the same with WAIT or
+PASS. The last such line counts; none is an unlabelled decision. Step 8 says the same (ENTER: take; WAIT
 or PASS: pass); the SELECTION line is the one that counts.
 
 **Entry and management:** enter only a printed candidate you select; its stop is
@@ -68,7 +68,8 @@ advantage testing has not shown.
 checked it and it is eligible to select. A printed candidate is eligible at its own
 stage, not the primary line's or a context line's; bos-vs-choch's stage actions and
 `Entry:` describe the primary line. A stage word names the pullback's stage:
-WEAKENING, REVERSING and CONFIRMED REVERSAL are the trend resuming. `(chosen)`: the
+WEAKENING, REVERSING and CONFIRMED REVERSAL mean price turned back toward the parent
+trend (a definition, not a forecast). `(chosen)`: the
 earliest trigger per side, the only one the gate takes; you select or pass it. Name it
 in your SELECTION line and reads (`mtf ready` with another model is refused). A model still waiting is in the one `- MTF waiting`
 clause: not ready, not an entry. A void one says so plainly, whatever its reason
@@ -79,7 +80,7 @@ no entry. `(position open: not a pick)`: context, never an entry.
 
 | Part | Means |
 |---|---|
-| model, stage | aggressive (the first CHoCH or CISD back), balanced (a CHoCH back, then a BOS), conservative (15m CHoCH + fresh BOS); `(early)`: before the MTF 15m pullback is established. Still eligible: the 15m-turn rule and the 3m-trigger rule do not apply |
+| model, stage | aggressive (the first CHoCH or CISD back), balanced (a CHoCH back, then a BOS), conservative (15m CHoCH + fresh BOS); `(early)`: before the MTF pullback (arm A: 15m; arm B: 3m) is established. Still eligible: the 15m-turn rule and the 3m-trigger rule do not apply |
 | trigger 3m or 1m | the timing frame, the candidate's own; its age (`new this bar`, `N min ago`). A 1m candidate is timed by its 1m trigger. A 1m trigger fired since the previous 3m close is current: it fired inside the bar that just closed; enter at the next bar or pass |
 | ran NR past the trigger, or NR back toward the stop | how far price moved from the trigger's close, in the trigger's R (its close to the stop). Back toward the stop: still valid. Once any close since the trigger ran over 0.5R past it, the candidate is void for good. A trigger over 60 minutes old, or from an earlier session, is void too |
 | 1h turn (the parent's frame: 1h in arm A, 15m in arm B) | a fact, never a wait: the parent's last CHoCH the side's way (this session or the previous one), the BOS that confirmed it, the BOS count since; "N sessions ago (older)"; "no turn": the trend has run since its first break |

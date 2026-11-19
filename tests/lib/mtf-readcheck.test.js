@@ -49,7 +49,7 @@ test('grade: a right report passes every field; numbers within their rounding; w
   assert.equal(Object.values(RC.grade(loose, exp).fields).every(x => x.ok), true);
 });
 
-test('a waiting clause with "or" in it is not a hedge; EARLY with no candidate is none (the probe says so); TURN says old turn for a CHoCH older than the previous session', () => {
+test('a waiting clause with "or" in it is not a hedge; EARLY with no candidate is none (the probe says so); TURN says older for a CHoCH older than the previous session (the line\'s word), recent otherwise', () => {
   const est = F.record({ stage: 'ESTABLISHED' });
   est.levels[0].entry = null;
   const w = RC.expected(est, mode, { price: 21540.25 });
@@ -60,8 +60,8 @@ test('a waiting clause with "or" in it is not a hedge; EARLY with no candidate i
   assert.match(RC.probe(), /EARLY: <yes or no for the chosen candidate; none without one>/);
   const old = F.record({ extra: {} });
   old.levels[0].parent.turn = { way: 'up', choch: { kind: 'CHoCH', at: '2026-10-01T14:00:00.000Z', et: '10-01 10:00' }, bos: { at: '2026-10-01T15:00:00.000Z', et: '10-01 11:00' }, since: null, bosCount: 1 };
-  assert.equal(RC.expected(old, mode, { price: 21540.25, at: '2026-10-07T14:00:00.000Z' }).TURN, 'old turn');
-  assert.equal(RC.expected(old, mode, { price: 21540.25, at: '2026-10-02T14:00:00.000Z' }).TURN, 'fresh');
+  assert.equal(RC.expected(old, mode, { price: 21540.25, at: '2026-10-07T14:00:00.000Z' }).TURN, 'older');
+  assert.equal(RC.expected(old, mode, { price: 21540.25, at: '2026-10-02T14:00:00.000Z' }).TURN, 'recent');
 });
 
 test('grade (adversarial): a waiting model read as ready, a void read as live, the 3m line read as deciding, a missing field, a wrong last line, a hedge: each fails its field only', () => {

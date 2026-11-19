@@ -4,8 +4,7 @@
 // on every session bar of the real MTF fixtures (tests/fixtures/mtf-structure, their last 50 bars) that prints a chosen candidate, the situational
 // skills fit the hard prompt limit (prompt.maxPromptBytes, with the cycle data's reserve) without pushing bos-vs-choch
 // (the MTF lines' reading skill) or mtf-entry to the "Also relevant" line. Text that grows the MTF prompt past it fails
-// here instead of dropping a skill. (The offline check over 139 rendered held-out and audit moments is
-// ~/fth-replays/tools/reading-audit/reask: none dropped at this tip.)
+// here instead of dropping a skill. (An offline check over 139 rendered real moments, outside the repo: none dropped.)
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -42,7 +41,7 @@ test('an MTF arm\'s cycle prompt keeps bos-vs-choch and mtf-entry in the prompt 
       const text = B.renderBriefing(b, { now });
       if (!/^- MTF candidate (LONG|SHORT) \(chosen\)/m.test(text)) continue;
       cycles += 1;
-      // The cycle prompt as the runner builds it (pickeval's wrap.js): the day line, the premarket plan, the news line.
+      // The cycle prompt as the runner builds it: the day line, the premarket plan, the news line.
       const w = bars.slice(Math.max(0, j + 1 - W), j + 1);
       let day = null; try { day = RW.dayLine({ symbol: 'MNQ', tickSize: 0.25 }, w); } catch (_e) { day = null; }
       const items = [{ symbol: 'MNQ', verdicts: [], scan: [], notEntries: [], entryBlocked: null, cited: [], bar: { t: bars[j].t, c: bars[j].c, contractId: 'MNQ', trend: (b.sections.m3.data || {}).trendRule, day, recent: bars.slice(j - 9, j + 1), plan: SC.premarketPlan([], 'MNQ', now) } }];

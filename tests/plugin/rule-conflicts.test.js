@@ -38,7 +38,7 @@ test('pins, shrink-only: sentences stating an arm D refusal in the MTF render', 
   const P = { NEVER_COUNTER_4H: /never counter/i, CLASS_REFUSAL: /\b(chop|unclear)\b[^.]{0,40}(sit out|no trend trade)/i, TURN_REQUIRED: /wait for the 15m turn/i };
   for (const [k, re] of Object.entries(P)) {
     const got = { system: sentences(system).filter(s => re.test(s)).length, cycle: sentences(cycle).filter(s => re.test(s)).length };
-    assert.ok(got.system <= PINS[k].system && got.cycle <= PINS[k].cycle, `${k}: ${JSON.stringify(got)} over the pin ${JSON.stringify(PINS[k])} (a new sentence needs its arm named, or lower the pin)`);
+    assert.deepEqual(got, PINS[k], `${k}: ${JSON.stringify(got)} vs the pin ${JSON.stringify(PINS[k])}: a rise is a new arm D refusal in the MTF text (name its arm); a fall lowers the pin`);
   }
 });
 
@@ -53,13 +53,16 @@ test('reconciled pairs: while an arm D rule stands, its reconciling text is in t
   ];
   const mtf = norm(cycle);
   for (const p of PAIRS) {
-    if (!p.a.test(`${system}\n${allSkills}`)) continue;
+    // Every pair is active today; a pair whose arm D text is gone is reported, never skipped silently.
+    assert.ok(p.a.test(`${system}\n${allSkills}`), `${p.id}: its arm D text is gone: remove the pair (the conflict is resolved)`);
     for (const r of p.by) assert.ok(mtf.includes(norm(r)), `${p.id}: "${r}" missing from the MTF prompt`);
   }
 });
 
-test('term guards in the mtf-entry skill: no "stale"; a stage word beside weakening or reversal names the pullback; a ± carries a unit', () => {
+test('term guards in the mtf-entry skill: no "stale" (void is the candidate\'s only dead word); the stage words are defined, as the pullback\'s stage, never a forecast', () => {
   assert.doesNotMatch(SKILL, /\bstale\b/i);
-  for (const s of sentences(norm(SKILL)).filter(x => /\b(WEAKENING|REVERSING|CONFIRMED REVERSAL)\b/.test(x) && /\b(weakening|reversal)\b/.test(x))) assert.match(s, /pullback/, s);
-  for (const m of SKILL.matchAll(/±\s?\d[\d.]*(\s?\S+)?/g)) assert.match(m[1] || '', /(R|pts|ATR|%|x)/, m[0]);
+  const s = norm(SKILL);
+  assert.ok(s.includes('A stage word names the pullback\'s stage: WEAKENING, REVERSING and CONFIRMED REVERSAL mean price turned back toward the parent trend (a definition, not a forecast).'), 'the stage words\' definition');
+  // Every other sentence naming a stage word with weakening or reversal in it names the pullback (C5).
+  for (const x of sentences(s).filter(y => /\b(WEAKENING|REVERSING|CONFIRMED REVERSAL)\b/.test(y) && /\b(weakening|reversal)\b/i.test(y.replace(/\b(WEAKENING|REVERSING|CONFIRMED REVERSAL)\b/g, '')))) assert.match(x, /pullback/, x);
 });

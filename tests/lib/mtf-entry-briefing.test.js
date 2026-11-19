@@ -83,7 +83,7 @@ test('arm A (replay): the record carries the mode and the 1h-structure side; the
   assert.ok(i > 0);
   assert.match(ta[i + 2], /^- MTF (candidate|waiting)/, 'the candidate lines follow the two MTF lines');
   assert.match(ta[i], / Entry: on the MTF candidate lines\.$/);
-  assert.match(ta[i + 1], /^- MTF structure below \(3m timing read; the 15m line decides the pullback\): 15m > 3m/);
+  assert.match(ta[i + 1], /^- MTF structure below \(3m timing read, early and noisy; the 15m line decides the pullback\): 15m > 3m/);
 });
 
 test('an MTF arm outside a replay: one unavailable line saying why (no record to enter on); arm B without 1m bars, or with 1m bars ending before the close: its reason', () => {

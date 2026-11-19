@@ -30,8 +30,9 @@ const { labelLines } = require('../label-line');
 
 const CAND = /^- MTF candidate (LONG|SHORT) \(chosen\): (aggressive|balanced|conservative) at stage [^,]+, trigger (\S+ \S+ \S+ \S+)[^;]*; .*?context: .*?(?:pullback #(\d+) of this 1h leg|its rank in the 1h leg not known).*?structural stop ([\d.]+)(?:: ([\d.]+) pts)?/;
 const WORD = /^\**\s*(ENTER|WAIT|PASS)\b\**\s*(?:[-–—:.,]\s*)?(.*)$/;
-// Two decisions on one line ("ENTER or WAIT", "PASS/ENTER") are none (REVIEW-4 minor 4).
-const TWO = /^\**\s*(ENTER|WAIT|PASS)\b\**\s*(?:or|\/)\s*\**\s*(ENTER|WAIT|PASS)\b/;
+// Two decisions on one line ("ENTER or WAIT", "PASS/ENTER", an echoed template "ENTER|WAIT|PASS") are none
+// (REVIEW-4 minor 4; the lessons review, F3).
+const TWO = /^\**\s*(ENTER|WAIT|PASS)\b\**\s*(?:or|\/|\|)\s*\**\s*(ENTER|WAIT|PASS)\b/;
 // A fenced block (``` ... ```) is a quoted template, never the decision.
 const unfenced = text => String(text || '').replace(/^\s*```[^\n]*\n[\s\S]*?^\s*```[^\n]*$/gm, '');
 function selectionOf(text) {

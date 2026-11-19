@@ -395,3 +395,12 @@ test('the candidate id is STABLE across cycles (the instance\'s opening time, th
   const renum = { ...rs[J], levels: rs[J].levels.map(l => (l.role === 'primary' ? { ...l, instance: { ...l.instance, id: 99 } } : l)) };
   assert.equal(ME.candidatesOf(renum, m, { price: PX, at: at(J) }).list[0].instanceId, a.instanceId);
 });
+
+test('the candidate line\'s words (A8): the drift\'s sign in words; the turn by its parent frame at the tightest cut', () => {
+  assert.equal(ME.driftText(-0.53), '0.53R back toward the stop');
+  assert.equal(ME.driftText(0), 'ran 0R past the trigger');
+  assert.equal(ME.driftText(0.17), 'ran 0.17R past the trigger');
+  assert.equal(ME.turnShort({ choch: { et: '10:15' }, bosCount: 2 }, true, '15m'), '15m turn, 2 BOS since');
+  assert.equal(ME.turnShort({ choch: { et: '10:15' }, bosCount: 2 }, false, '1h'), 'older turn, 2 BOS since');
+  assert.equal(ME.turnShort({ choch: null, bosCount: 3 }, false, '1h'), 'no turn, 3 BOS');
+});

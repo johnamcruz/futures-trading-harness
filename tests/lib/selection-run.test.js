@@ -242,3 +242,10 @@ test('rulerOf (REVIEW-4 minor 5, 6): a limit whose valid_bars window runs past t
   const t1 = R.rulerOf(turn, 3, 'MNQ', { ...SHIPPED, minRR: 1 })({ at: T(3), side: 'long', stop: 95 });
   assert.notDeepEqual(t, t1, 'the mark that arms the trail is the shipped minRR');
 });
+
+test('the lessons review (F3): an echoed template "ENTER|WAIT|PASS" is two decisions on one line: unlabelled, never an ENTER', () => {
+  const { selectionOf } = require('../../scripts/lib/replay/selection-run');
+  assert.equal(selectionOf('SELECTION: ENTER|WAIT|PASS - <side> <model> <trigger time>: <reason>').decision, 'UNLABELLED');
+  assert.equal(selectionOf('SELECTION: PASS|WAIT - x').decision, 'UNLABELLED');
+  assert.equal(selectionOf('SELECTION: PASS - long aggressive 10:12: room under 1R').decision, 'PASS');
+});
