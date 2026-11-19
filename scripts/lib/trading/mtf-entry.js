@@ -345,12 +345,11 @@ function candidateLines(rec, mode, { level = x => x, sizing = null, price = null
 
 /**
  * The reading audit (E1): in an MTF arm today's trend rule refuses no MTF candidate (the gate exempts a verified MTF entry
- * from [mtf-trend]; the candidate's side is the 1h structure's), so its printed refusal is replaced there; arm D: as is.
- *   mtfTrendRuleText(text)   "...; no short against it." -> "...; an MTF candidate's side is the 1h structure's, and this
- *                            rule does not refuse it."
+ * from [mtf-trend]; the candidate's side is the 1h structure's), so its printed refusal clause is dropped there; arm D: as is.
+ *   mtfTrendRuleText(text)   "LONG allowed (prevailing 4h up); no short against it." -> "LONG allowed (prevailing 4h up)."
  *   mtfBiasText(line)        "Bias: long only (4h up, 1h up; short refused)" -> "Bias: long only (4h up, 1h up)"
  */
-const mtfTrendRuleText = text => String(text).replace(/; no (long|short) against it(\.?)$/, '; an MTF candidate\'s side is the 1h structure\'s, and this rule does not refuse it$2');
+const mtfTrendRuleText = text => String(text).replace(/; no (long|short) against it(\.?)$/, '$2');
 const mtfBiasText = line => String(line).replace(/; (long|short) refused\)/, ')');
 
 module.exports = { mtfTrendRuleText, mtfBiasText, mtfOnlyMode, mtfPlanProblems, setupMinutes, startProblems, TODAY, ARMS, replayRun, modeOf, recordMode, candidatesOf, readyOf, entryModeProblems, sizeHint, candidateLines };

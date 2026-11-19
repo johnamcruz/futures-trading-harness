@@ -790,7 +790,7 @@ const PLAN_STEPS = ['HTF', 'Context', 'Location', 'Setup', 'Confluence', 'Entry'
 const PLAN_TEXT = ` Write the trader-process skill's PLAN (1 ${PLAN_STEPS[0]} to ${PLAN_STEPS.length} ${PLAN_STEPS[PLAN_STEPS.length - 1]}) before the result line.`;
 // An MTF entry arm (mtf_only): the SELECTION line named where the PLAN and the result line are, right before the result
 // line, so the PLAN's step 8 never stands in for it (the reading lesson: the six mornings labelled 7 of 13). Arm D: as above.
-const MTF_PLAN_TEXT = PLAN_TEXT.replace(' before the result line.', ', then, with an MTF candidate line printed, your SELECTION line on its own line (`SELECTION: ENTER|WAIT|PASS - <reason>`, the mtf-entry skill: the one that counts), then the result line. A candidate is decided by the mtf-entry skill: its side is the 1h structure\'s, and trade-session\'s class table, take rule (your 4h and 1h too) and pullback setup (wait for the 15m turn) are not refusals of it.');
+const MTF_PLAN_TEXT = PLAN_TEXT.replace(' before the result line.', ', then, with an MTF candidate line printed, your SELECTION line on its own line (`SELECTION: ENTER|WAIT|PASS - <reason>`, the mtf-entry skill: the one that counts), then the result line. A candidate is decided by the mtf-entry skill: its side is the 1h structure\'s, and trade-session\'s class table, take rule (your 4h and 1h too) and pullback setup (wait for the 15m turn) are not refusals of it (you may still pass it, with your own reason).');
 const RESULT_LINE = ` End with the cycle result as plain text in your final message, never as a tool call. Your last line must be exactly: ${RESULT_TEMPLATE}.`;
 
 /**
