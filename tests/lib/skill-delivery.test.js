@@ -77,6 +77,8 @@ const FIXTURES = {
   pullback: { present: { state: FLAT, briefings: [brief({ pullback: { side: 'long', frame: '15m', leg: { origin: 21480, extreme: 21530.5 }, depth: 0.41 } })] }, absent: { state: FLAT, briefings: [brief({ pullback: null })] } },
   structure: { present: { state: FLAT, briefings: [brief({ lastBreak: { last: { kind: 'BOS' } } })] }, absent: { state: FLAT, briefings: [brief({ lastBreak: { last: null } })] } },
   window: { present: { state: FLAT, briefings: [brief({ windowEntries: 'refused' })] }, absent: { state: FLAT, briefings: [brief({})] } },
+  // P1: an MTF entry arm's record (its mode) present; today's record (no mode) absent.
+  mtf: { present: { state: FLAT, briefings: [brief({ mtfStructure: { mode: { arm: 'A', entryMode: 'mtf_only' }, levels: [] } })] }, absent: { state: FLAT, briefings: [brief({ mtfStructure: { levels: [] } })] } },
 };
 const situation = f => (typeof f === 'function' ? f() : f);
 const LOADED = cycleLoaded(cfgOf('claude'));
@@ -89,7 +91,7 @@ const EXPECTED = {
     'setup-judgment', 'trade-lifecycle', 'trade-plan', 'trade-session'],
   b: ['bos-vs-choch', 'breakout', 'breakout-vs-fakeout', 'candle-reading', 'cisd', 'compression', 'daily-bias',
     'entry-outcome', 'fair-value-gaps', 'fib-retracement', 'invalidation', 'leftover-orders', 'levels-and-reactions',
-    'manage-position', 'momentum-and-volume', 'mtf-bias-filter', 'position-sizing', 'prop-challenge-pacing',
+    'manage-position', 'momentum-and-volume', 'mtf-bias-filter', 'mtf-entry', 'position-sizing', 'prop-challenge-pacing',
     'pullback-vs-reversal', 'rejection', 'session-timing', 'take-profit', 'top-down-entry', 'trend-vs-range',
     'vwap-volume-profile'],
   c: ['absorption', 'broker-mcp', 'broker-refusals', 'contract-roll', 'displacement', 'exchange-holidays', 'gate-refusals',

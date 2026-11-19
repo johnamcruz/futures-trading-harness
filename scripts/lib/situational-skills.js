@@ -110,6 +110,8 @@ const TABLE = Object.freeze([
   { id: 'pullback', stage: 'bias', facts: ['pullback'], skills: ['pullback-vs-reversal'], why: 'price against the prevailing side (the Pullback line)', when: c => c.flat.some(b => isObj(m3Of(b).pullback)) },
   { id: 'structure', stage: 'bias', facts: ['lastBreak'], skills: [S.bias.break], why: 'the last structure break', when: c => c.briefings.some(b => isObj(m3Of(b).lastBreak) && isObj(m3Of(b).lastBreak.last)) },
   { id: 'window', stage: 'bias', facts: ['windowEntries'], skills: ['session-timing'], why: 'the window refuses entries', when: c => c.briefings.some(b => m3Of(b).windowEntries && m3Of(b).windowEntries !== 'allowed') },
+  // P1: an MTF entry arm (replay only): the briefing's MTF record carries the arm; today's never does.
+  { id: 'mtf', stage: 'setup', facts: ['mtfStructure'], skills: ['mtf-entry'], why: 'an MTF entry arm is on (the MTF candidate lines)', when: c => c.briefings.some(b => { const r = m3Of(b).mtfStructure; return isObj(r) && isObj(r.mode) && typeof r.mode.entryMode === 'string' && r.mode.entryMode !== 'today'; }) },
 ].map(e => Object.freeze({ ...e, facts: Object.freeze(e.facts), ...(e.skills ? { skills: Object.freeze(e.skills) } : {}) })));
 const SECTIONS = Object.freeze({ declared: Object.freeze({ skill: S.bias.regime, heading: '**Declared yet?**', intro: 'For the Trend declared? line, from your `trend-vs-range` skill' }) });
 const SKILLS = Object.freeze([...new Set(TABLE.flatMap(e => e.skills || []))]);

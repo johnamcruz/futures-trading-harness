@@ -23,6 +23,9 @@ const description = name => String(parseFrontmatter(fs.readFileSync(path.join(RO
 
 // Skills no role, head-trader load list or command reaches, each with why. An entry another source covers fails.
 const ALLOWED = {
+  // P1: embedded by the runner (situational-skills.js TABLE, entry mtf) only in an MTF entry arm (a replay); in today's
+  // arm no role or prompt names it, so arm D's prompts stay byte-identical (but for its catalog line).
+  'mtf-entry': 'the runner embeds it only in an MTF entry arm (its briefing\'s MTF record carries the arm); never in today\'s cycles',
   replay: 'the user starts and reads replays (it says so); no trading role or cycle runs one',
   'training-loop': 'the user starts the training loop, as replays; never inside an autonomous cycle',
   'design-self-review': 'the training loop\'s proposer reads it as its prompt (scripts/lib/train/proposer.js); never a trading role',

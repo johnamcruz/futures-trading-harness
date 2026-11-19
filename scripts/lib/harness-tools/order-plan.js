@@ -196,6 +196,8 @@ function composedPlanOp(c, { s, composed, root, want, now, accountId, strategies
   const specOf = liveSpecs(c.env);
   const r = composedOrder({
     home, root, side: want, now, cycleBars: loadConfig(c.env).cycleBars, strategy: composed, strategies, accounts: loadAccounts(c.root, c.env).accounts,
+    // P1: the MTF entry arm on the caller's env, as the gate re-checks the record (an MTF record plans only in its arm).
+    mtfMode: loadConfig(c.env).mtfMode,
     specOf, accountId: Number.isInteger(accountId) ? accountId : null, selected, paper: c.env.FTH_PAPER === '1', size, approved,
     // The broker's max order size, as the gate reads it (the size translation never sizes over it).
     orderMax: brokerOrderLimit(contractsFileFor(home, c.env)).maxOrderSize,

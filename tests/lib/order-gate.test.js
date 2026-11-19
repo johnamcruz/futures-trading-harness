@@ -4903,3 +4903,161 @@ test('[modify-stop]: a modify_order looser than the runner\'s confirmed resting 
   // The check reads the record, not the request: a home without the file passes it to the gateway.
   assert.deepStrictEqual(evaluateModify({ input: { orderId: 9, stopPrice: 1 }, config: { ...config, home: require('../helpers').tmpDir() } }).violations, []);
 });
+
+// ---- P1 (feat/p1-mtf-entries): the MTF entry arm at the gate. An MTF composed entry (a TRUE `mtf ready` read on the
+// cycle bar's briefing, re-checked here) in an MTF arm is exempt from [mtf-trend] (the 4h+1h EMA rule): its side is the
+// 1h structure's, held by the re-check. Only then: a failed or forged re-check keeps [mtf-trend]. [entry-mode]: mtf_only
+// refuses every other entry; an MTF arm outside a replay refuses every entry. Exits go in every arm.
+const MF = require('../fixtures/mtf-entry');
+const MTF_DOWN4H = { 240: -1, 60: 1, 15: 1 }; // the EMA 4h against the long: today's [mtf-trend] refuses it
+const mtfEval = (o = {}) => {
+  const home = trendHome(tmpDir(), { biases: o.biases || MTF_DOWN4H, fired: o.fired || [] });
+  if (o.write !== false) LC.writeScenario(home, { b: MF.briefing(o.b || {}), reads: o.reads || MF.READS, mtfMode: o.composeMode || MF.MODE('A'), ...(o.scenario || {}) });
+  if (o.after) o.after(home);
+  return evaluateOrder({
+    input: o.order || MF.order(), entries: [plan(1, { ts: '2026-10-07T13:59:30Z' })], now: LC_NOW,
+    config: { ...config, home, cycleBars: { MNQ: LC.BAR }, ...('mode' in o ? (o.mode ? { mtfMode: o.mode } : {}) : { mtfMode: MF.MODE('A') }) }, strategies: LC_REGISTRY,
+  });
+};
+const LIVE_MODE = arm => require('../../scripts/lib/trading/mtf-entry').modeOf({ arm, exitMode: 'trail', entryPullback: 'any', minStage: 'established' }, {}, { isReplay: () => false });
+
+test('MTF arm A: an MTF long on the 1h structure goes though the EMA 4h is down ([mtf-trend] exempt); its stamp carries the candidate', () => {
+  const r = mtfEval();
+  assert.deepStrictEqual(r.violations, []);
+  assert.deepStrictEqual([r.composed.stop, r.composed.target, r.composed.mtf.model, r.composed.mtf.rank, r.composed.mtf.trigger.at, r.composed.mtf.prevHigh], [21528.75, 21563.25, 'aggressive', 1, LC.CLOSE, 21598]);
+  // The coordinator's ruling 3: the stamp carries the candidate's key (its instance id, the cycle bar), so the trade joins
+  // the candidate line and its facts offline; the compose record carries the same id and its bar.
+  assert.deepStrictEqual([r.composed.mtf.instanceId, r.composed.mtf.bar], ['intraday|2026-10-07T13:15:00.000Z|2026-10-07T14:00:00.000Z|aggressive', LC.BAR]);
+  // The same order in arm D (today, the default): the MTF reads are not in the mode and the 4h+1h rule binds.
+  const d = mtfEval({ mode: null });
+  assert.deepStrictEqual(checks(d), ['composed-reads', 'mtf-trend']);
+  assert.match(d.violations.find(v => v.check === 'composed-reads').message, /not in this entry mode \(arm D, today\)/);
+});
+
+test('MTF arm A fails closed: against the 1h structure, withheld, no record, unavailable, a forged record (the briefing holds no ready): refused, and [mtf-trend] not exempted', () => {
+  const cases = [
+    [{ b: { mtf: { side1h: 'short', entry: { side: 'short' } } } }, /against the 1h structure/],
+    [{ b: { mtf: { withheld: 'stop traded' } } }, /withheld: stop traded/],
+    [{ b: { m3: { mtfStructure: undefined } } }, /no MTF structure record/],
+    [{ b: { m3: { mtfStructure: { unavailable: 'no stop rule' } } } }, /MTF structure unavailable/],
+    // Forged: the record was composed on a ready briefing; the briefing on disk (the gate's) holds the ready withheld.
+    [{ after: home => require('../../scripts/lib/trading/briefing').writeBriefing(home, MF.briefing({ mtf: { withheld: 'warning' } })) }, /withheld: warning/],
+    [{ b: { mtf: { rank: 2 } }, mode: MF.MODE('A', { entryPullback: 'first' }), composeMode: MF.MODE('A', { entryPullback: 'first' }) }, /built under another entry arm|not first/],
+  ];
+  for (const [o, re] of cases) {
+    const r = mtfEval(o);
+    assert.ok(checks(r).includes('composed-reads'), `${JSON.stringify(o.b)}: ${JSON.stringify(checks(r))}`);
+    assert.ok(checks(r).includes('mtf-trend'), `${JSON.stringify(o.b)}: the exemption must not be granted`);
+    assert.ok(r.violations.some(v => re.test(v.message)), `${JSON.stringify(o.b)}: ${JSON.stringify(r.violations)}`);
+  }
+});
+
+test('MTF exemption only on a passing re-check: MTF reads that hold with the bracket off the plan are refused and keep [mtf-trend]; a plain record carrying a forged mtf field is never exempt', () => {
+  const off = mtfEval({ order: MF.order({ stopLossBracket: { ticks: 47, type: 'stop' } }) });
+  assert.ok(checks(off).includes('composed-reads'), JSON.stringify(off.violations));
+  assert.ok(checks(off).includes('mtf-trend'), 'a failed re-check: no exemption');
+  // Today's arm (D), the scenario-1 long under the 4h EMA down, its stored record given an `mtf` field.
+  const home = trendHome(tmpDir(), { biases: MTF_DOWN4H });
+  const rec = LC.writeScenario(home, {});
+  const TLm = require('../../scripts/lib/trading/trade-lifecycle');
+  const file = TLm.recordFile(home, 'MNQ', '2026-10-07');
+  fs.writeFileSync(file, fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map(l => { const r = JSON.parse(l); return JSON.stringify(r.id === rec.id ? { ...r, mtf: { arm: 'A', model: 'aggressive', stop: 21512.5 } } : r); }).join('\n') + '\n');
+  const r = evaluateOrder({ input: LC.order(), entries: [plan(1, { ts: '2026-10-07T13:59:30Z' })], now: LC_NOW, config: { ...config, home, cycleBars: { MNQ: LC.BAR } }, strategies: LC_REGISTRY });
+  assert.ok(checks(r).includes('mtf-trend'), `the record's own field is never trusted: ${JSON.stringify(checks(r))}`);
+});
+
+test('a cited rules setup beside the MTF read, under the EMA 4h down and its candidate\'s trend rule refusing, is refused in arms A and AB, never exempt; a wrong target form is refused', () => {
+  const CAND = { ...LC.S2_CANDIDATE, trendRule: 'refuses', stopPoints: 30 };
+  const b = MF.briefing({ m3: { candidates: [CAND] } });
+  Object.assign(b.sections.m3.data.candles['3m'], { rangeAtr: 1.2, volRatio: 1.3 });
+  const reads = [
+    { step: 'bias', skill: 'multi-timeframe-analysis', read: '1h up', why: 'x' },
+    { step: 'location', skill: 'vwap-volume-profile', read: 'vwap above', why: 'x' },
+    { step: 'setup', skill: 'momentum-and-volume', read: 'momentum_continuation fired up', why: 'x' },
+    { step: 'setup', skill: 'mtf-entry', read: 'mtf ready aggressive long', why: 'x' },
+    { step: 'entry', skill: 'momentum-and-volume', read: '3m momentum up', why: 'x' },
+    { step: 'stop', skill: 'mtf-entry', read: 'stop mtf 21528.75', why: 'x' },
+    { step: 'target', skill: 'take-profit', read: 'target 2r', why: 'x' },
+  ];
+  for (const arm of ['A', 'AB']) {
+    const mode = MF.MODE(arm);
+    const home = trendHome(tmpDir(), { biases: MTF_DOWN4H, fired: [] });
+    const rec = LC.writeScenario(home, { b: arm === 'AB' ? { ...b, sections: { ...b.sections, m3: { ...b.sections.m3, data: { ...b.sections.m3.data, mtfStructure: MF.record({ mode }) } } } } : b, reads, mtfMode: mode, cited: ['momentum_continuation'] });
+    const order = LC.s2Order({ stopLossBracket: { ticks: 120, type: 'stop' }, takeProfitBracket: { ticks: 240, type: 'limit' }, rationale: 'setup:trade_lifecycle long at market from 21540.25, stop 21510.25, target 21600.25' });
+    const r = evaluateOrder({ input: order, entries: [plan(1, { ts: '2026-10-07T13:59:30Z' })], now: LC_NOW, config: { ...config, home, cycleBars: { MNQ: LC.BAR }, mtfMode: mode }, strategies: LC_REGISTRY });
+    assert.ok(r.violations.length > 0, `${arm}: refused (record ok ${rec.ok})`);
+    assert.ok(checks(r).includes('mtf-trend'), `${arm}: no exemption: ${JSON.stringify(checks(r))}`);
+    assert.ok(r.violations.some(v => /\[mtf-cited\]/.test(v.message)), `${arm}: named: ${JSON.stringify(r.violations)}`);
+    assert.equal(r.composed, undefined);
+  }
+  const wrongTarget = mtfEval({ reads: MF.READS.map(x => (x.step === 'target' ? { ...x, read: 'target 2r' } : x)) });
+  assert.ok(checks(wrongTarget).includes('mtf-trend') && wrongTarget.violations.some(v => /\[mtf-target\]/.test(v.message)), JSON.stringify(wrongTarget.violations));
+});
+
+test('a plan stop that is not the stamped structural stop is refused [mtf-stop] (here: the record\'s buffer 2 ticks, the strategy\'s 1), and [mtf-trend] binds', () => {
+  const reads = MF.READS.map(x => (x.step === 'stop' ? { ...x, read: 'stop mtf 21528.5' } : x));
+  const r = mtfEval({ b: { mtf: { entry: { stop: 21528.5 } } }, reads });
+  assert.ok(r.violations.some(v => /\[mtf-stop\] the plan's stop 21528.75 is not the MTF candidate's structural stop 21528.5/.test(v.message)), JSON.stringify(r.violations));
+  assert.ok(checks(r).includes('mtf-trend'));
+});
+
+test('first-only at the gate: rank 2 refused (`not first`), rank 1 goes', () => {
+  const first = MF.MODE('A', { entryPullback: 'first' });
+  const rec = o => MF.record({ mode: first, ...o });
+  const go = mtfEval({ b: { m3: { mtfStructure: rec({}) } }, mode: first, composeMode: first });
+  assert.deepStrictEqual(go.violations, []);
+  const two = mtfEval({ b: { m3: { mtfStructure: rec({ rank: 2, withheld: 'not first' }) } }, mode: first, composeMode: first });
+  assert.ok(two.violations.some(v => v.check === 'composed-reads' && /withheld: not first/.test(v.message)), JSON.stringify(two.violations));
+});
+
+test('[entry-mode] mtf_only (arms A, B, AB): a non-MTF compose record and a rules setup are refused; exits go in every arm', () => {
+  const plainHome = () => { const h = trendHome(tmpDir(), { biases: { 240: 1, 60: 1, 15: 1 } }); LC.writeScenario(h, { mtfMode: MF.MODE('A') }); return h; };
+  for (const arm of ['A', 'B', 'AB']) {
+    const r = evaluateOrder({ input: LC.order(), entries: [plan(1, { ts: '2026-10-07T13:59:30Z' })], now: LC_NOW, config: { ...config, home: plainHome(), cycleBars: { MNQ: LC.BAR }, mtfMode: MF.MODE(arm) }, strategies: LC_REGISTRY });
+    assert.ok(checks(r).includes('entry-mode'), `${arm}: ${JSON.stringify(checks(r))}`);
+    assert.match(r.violations.find(v => v.check === 'entry-mode').message, new RegExp(`entry mode mtf_only \\(arm ${arm}\\): only an MTF ready entry`));
+    const rules = evaluateOrder({ input: entryOrder(), entries: [plan()], now: NOW, config: { ...config, mtfMode: MF.MODE(arm) } });
+    assert.ok(checks(rules).includes('entry-mode'), `${arm} rules: ${JSON.stringify(checks(rules))}`);
+    const exit = evaluateOrder({ input: entryOrder({ side: 'sell', rationale: '[exit] flatten the long', stopLossBracket: undefined }), entries: [], now: NOW, config: { ...config, mtfMode: MF.MODE(arm) } });
+    assert.deepStrictEqual(exit.violations, []);
+  }
+  // Arm AB's MTF entry goes as arm A's; its 1m part unavailable, the intraday candidate still stands; a record with no 1m
+  // part at all is refused.
+  assert.deepStrictEqual(mtfEval({ mode: MF.MODE('AB'), composeMode: MF.MODE('AB'), b: { mtf: { mode: MF.MODE('AB'), extra: { execution: { unavailable: 'no 1m bars' } } } } }).violations, []);
+  const noPart = mtfEval({ mode: MF.MODE('AB'), composeMode: MF.MODE('AB'), b: { mtf: { mode: MF.MODE('AB') } } });
+  assert.ok(noPart.violations.some(v => /arm AB needs its 1m execution record/.test(v.message)));
+});
+
+test('[entry-mode] an MTF arm outside a replay (live): every entry refused, exits go; arm D is never refused', () => {
+  for (const arm of ['A', 'B', 'AB']) {
+    const r = mtfEval({ mode: LIVE_MODE(arm) });
+    assert.ok(checks(r).includes('entry-mode'), arm);
+    assert.match(r.violations.find(v => v.check === 'entry-mode').message, new RegExp(`MTF entry arm ${arm} runs only in a replay until the owner opts in`));
+    assert.ok(checks(r).includes('mtf-trend'), `${arm}: no exemption live`);
+    const exit = evaluateOrder({ input: entryOrder({ side: 'sell', rationale: '[exit] flatten the long', stopLossBracket: undefined }), entries: [], now: NOW, config: { ...config, mtfMode: LIVE_MODE(arm) } });
+    assert.deepStrictEqual(exit.violations, []);
+    const protect = evaluateOrder({ input: entryOrder({ side: 'sell', type: 'stop', rationale: '[protect] stop for the long', stopLossBracket: undefined }), entries: [], now: NOW, config: { ...config, mtfMode: LIVE_MODE(arm) } });
+    assert.ok(!checks(protect).includes('entry-mode'));
+  }
+  assert.deepStrictEqual(evaluate(entryOrder(), [plan()], { config: { ...config, mtfMode: LIVE_MODE('D') } }).violations, []);
+});
+
+test('MTF entry, late: the newest price through the structural stop after the close refuses it (late-entry, beyond-stop)', () => {
+  const r = mtfEval({ after: home => require('../../scripts/lib/trading/late-entry').recordPrice(home, 'MNQ', { price: 21528.5, closedAt: '2026-10-07T14:00:00.000Z', minutes: 1, source: 'runner' }, { now: LC_NOW }) });
+  assert.deepStrictEqual(checks(r), ['late-entry']);
+});
+
+test('"stop mtf" on a non-MTF entry is refused in every arm (D, A, B, AB): the scenario-1 setup keeps its own stop, never the MTF candidate\'s 46 ticks', () => {
+  const UP = { 240: 1, 60: 1, 15: 1 };
+  const reads = LC.READS.map(x => (x.step === 'stop' ? { ...x, read: 'stop mtf 21528.75' } : x));
+  for (const arm of ['D', 'A', 'B', 'AB']) {
+    const mode = arm === 'D' ? undefined : MF.MODE(arm);
+    const home = trendHome(tmpDir(), { biases: UP });
+    const rec = LC.writeScenario(home, { b: MF.briefing(), reads, ...(mode ? { mtfMode: mode } : {}) });
+    assert.equal(rec.ok, false, arm);
+    assert.ok(rec.problems.some(p => /^\[mtf-stop\] "stop mtf" is an MTF entry's stop only/.test(p)), `${arm}: ${JSON.stringify(rec.problems)}`);
+    const r = evaluateOrder({ input: LC.order({ stopLossBracket: { ticks: 46, type: 'stop' }, rationale: 'setup:trade_lifecycle long, the 15m rejection, stop 21528.75, target 21598.00' }), entries: [plan(1, { ts: '2026-10-07T13:59:30Z' })], now: LC_NOW,
+      config: { ...config, home, cycleBars: { MNQ: LC.BAR }, ...(mode ? { mtfMode: mode } : {}) }, strategies: LC_REGISTRY });
+    assert.ok(checks(r).includes('composed-reads'), `${arm}: ${JSON.stringify(checks(r))}`);
+  }
+});

@@ -49,7 +49,7 @@
  *   omittedPolicyErrors(cfg, strategies, attemptRunning)  a lane's policies list leaving out a policy with a running attempt
  *   retireLanes(cfg, strategies)         marks each lane that lists a retired strategy (strategies.js RETIRED) no folder
  *                                        defines: lane.retired = [names]; returns one error line per such lane
- *   startErrors(cfg, strategies, agents, attemptRunning) every refusal the runner checks at start (lanes, signal lanes, a
+ *   startErrors(cfg, strategies, agents, attemptRunning, mtfMode) every refusal the runner checks at start (lanes, signal lanes, a
  *                                        composed strategy listed on a signal lane, agents),
  *                                        after retireLanes (a retired lane is never a refusal: see below)
  *
@@ -313,12 +313,20 @@ function retireLanes(cfg, strategies) {
 }
 
 /** Every refusal the runner checks at start against the strategies and agent roles (after retireLanes marks its lanes). */
-const startErrors = (cfg, strategies, agents, attemptRunning = () => false) => (retireLanes(cfg, strategies), [
+const startErrors = (cfg, strategies, agents, attemptRunning = () => false, mtfMode = undefined) => (retireLanes(cfg, strategies), [
   ...laneStrategyErrors(lanesOf(cfg), strategies), ...signalLaneErrors(lanesOf(cfg), strategies),
   // D11: a lane listing the composed trade (trade_lifecycle, or a policy listing it) cycles every bar.
   ...require('./trading/lifecycle-runner').composedLaneErrors(lanesOf(cfg), strategies),
   ...omittedPolicyErrors(cfg, strategies, attemptRunning), ...agentErrors(cfg, agents),
+  // P1: the MTF entry arm (config/runner.json mtfEntry): replay only; the 1m execution frame needs a 1m data lane.
+  ...mtfStartErrors(cfg, mtfMode),
 ]);
+
+function mtfStartErrors(cfg, mtfMode) {
+  const ME = require('./trading/mtf-entry');
+  const mode = mtfMode === undefined ? ME.modeOf(require('./tunables').runner().mtfEntry, process.env) : mtfMode;
+  return ME.startProblems({ mode, minuteDataLane: lanesOf(cfg).some(l => isDataLane(l) && Number(l.timeframe) === 1) });
+}
 
 module.exports = {
   LANE_KEYS, TRIGGERS, DATA_MINUTES, isDataLane, tradingLanes, parseLanes, lanesOf, laneStrategies, lanePolicies, laneStrategyErrors, signalLaneErrors, describeLane,

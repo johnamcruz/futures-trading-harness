@@ -394,3 +394,12 @@ test('start and preflight read the home\'s attempts: a lane leaving out a second
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('P1: startErrors refuses an MTF arm the runner cannot run (no 1m data lane for the execution frame; live)', () => {
+  const ME = require('../../scripts/lib/trading/mtf-entry');
+  const m = arm => ME.modeOf({ arm, exitMode: 'trail', entryPullback: 'any', minStage: 'established' }, {}, { isReplay: () => true });
+  const cfg = { timeframe: 3, trigger: 'bar' };
+  assert.ok(L.startErrors(cfg, [], [], () => false, m('B')).some(e => /arm B reads the 1m execution frame/.test(e)));
+  assert.ok(!L.startErrors({ ...cfg, lanes: [{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'data' }] }, [], [], () => false, m('B')).some(e => /1m execution frame/.test(e)));
+  assert.ok(!L.startErrors(cfg, [], [], () => false, m('A')).some(e => /MTF/.test(e)));
+});
