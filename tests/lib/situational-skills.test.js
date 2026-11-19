@@ -111,7 +111,9 @@ test('choose: stage order under the budget, nothing the prompt already holds, th
   // with swing-holds: bos-vs-choch's two broken-word lines, +324 bytes, the measured need; 78788 after its review, 81995 with feat/mtf-structure (bos-vs-choch's Multi-timeframe structure section, pullback-vs-reversal's pointer, +3207, owner-approved 2026-11-17), 83180 with its SPEC v3 bullets (+1185, owner-approved 2026-11-18), 82971 with SPEC v4 (-209, lowered: the Above bullet removed, the below line's frame named),
   // owner-approved 2026-11-17: the closed-back line in every state, +62).
   // 90431 with feat/p1-mtf-entries (the mtf-entry skill embedded in an MTF entry arm, +7460, the measured need of the owner's selection skill; arm D never embeds it).
-  assert.strictEqual(require('../../scripts/lib/tunables').runner().prompt.situationalSkillBytes, 90431);
+  // 91258 with feat/p1-lessons (the reading lessons in the mtf-entry skill: the SELECTION line, the candidate is the setup,
+  // a negative drift, the 1m trigger, the trend rule and the class; +827, the measured need; arm D never embeds it).
+  assert.strictEqual(require('../../scripts/lib/tunables').runner().prompt.situationalSkillBytes, 91258);
 });
 
 test('the Setups-to-check line: a compression break on an allowed side (at its key level when its box sits at one) and a tradeable 15m or 1h CISD, the stronger first; nothing against the trend rule, on the 3m or 5m, or outside the window', () => {

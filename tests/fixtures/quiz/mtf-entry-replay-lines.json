@@ -1,0 +1,13 @@
+{
+ "about": "Recorded MTF lines from a replay of the six-morning test (arm B, the 1m execution candidate, 2022-03-07, the cycle on the bar closing 11:33 ET), as the runner printed them: the lesson items that need a 1m candidate print these (the quiz fixtures hold 3m bars only, so the drift test cannot rebuild them).",
+ "lines": [
+  {
+   "at": "2022-03-07 11:33",
+   "arm": "B",
+   "lines": [
+    "- MTF structure 1h > 15m (primary): stage CONFIRMED REVERSAL. 1h structure DOWN, 1h protected high 13879.75 (the origin of the last 1h break) holds on 1h closes. 15m pullback against the 1h: UP, now over on the 15m: a 15m close 13674 below its protected low 13703.75 at 10:00; price back DOWN with the 1h; the 1h impulse low 13527.75 not yet broken. Entry: on the MTF candidate lines.",
+    "- MTF candidate SHORT (chosen): aggressive at stage DEVELOPING (early), trigger 1m CHoCH down 11:31 (2 min ago); drift -0.04R past the trigger; context: fresh turn (this session): 15m CHoCH down 10:00, no BOS down yet; 0 BOS since the turn; impulse 2.24 ATR in 8 bars, 0 displacement candles, cleanness 0.31; pullback #1 of this 1h leg; depth 30% (moderate): the stop 34 pts away, the impulse extreme 59.25 pts away; structural stop 13634.25: 34 pts, $69.24 a contract all in; the $300 cap fits 4; 4h structure DOWN (context)."
+   ]
+  }
+ ]
+}
