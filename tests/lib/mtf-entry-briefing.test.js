@@ -70,7 +70,10 @@ test('arm A (replay): the record carries the mode and the 1h-structure side; the
   const SETUPS = l => /^- (Setups to check|Standard plan|Rules setups|Setups)\b/.test(l);
   // And the reading audit's E1 (tests/lib/mtf-only-offers.test.js): the Trend rule line without its refusal clause, the
   // Bias line without its refused side.
-  const E1 = l => (/^(- Trend rule| {2}trendRule): /.test(l) ? l.replace(/; no (long|short) against it\.$/, '.') : /^- Bias: /.test(l) ? l.replace(/; (long|short) refused\)/, ')') : l);
+  // And the conflict audit's A7: the Bias and Alignment lines are labelled context.
+  const E1 = l => (/^(- Trend rule| {2}trendRule): /.test(l) ? l.replace(/; no (long|short) against it\.$/, '.')
+    : /^- Bias: /.test(l) ? l.replace(/; (long|short) refused\)/, ')').replace(/^- Bias: (long|short) only \(/, '- Bias: $1 (').replace(/^- Bias: /, '- Bias (context here): ')
+      : l.replace(/^- Alignment: /, '- Alignment (context here): '));
   assert.deepEqual(ta.filter(l => !IS_MTF(l) && !SETUPS(l)), td.filter(l => !IS_MTF(l) && !SETUPS(l)).map(E1), 'only the MTF lines (and the setups as context) differ');
   assert.ok(td.some(l => /^- Trend rule: .*; no (long|short) against it\.$/.test(l)), 'arm D keeps its refusal clause');
   assert.ok(ta.filter(SETUPS).every(l => /Context only: MTF entry arm A enters only on an MTF candidate line\.$/.test(l) || /^- Setups: /.test(l)), ta.filter(SETUPS).join('\n'));
@@ -78,7 +81,7 @@ test('arm A (replay): the record carries the mode and the 1h-structure side; the
   assert.ok(i > 0);
   assert.match(ta[i + 2], /^- MTF (candidate|waiting)/, 'the candidate lines follow the two MTF lines');
   assert.match(ta[i], / Entry: on the MTF candidate lines\.$/);
-  assert.match(ta[i + 1], /^- MTF structure below \(early read; 3m, noisy: the 15m line decides the pullback, the 3m only times it\): 15m > 3m/);
+  assert.match(ta[i + 1], /^- MTF structure below \(3m timing read; the 15m line decides the pullback\): 15m > 3m/);
 });
 
 test('an MTF arm outside a replay: one unavailable line saying why (no record to enter on); arm B without 1m bars, or with 1m bars ending before the close: its reason', () => {

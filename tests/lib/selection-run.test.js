@@ -13,7 +13,7 @@ const R = require('../../scripts/lib/replay/selection-run');
 const { writeCycleLog } = require('../../scripts/lib/cycle-log');
 const { tmpDir } = require('../helpers');
 
-const LINE = (o = {}) => `- MTF candidate ${o.side || 'LONG'} (chosen): ${o.model || 'aggressive'} at stage WEAKENING, trigger 3m CHoCH ${o.way || 'up'} ${o.et || '10:12'} (new this bar); drift 0R past the trigger; context: fresh turn (this session): 1h CHoCH up 09:00, BOS up 09:45; 1 BOS since the turn; impulse 2.6 ATR in 8 bars, 2 displacement candles, cleanness 0.81; pullback #1 of this 1h leg; depth 55% (moderate): the stop 11.5 pts away, the impulse extreme 30 pts away; structural stop ${o.stop || 21528.75}: 11.5 pts, $24.24 a contract all in; the $300 cap fits 12; 4h structure UP (context).`;
+const LINE = (o = {}) => `- MTF candidate ${o.side || 'LONG'} (chosen): ${o.model || 'aggressive'} at stage WEAKENING, trigger 3m CHoCH ${o.way || 'up'} ${o.et || '10:12'} (new this bar); ran 0R past the trigger; context: 1h turn (this session): 1h CHoCH up 09:00, BOS up 09:45; 1 BOS since the turn; impulse 2.6 ATR in 8 bars, 2 displacement candles, cleanness 0.81; pullback #1 of this 1h leg; depth 55% (moderate): the stop 11.5 pts away, the impulse extreme 30 pts away; structural stop ${o.stop || 21528.75}: 11.5 pts, $24.24 a contract all in; the $300 cap fits 12; 4h structure UP (context).`;
 const BRIEF = (asOf, line) => `Autonomous cycle.\n--- bar_briefing {"symbol":"MNQ"} as of ${asOf} ---\n${line}\n--- end of bar_briefing {"symbol":"MNQ"} (sha256 x) ---`;
 const claude = text => JSON.stringify({ type: 'result', subtype: 'success', result: text });
 

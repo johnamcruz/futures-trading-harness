@@ -110,7 +110,7 @@ test('summarize: per-field share over answers and the bar (>= 95% per field: eac
 test('the expected fields come from the code that prints the lines (candidatesOf), never the text: a record and its lines agree', () => {
   const lines = ME.candidateLines(rec, mode, { price: 21540.25, sizing: rec.sizing });
   assert.ok(lines[0].includes(`structural stop ${exp.STOP}`));
-  for (const part of [`drift ${exp.DRIFT_R}R`, `depth 45% (${exp.DEPTH})`, '(new this bar);']) assert.ok(lines[0].includes(part), part);
+  for (const part of [Number(exp.DRIFT_R) < 0 ? `${-Number(exp.DRIFT_R)}R back toward the stop` : `ran ${exp.DRIFT_R}R past the trigger`, `depth 45% (${exp.DEPTH})`, '(new this bar);']) assert.ok(lines[0].includes(part), part);
   assert.ok(lines[0].includes(`$${exp.PER_CONTRACT} a contract all in`));
   assert.ok(lines[0].includes(`${exp.READY} at stage ${exp.STAGE}`));
 });

@@ -790,7 +790,10 @@ const PLAN_STEPS = ['HTF', 'Context', 'Location', 'Setup', 'Confluence', 'Entry'
 const PLAN_TEXT = ` Write the trader-process skill's PLAN (1 ${PLAN_STEPS[0]} to ${PLAN_STEPS.length} ${PLAN_STEPS[PLAN_STEPS.length - 1]}) before the result line.`;
 // An MTF entry arm (mtf_only): the SELECTION line named where the PLAN and the result line are, right before the result
 // line, so the PLAN's step 8 never stands in for it (the reading lesson: the six mornings labelled 7 of 13). Arm D: as above.
-const MTF_PLAN_TEXT = PLAN_TEXT.replace(' before the result line.', ', then, with an MTF candidate line printed, your SELECTION line on its own line (`SELECTION: ENTER|WAIT|PASS - <reason>`, the mtf-entry skill: the one that counts), then the result line. A candidate is decided by the mtf-entry skill: its side is the 1h structure\'s, and trade-session\'s class table, take rule (your 4h and 1h too) and pullback setup (wait for the 15m turn) are not refusals of it (you may still pass it, with your own reason).');
+const MTF_PLAN_TEXT = PLAN_TEXT.replace(' before the result line.', ', then, with an MTF candidate line printed, your SELECTION line on its own line (`SELECTION: ENTER|WAIT|PASS - <reason>`, the mtf-entry skill: the one that counts), then the result line.');
+// The conflict audit's A1 (C1-C4, C8, C10, C21): which rule decides an MTF candidate, in an MTF arm only, placed last
+// (after this cycle's reads, right before the result line: the model follows the nearest text). No default decision.
+const MTF_PRECEDENCE = ' An MTF candidate printed: `mtf-entry` decides it. Its side, class and pullback rules override every other skill\'s. The window, account, size and management rules still apply. Side: the 1h structure\'s. These are arm D\'s rules, facts here and never refusals: the 4h; the Trend rule, Bias and Alignment lines; the Market state class and the class table; the take rule (your 4h and 1h too); never counter the 4h; the Pullback setup (wait for the 15m turn); today\'s 3m pullback trigger. The candidate\'s own line gives its stage, trigger, age, drift and stop. No entry when it is against the 1h structure, when it is void, or when the gate refuses it. Else select ENTER, WAIT (a 3m trigger only) or PASS, with your reason, on the SELECTION line.';
 const RESULT_LINE = ` End with the cycle result as plain text in your final message, never as a tool call. Your last line must be exactly: ${RESULT_TEMPLATE}.`;
 
 /**
@@ -802,7 +805,9 @@ const RESULT_LINE = ` End with the cycle result as plain text in your final mess
 function withCycleData(prompt, data) {
   if (!data) return prompt;
   if (typeof prompt !== 'string' || !prompt.endsWith(RESULT_LINE)) throw new Error('withCycleData: the prompt does not end with its result line');
-  return `${prompt.slice(0, -RESULT_LINE.length)}${data}${RESULT_LINE}`;
+  // An MTF arm's precedence paragraph stays last, after the reads (the conflict audit's A1).
+  const tail = prompt.endsWith(`${MTF_PRECEDENCE}${RESULT_LINE}`) ? `${MTF_PRECEDENCE}${RESULT_LINE}` : RESULT_LINE;
+  return `${prompt.slice(0, -tail.length)}${data}${tail}`;
 }
 
 /**
@@ -908,7 +913,7 @@ function prompts(cfg, now, root = '') {
         instructions: ` ${skillsText(cfg, root)}, then run the trade-session skill for ${symbols}${new Set(list.map(x => x.symbol)).size > 1 ? ' (one symbol at a time, open positions first)' : ''}${also}${acct}${mode ? ` in ${mode}` : ''}.${mtfOnly ? MTF_PLAN_TEXT : PLAN_TEXT}`,
         desk: manageOnly || cfg.paper ? '' : entry ? `${ENTRY_TEXT}${cachedText(cached)}` : managedDesk ? `${MANAGED_DESK_TEXT}${cachedText(cached)}` : `${roster(cfg, (cached && cached.roles) || [], frames)}${managedCycle ? MANAGED_NO_ENTRY_TEXT : ''}${cachedText(cached)}`,
         situation: situationText,
-        result: RESULT_LINE,
+        result: mtfOnly ? `${MTF_PRECEDENCE}${RESULT_LINE}` : RESULT_LINE,
       };
       if (raw) return parts;
       return tradeOrder(cfg).map(k => parts[k]).join('');
@@ -1579,6 +1584,7 @@ module.exports = {
   headDeliveryOf,
   oneDelivery,
   RESULT_LINE,
+  MTF_PRECEDENCE,
   CYCLE_OUTCOMES,
   RESULT_TEMPLATE,
   outcomeOf,

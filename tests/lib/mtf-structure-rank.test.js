@@ -150,9 +150,9 @@ test('lines, MTF mode: the primary line names no model (its Entry clause points 
   const [one, two] = lines(rec);
   assert.match(one, / Entry: on the MTF candidate lines\.$/);
   assert.doesNotMatch(one, /ready|NOT ready|structural stop/);
-  assert.match(two, /^- MTF structure below \(early read; 3m, noisy: the 15m line decides the pullback, the 3m only times it\): s > t \(context\): /);
+  assert.match(two, /^- MTF structure below \(3m timing read; the 15m line decides the pullback\): s > t \(context\): /);
   const today = lines(M.recordsOf({ ...OPTS, bars: A.bars, minutes: A.base, levels: [A.level, A.below], side: 'long', prims: A.prims })[A.at(25, 1)]);
-  assert.equal(two.replace(' (early read; 3m, noisy: the 15m line decides the pullback, the 3m only times it)', ''), today[1]);
+  assert.equal(two.replace(' (3m timing read; the 15m line decides the pullback)', ''), today[1]);
   assert.equal(one.replace(/ Entry: on the MTF candidate lines\.$/, ''), today[0].replace(/ Entry: .*$/, ''));
   // Today's record (no mode): the Entry clause exactly as before.
   assert.match(today[0], /Entry: aggressive ready LONG new this bar, structural stop 129\.75 \(a structure level, not an order stop\); balanced NOT ready/);

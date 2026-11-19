@@ -70,8 +70,8 @@ function turnText(turn, frame, { sessionsAgo = null } = {}) {
   const bos = n => `${n} BOS`;
   if (turn.choch) {
     const b = turn.bos ? `, BOS ${turn.way} ${turn.bos.et}` : `, no BOS ${turn.way} yet`;
-    const head = isFresh(turn, sessionsAgo) ? `fresh turn (${sessionsAgo === 0 ? 'this session' : 'the previous session'})`
-      : Number.isInteger(sessionsAgo) ? `turn ${sessionsAgo} sessions ago (not fresh)` : 'turn of unknown age (not fresh)';
+    const head = isFresh(turn, sessionsAgo) ? `${frame} turn (${sessionsAgo === 0 ? 'this session' : 'the previous session'})`
+      : Number.isInteger(sessionsAgo) ? `${frame} turn ${sessionsAgo} sessions ago (older)` : `${frame} turn of unknown age (older)`;
     return `${head}: ${frame} CHoCH ${turn.way} ${turn.choch.et}${b}; ${bos(turn.bosCount)} since the turn`;
   }
   return `no turn: trend since ${turn.since ? turn.since.et : '?'}, ${bos(turn.bosCount)}`;

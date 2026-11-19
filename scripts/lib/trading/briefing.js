@@ -1037,7 +1037,8 @@ function summaryLines(b, et) {
     // 15m > 3m; directly under the Market state line, facts only; one `unavailable` line when the record cannot be made.
     // Prices through the briefing's own tick formatter (review m1: a 0.1-tick contract prints its stop on the tick).
     ...(!own ? mtfBriefingLines(m3, b) : []),
-    alignment,
+    // The conflict audit's A7 (C9): in an MTF arm the Alignment line is context, never a side rule.
+    mtfOnlyOf(m3) ? alignment.replace(/^- Alignment: /, '- Alignment (context here): ') : alignment,
     own ? `- VWAP and the session's levels (today, overnight, opening range, IB, profile): each ${SESSION_ELSEWHERE}, one value in every briefing; ${typeof m3.setups === 'string' ? `the room below is this ${tf} bar's own levels` : `the room below and the setups' levels include them (the runner's values), with this ${tf} bar's own`}.`
       : `- VWAP (${vw.applies || '?'}): price ${vw.side || '?'}, ${Number.isFinite(vw.distanceAtr) ? Math.abs(vw.distanceAtr) : '?'} x ${tf} ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP ${vw.rthCrossesLast30 ?? '?'}, the session VWAP ${vw.sessionCrossesLast30 ?? '?'} (the regime's count).`,
     `- News: ${news.error ? news.error : news.inBlackout ? `in a blackout (${news.reason || 'event'}) until ${et(news.until)}` : news.next ? `next ${news.next.reason || 'event'} at ${et(news.next.start)} (in ${news.next.inMinutes} min)` : 'no blackout ahead'}.`,

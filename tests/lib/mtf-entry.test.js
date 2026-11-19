@@ -177,7 +177,7 @@ test('candidateLines: one line per READY candidate (side, model, stage, trigger,
   const ls = ME.candidateLines(rec, m, { level: x => x, sizing: { tick: 0.25, tickValue: 0.5, capUsd: 300, minContracts: 3, stretchUsd: 500, slipTicks: 1, feePerSide: 0.37 }, price: PX });
   const cands = ls.filter(l => l.startsWith('- MTF candidate LONG'));
   assert.equal(cands.length, 2);
-  assert.match(cands[0], /^- MTF candidate LONG \(chosen\): aggressive at stage WEAKENING, trigger 3m CHoCH up \d\d:\d\d \(new this bar\); drift 0R past the trigger; context: no turn: trend since \d\d:\d\d, 1 BOS; impulse /);
+  assert.match(cands[0], /^- MTF candidate LONG \(chosen\): aggressive at stage WEAKENING, trigger 3m CHoCH up \d\d:\d\d \(new this bar\); ran 0R past the trigger; context: no turn: trend since \d\d:\d\d, 1 BOS; impulse /);
   // Tick-checked (MNQ $0.50 a tick): 131.5 - 129.75 = 1.75 pts = 7 ticks; all in (7 + 1 slippage) x $0.50 + 2 x $0.37 = $4.74; $300 fits 63.
   assert.match(cands[0], /; pullback #1 of this 1h leg; depth 40% \(moderate\): the stop 1\.75 pts away, the impulse extreme 18\.5 pts away; structural stop 129\.75: 1\.75 pts, \$4\.74 a contract all in; the \$300 cap fits 63; 4h structure DOWN \(context\)\.$/);
   // The owner's decision (2026-11-18): the three entries and the structure only: no draw, no premium or discount, no fib
@@ -206,7 +206,7 @@ test('candidateLines: over the budget the context\'s cleanness goes first, then 
   const cut1 = ME.candidateLines(rec, m, { level: x => x, price: PX, bytes: Buffer.byteLength(full) - 1 })[0];
   assert.ok(!/cleanness/.test(cut1) && /impulse /.test(cut1) && /pullback #1/.test(cut1) && /structural stop 129\.75/.test(cut1), cut1);
   const cut2 = ME.candidateLines(rec, m, { level: x => x, price: PX, bytes: 50 })[0];
-  assert.ok(/no turn, 1 BOS/.test(cut2) && /structural stop 129\.75/.test(cut2) && /drift 0R/.test(cut2) && /depth 40% \(moderate\)/.test(cut2), cut2);
+  assert.ok(/no turn, 1 BOS/.test(cut2) && /structural stop 129\.75/.test(cut2) && /ran 0R past the trigger/.test(cut2) && /depth 40% \(moderate\)/.test(cut2), cut2);
 });
 
 test('candidatesOf, execution: a POTENTIAL (not developed) takes the rank it would have, the next in the 1h leg', () => {

@@ -20,16 +20,16 @@ observable facts; you interpret them and select opportunities.
 
 **Market reading**, in order:
 
-1. The parent trend and its protected structure (the 1h side: the primary line's
-   "1h structure UP" or "DOWN"; the 4h "(context)" is context, not a refusal).
-2. The active and completed pullback instances.
+1. The parent trend and its protected structure. The side is the primary line's
+   "1h structure UP" or "DOWN". The 4h "(context)" is a fact, never a refusal.
+2. The MTF 15m pullbacks (the primary line): active and completed.
 3. The setup timeframe's structure relative to the parent (the 15m line decides the
    pullback; the 3m line only times it).
 4. The execution timeframe's CHoCH and BOS aligned with the parent.
 5. Early internal resumption (the aggressive trigger) against synchronized structural
    resumption (balanced, conservative).
 6. Failed execution attempts and renewed countertrend progression.
-7. Whether the current candidate remains actionable (not void, not stale).
+7. Whether the current candidate remains actionable (not void).
 
 **Decision rules:**
 
@@ -39,17 +39,16 @@ observable facts; you interpret them and select opportunities.
 - The rank is a fact, not a preference: do not prefer the first pullback because of
   its rank.
 - Do not require order blocks, FVGs or Fibonacci retracements.
-- Do not reuse invalidated execution confirmations: a void candidate stays void.
-- Never enter against the 1h (never against it). In an MTF arm the side is the 1h
-  structure's: today's trend rule line does not refuse a verified MTF candidate (the
-  gate exempts a verified MTF entry from `[mtf-trend]`).
-- The Market state class describes the market: weigh it like any other fact. It is
-  not a refusal and not a rule. trade-session's class table and its take rule ("your
-  4h and 1h too") are arm D's: for a candidate the side is the 1h structure's. You
-  may still PASS with your own reason; never cite the class as a rule.
+- A void candidate stays void.
+- Never enter against the 1h structure. The 1h trend label is context.
+- For a candidate the side is the 1h structure's. The Trend rule line does not refuse
+  a verified MTF candidate: the gate exempts a verified MTF entry from `[mtf-trend]`.
+- The class is a fact to weigh, never a refusal. Any class rule (sit out, no trend
+  trade, avoid trend entries, a take needs the class and your 4h and 1h) is arm D's.
+- A PASS gives your own reason. Never cite the class as a rule.
 - Never substitute an unrelated stop for the verified structural invalidation level.
-- WAIT keeps an active candidate for a later bar (a 3m trigger); a 1m-trigger candidate
-  lives one bar, so a WAIT on it is a pass. PASS rejects this opportunity.
+- 3m trigger: WAIT keeps it for the next bar. 1m trigger: ENTER or PASS (it lives one
+  bar). PASS rejects this opportunity.
 
 **State your decision** on one line of its own, at the line's start, before the
 CYCLE RESULT line: `SELECTION: ENTER - <reason>`, `SELECTION: WAIT - <reason>` or
@@ -65,27 +64,30 @@ approved trail manages the stop.
 **Evidence discipline:** structure is observable information, not proof of future
 direction. Do not invent advantages for patterns testing has not shown.
 
-**What prints.** Only READY candidates get a `- MTF candidate` line: a printed
-candidate is READY. Its stage is its own hierarchy's, printed on its line (arm B: the
-15m > 3m pullback timed on the 1m), not the primary line's or a context line's,
-whatever stage those print; the earliest trigger per side is `(chosen)`, the only
-one the gate takes: name it in your SELECTION line and your reads (`mtf ready` with another model is refused, "the ready
-candidate is X, not Y"). A model still waiting is in the one `- MTF waiting`
+**What prints.** Only READY candidates get a `- MTF candidate` line. READY: eligible
+to select (bos-vs-choch's `Entry:` fact is arm D's). A candidate's stage is printed on
+its own line (arm B: the 15m > 3m pullback timed on the 1m). bos-vs-choch's stage
+actions describe the primary line. A printed candidate is eligible at its own stage,
+not the primary line's or a context line's. A stage word names the pullback's stage:
+WEAKENING, REVERSING and CONFIRMED REVERSAL are the trend resuming, never ending.
+The earliest trigger per side is `(chosen)`: the only one the gate takes. Name it in
+your SELECTION line and your reads (`mtf ready` with another model is refused: "the
+ready candidate is X, not Y"). A model still waiting is in the one `- MTF waiting`
 clause: not ready, not an entry. A void one says so plainly, whatever its reason
 ("candidate void (stop traded)", "candidate void (price ran 0.8R past the trigger)"):
 no entry. `(position open: not a pick)`: context, never an entry.
 
-**A candidate line**, part by part (the trend's way: never a counter-trend trigger):
+**A candidate line**, part by part (the 1h structure's way; never a trigger against it):
 
 | Part | Means |
 |---|---|
-| model, stage | aggressive (the first CHoCH or CISD back), balanced (a CHoCH back, then a BOS), conservative (15m CHoCH + fresh BOS): the models `mtfEntry.models` enables; `(early)`: before the 15m pullback is established, still eligible: no 15m turn is needed (trade-session's pullback setup, wait for the 15m turn, is arm D's) |
+| model, stage | aggressive (the first CHoCH or CISD back), balanced (a CHoCH back, then a BOS), conservative (15m CHoCH + fresh BOS): the models `mtfEntry.models` enables; `(early)`: before the MTF 15m pullback is established. Still eligible: no 15m turn and no 3m trigger rule apply (the Pullback setup and its three lines are arm D's) |
 | trigger 3m or 1m | the timing frame, the candidate's own; its age (`new this bar`, `N min ago`). A 1m candidate is timed by its 1m trigger: today's 3m pullback trigger does not apply to it. A 1m trigger fired since the previous 3m close is current: it fired inside the bar that just closed; enter at the next bar or pass (this bar or never) |
-| drift NR past the trigger | how far price ran past the trigger's close, in the trigger's R (its close to the stop). Negative: the price is back toward the stop, the stop closer than at the trigger: not stale, not void. Once any close since the trigger was over 0.5R the candidate is void for good; a trigger over 60 minutes old, or from an earlier session, is void too |
-| fresh turn | the parent's last CHoCH the side's way (this session or the previous one) and the BOS that confirmed it, the BOS count since; "turn N sessions ago (not fresh)": older; "no turn": the trend has run since its first break |
+| ran NR past the trigger, or NR back toward the stop | how far price moved from the trigger's close, in the trigger's R (its close to the stop). Back toward the stop: still valid. Once any close since the trigger ran over 0.5R past it, the candidate is void for good. A trigger over 60 minutes old, or from an earlier session, is void too |
+| 1h turn (the parent's frame) | the parent's last CHoCH the side's way (this session or the previous one) and the BOS that confirmed it, the BOS count since; "turn N sessions ago (older)": older; "no turn": the trend has run since its first break |
 | impulse | the move the pullback came from: its size in ATR, bars, displacement candles, cleanness (net move over the bars' ranges, 0-1) |
 | pullback #N of this 1h leg | its count since the 1h break that started the leg: a fact to weigh, not a preference |
-| depth N% (class): the stop X pts away, the impulse extreme Y pts away | how far the pullback retraced the parent impulse (shallow under 30%, moderate 30-75%, deep 75-100%, breached past the protected level) and the room it leaves: judge room against risk, never a forecast; depth alone is not an entry signal |
+| depth N% (depth band): the stop X pts away, the impulse extreme Y pts away | how far the pullback retraced the parent impulse (shallow under 30%, moderate 30-75%, deep 75-100%, breached past the protected level) and the room it leaves: judge room against risk, never a forecast; depth alone is not an entry signal |
 | structural stop, `$ a contract all in`, `cap fits K` | the stop (the trigger's origin, a tick beyond) and the size the code will take; under the floor: the stretch only while healthy, else skip |
 | previous high (exit target) | the exit option; under 1R: weigh whether the room pays; "already past": no exit target, the trail |
 

@@ -27,7 +27,7 @@ function probe() {
     SIDE: 'long or short (the 1h structure\'s side)', READY: 'the chosen candidate\'s model, or none (a waiting or void model is none)', STAGE: 'its stage word, or none',
     EARLY: 'yes or no for the chosen candidate; none without one', TRIGGER: '<frame> <CHoCH|CISD|BOS>, or none',
     TRIGGER_AGE: 'the chosen candidate\'s trigger age in minutes (0 when new this bar); none without a candidate',
-    DRIFT_R: 'the chosen candidate\'s drift past the trigger in R (a number); none without a candidate', DEPTH: 'the chosen candidate\'s depth class (shallow, moderate, deep or breached); none without a candidate', TURN: 'fresh, old turn, no turn, or none', BOS_SINCE: 'the BOS count its context gives, or none',
+    DRIFT_R: 'the chosen candidate\'s drift in R (a number): positive when it ran past the trigger, negative when it is back toward the stop; none without a candidate', DEPTH: 'the chosen candidate\'s depth band (shallow, moderate, deep or breached); none without a candidate', TURN: 'fresh (its turn this session or the previous one), old turn (older), no turn, or none', BOS_SINCE: 'the BOS count its context gives, or none',
     IMPULSE_ATR: 'the impulse in ATR, or none', DISPLACED: 'its displacement candles, or none', CLEANNESS: 'its cleanness, or none', RANK: 'its pullback number, or none',
     STOP: 'its structural stop price, or none', PER_CONTRACT: 'its dollars a contract all in, or none',
     WAITING: 'the waiting clause as printed, or none', VOID: 'yes if a candidate is void (stop traded, ran past, too old ...), else no', PULLBACK_DECIDED_BY: 'the frame whose line decides the pullback (15m or 3m)',
