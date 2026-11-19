@@ -1138,10 +1138,13 @@ async function mtfChain(arm) {
   // The selection scorecard reads this order as the gateway wrote it: a take, joined to the candidate the cycle printed on
   // the bar the gate judged (selection-run.js ordersFrom, candidateRows; REVIEW-3 major 4).
   const RUN = require('../../scripts/lib/replay/selection-run');
-  const orders = RUN.ordersFrom(entryOrders(w.home));
-  assert.deepStrictEqual(orders.map(o => [o.side, o.model, o.bar, o.stop]), [['long', 'aggressive', new Date(LC.BAR).toISOString(), 21528.75]], JSON.stringify(stamped.composed.mtf));
-  const rows = RUN.candidateRows([{ at: orders[0].bar, side: 'long', model: 'aggressive', trigger: 'the trigger', stop: 21528.75, decision: 'ENTER' }], orders, () => null);
-  assert.deepStrictEqual([rows[0].state, rows[0].at], ['took', orders[0].bar]);
+  // The gate stamps the cycle bar's open (LC.BAR); the cycle's pick carries the briefing's time, the bar's close (LC.CLOSE).
+  assert.strictEqual(stamped.composed.mtf.bar, LC.BAR);
+  const orders = RUN.ordersFrom(entryOrders(w.home), STEP);
+  assert.deepStrictEqual(orders.map(o => [o.side, o.model, o.bar, o.stop]), [['long', 'aggressive', new Date(LC.CLOSE).toISOString(), 21528.75]], JSON.stringify(stamped.composed.mtf));
+  const pickAt = RUN.barOf({ prompt: `--- bar_briefing {"symbol":"MNQ"} as of ${new Date(LC.CLOSE).toISOString()} ---` }, STEP);
+  const rows = RUN.candidateRows([{ at: pickAt, side: 'long', model: 'aggressive', trigger: 'the trigger', stop: 21528.75, decision: 'ENTER' }], orders, () => null);
+  assert.deepStrictEqual([rows[0].state, rows[0].at, RUN.orphanOrders(orders, rows).length], ['took', pickAt, 0]);
   // The runner (today's exit, trail mode): up past 2R (21563.25) arms the lock; then back to the trailed stop.
   exchange.update(w.state, s => { delete s.bars; });
   const fill = position(w).averagePrice;

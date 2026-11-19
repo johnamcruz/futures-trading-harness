@@ -72,13 +72,24 @@ test('readRun reads an opencode cycle\'s decision from its transcript\'s final t
   assert.deepEqual([r.picks[0].decision, r.rows[0].state], ['ENTER', 'enterNoOrder']);
 });
 
-test('ordersFrom: the gateway\'s entry orders with the gate\'s mtf stamp (side as given: 0 or buy is long), the bar the gate judged; a non-MTF order is none', () => {
+test('ordersFrom: the gateway\'s entry orders with the gate\'s mtf stamp (side as given: 0 or buy is long); the stamp\'s bar is the cycle bar\'s OPEN, mapped to its close (the time the picks carry); a non-MTF order is none', () => {
   const o = R.ordersFrom([
-    { at: '2026-10-07T14:18:20.000Z', side: '0', composed: { entry: 21540.25, stop: 21528.75, mtf: { bar: '2026-10-07T14:18:00.000Z', model: 'aggressive', instanceId: 'intraday|a|b|aggressive' } } },
-    { at: '2026-10-07T14:21:20.000Z', side: 'sell', composed: { entry: 1, stop: 2, mtf: { bar: '2026-10-07T14:21:00Z', model: 'balanced' } } },
+    { at: '2026-10-07T14:18:20.000Z', side: '0', composed: { entry: 21540.25, stop: 21528.75, mtf: { bar: '2026-10-07T14:15:00.000Z', model: 'aggressive', instanceId: 'intraday|a|b|aggressive' } } },
+    { at: '2026-10-07T14:21:20.000Z', side: 'sell', composed: { entry: 1, stop: 2, mtf: { bar: '2026-10-07T14:18:00Z', model: 'balanced' } } },
     { at: '2026-10-07T14:24:20.000Z', side: 'buy', composed: { entry: 1, stop: 0 } },
-  ]);
+  ], 180000);
   assert.deepEqual(o.map(x => [x.side, x.bar, x.model, x.instanceId]), [['long', '2026-10-07T14:18:00.000Z', 'aggressive', 'intraday|a|b|aggressive'], ['short', '2026-10-07T14:21:00.000Z', 'balanced', null]]);
+  assert.throws(() => R.ordersFrom([], 0), /the timeframe/);
+});
+
+test('readRun joins a real MTF order to its candidate: the 2022-04-11 arm-B take (the gate stamped the cycle bar\'s open, 14:57; the cycle decided on the bar closing 15:00) is took, scored at 15:00, no orphan', () => {
+  const h = home();
+  cycle(h, '2022-04-11T15:00:02Z', { prompt: BRIEF('2022-04-11T15:00:00.000Z', LINE({ side: 'SHORT', way: 'down', et: '10:59', stop: 14068 })), transcript: claude('SELECTION: ENTER - aggressive short on the 1m CISD down 10:59') });
+  // The record's shape as the gateway wrote it (order-tracker.js recordEntryOrder with the gate's stamp).
+  fs.writeFileSync(path.join(h, 'entry-orders.json'), JSON.stringify([{ orderId: 1, contractId: 'MNQ', side: 'sell', setup: 'trade_lifecycle', stopTicks: 74, targetTicks: 148, stopPrice: 14068, at: '2022-04-11T15:00:02.000Z',
+    composed: { record: 'e92abb4396a1a1d8', side: 'short', entry: 14049.5, stop: 14068, mtf: { instanceId: 'execution|2022-04-11T14:55:00.000Z|2022-04-11T14:59:00.000Z|aggressive', bar: '2022-04-11T14:57:00.000Z', arm: 'B', hierarchy: 'execution', model: 'aggressive', stage: 'DEVELOPING' } } }]));
+  const r = R.readRun({ home: h, runDir: path.join(h, 'nothing'), minutes: 3, symbol: 'MNQ' });
+  assert.deepEqual([r.rows.length, r.rows[0].state, r.rows[0].at, r.orderCounts], [1, 'took', '2022-04-11T15:00:00.000Z', { read: 1, joined: 1, orphans: 0 }]);
 });
 
 test('candidateRows: a take is the candidate an order was placed for, scored at THAT bar (a WAIT then an ENTER scores at the entry bar); an ENTER with no order is its own state; an order for another model, or on a bar it never printed on, is not its take', () => {

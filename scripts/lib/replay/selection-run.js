@@ -15,8 +15,9 @@
  *   picksFrom(cycles, tfMs)        each cycle's chosen MTF candidate line(s) the 1h's way ("- MTF candidate LONG (chosen):
  *                                  <model> at stage ..."): [{ at (the bar), side, model, trigger, rank, stop, stopPts,
  *                                  decision, reason }], one per bar and side
- *   ordersFrom(orders)             the run's MTF entry orders (entry-orders.json with the gate's mtf stamp): [{ at, bar
- *                                  (the stamp's: the bar the gate judged), side, model, instanceId, entry, stop }]
+ *   ordersFrom(orders, tfMs)       the run's MTF entry orders (entry-orders.json with the gate's mtf stamp): [{ at, bar
+ *                                  (the bar the gate judged, as its CLOSE: the stamp holds the cycle bar's open, the
+ *                                  picks the briefing's close), side, model, instanceId, entry, stop }]
  *   candidateRows(picks, orders, ruler, { lastBar })   pickTable's rows (one per candidate)
  *   orphanOrders(orders, rows)     the MTF orders no row took (counted in readRun's orderCounts)
  *   rulerOf(bars, minutes, symbol, { validBars, minRR, plan })   the ruler (below)
@@ -65,9 +66,12 @@ function picksFrom(cycles, tfMs) {
 }
 
 const sideOf = s => (/^(0|buy|long)$/i.test(String(s)) ? 'long' : /^(1|sell|short)$/i.test(String(s)) ? 'short' : null);
-function ordersFrom(orders) {
+// The gate stamps the cycle's lane bar (FTH_CYCLE_BARS: the bar's open time `t`); a pick carries the bar's close (the
+// briefing's "as of"): the open plus the timeframe joins them (found by the first real MTF order, 2022-04-11).
+function ordersFrom(orders, tfMs) {
+  if (!(tfMs > 0)) throw new Error('ordersFrom: the timeframe (ms) is required: the stamp\'s bar is an open time');
   return (orders || []).filter(o => o && o.composed && o.composed.mtf && Number.isFinite(Date.parse(o.composed.mtf.bar))).map(o => ({
-    at: o.at, bar: new Date(Date.parse(o.composed.mtf.bar)).toISOString(), side: sideOf(o.composed.side || o.side), model: o.composed.mtf.model || null,
+    at: o.at, bar: new Date(Date.parse(o.composed.mtf.bar) + tfMs).toISOString(), side: sideOf(o.composed.side || o.side), model: o.composed.mtf.model || null,
     instanceId: o.composed.mtf.instanceId || null, entry: o.composed.entry ?? null, stop: o.composed.stop ?? null,
   }));
 }
@@ -158,7 +162,7 @@ function readRun({ home, runDir, minutes, symbol = null }) {
   const days = fs.existsSync(dir) ? fs.readdirSync(dir).sort() : [];
   const cycles = days.flatMap(d => fs.readdirSync(path.join(dir, d)).filter(f => f.endsWith('-trade.json')).sort().map(f => readJson(path.join(dir, d, f), null)).filter(Boolean)
     .map(c => ({ prompt: c.prompt, cycleAt: c.cycleAt || c.at, output: finalText(c) })));
-  const orders = ordersFrom(readJson(path.join(home, 'entry-orders.json'), []));
+  const orders = ordersFrom(readJson(path.join(home, 'entry-orders.json'), []), tfMs);
   const picks = picksFrom(cycles, tfMs);
   const bars = require('./trend-capture').servedBars(runDir, minutes);
   const P = bars.length ? require('../eval/goal-trades').shippedOf(path.resolve(__dirname, '..', '..', '..'), {}) : null;
