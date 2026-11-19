@@ -137,13 +137,20 @@ test('round 20c: the field scan catches a reader that never requires market-stat
 // the module itself. No gate, hook, gateway, compose, order-plan, exit, entry-rule, trend-rule or decision code names it,
 // and the Market state's modules never read it (it feeds no state or class word). No runner file holds deeper bars for it:
 // the runner's window already covers it (historyBars).
-const MTF_READERS = ['scripts/lib/trading/mtf-structure.js', 'scripts/lib/trading/briefing.js', 'scripts/lib/tunables.js'];
+// P1 (feat/p1-mtf-entries, the coordinator's decision 1): in an MTF entry arm the read feeds the entry path, by design:
+// mtf-entry.js (the arm's one check), composed-reads.js (the `mtf ready` and `stop mtf` reads, through mtf-entry.js) and
+// situational-skills.js (the runner embeds the mtf-entry skill when the record carries an MTF arm). In today's arm (D)
+// none of them reads the record.
+const MTF_READERS = ['scripts/lib/trading/mtf-structure.js', 'scripts/lib/trading/briefing.js', 'scripts/lib/tunables.js', 'scripts/lib/trading/mtf-entry.js', 'scripts/lib/trading/composed-reads.js', 'scripts/lib/situational-skills.js'];
+// The readers that are entry or decision paths by name (the DECIDES pattern), allowed only for the MTF entry arm.
+const MTF_DECIDERS = ['scripts/lib/trading/composed-reads.js'];
 const MTF_NAME = /\bmtfStructure\b|mtf-structure['"]|MTF structure/;
 test('the MTF structure read is named only by its module, the briefing and its config schema; no decision path or Market state module reads it', () => {
   const named = ALL.filter(f => MTF_NAME.test(code(fs.readFileSync(path.join(ROOT, f), 'utf8'))));
   assert.deepStrictEqual(named.sort(), [...MTF_READERS].sort());
-  for (const f of MTF_READERS) assert.doesNotMatch(f, DECIDES, f);
-  for (const f of ['scripts/lib/trading/market-state.js', 'scripts/lib/trading/market-layers.js', 'scripts/lib/trading/structure-layers.js', 'scripts/lib/trading/state-read.js', 'scripts/lib/trading/entry-rule.js', 'scripts/lib/trading/composed-reads.js', 'scripts/lib/trading/order-plan.js', 'scripts/lib/trading/order-gate.js']) {
+  for (const f of MTF_READERS.filter(x => !MTF_DECIDERS.includes(x))) assert.doesNotMatch(f, DECIDES, f);
+  // (composed-reads.js left this list in P1: its MTF reads go through mtf-entry.js, MTF_DECIDERS above.)
+  for (const f of ['scripts/lib/trading/market-state.js', 'scripts/lib/trading/market-layers.js', 'scripts/lib/trading/structure-layers.js', 'scripts/lib/trading/state-read.js', 'scripts/lib/trading/entry-rule.js', 'scripts/lib/trading/order-plan.js', 'scripts/lib/trading/order-gate.js']) {
     if (fs.existsSync(path.join(ROOT, f))) assert.doesNotMatch(fs.readFileSync(path.join(ROOT, f), 'utf8'), MTF_NAME, f);
   }
   for (const s of ['const p = b.sections.m3.data.mtfStructure;', "require('./mtf-structure')", 'if (/- MTF structure 1h/.test(t)) refuse();', 'const { mtfStructure } = m3;']) assert.match(code(s), MTF_NAME, s);

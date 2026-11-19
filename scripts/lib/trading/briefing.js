@@ -50,7 +50,7 @@
  * whatever was built on it (an analyst's report) stays valid while the
  * versions it used are unchanged.
  *
- *   buildBriefing({ symbol, bars, minutes, prev, scan, scanError, blackouts, clock, roundSteps, now })   the briefing (prev: the
+ *   buildBriefing({ symbol, bars, minutes, prev, scan, scanError, blackouts, clock, roundSteps, now, positionOpen })   the briefing (prev: the
  *                                                              last one, reused where valid; clock: the gate config's entry
  *                                                              windows; roundSteps: the loaded round-number config,
  *                                                              round-numbers.js, passed by the caller that owns it: none, none shown)
@@ -132,6 +132,30 @@ const { pullbackRead, pullbackLine } = require('./pullback-read');
 // nothing in the gate, compose_check, order_plan, the trend rule or the Market state reads it
 // (tests/plugin/market-state-readers.test.js).
 const MTF = require('./mtf-structure');
+const ME = require('./mtf-entry');
+const RUNNER_STATE = require('../tunables').runner(); // config/runner.json mtfEntry (P1: the MTF entry arm)
+
+/** An mtf_only arm's context-only clause for today's setups (the briefing's MTF record's mode), else null. */
+function mtfOnlyOf(m3) {
+  const rec = m3 && m3.mtfStructure;
+  const mode = rec && typeof rec === 'object' && rec.mode && typeof rec.mode === 'object' ? rec.mode : null;
+  return mode && mode.entryMode === 'mtf_only' ? `Context only: MTF entry arm ${mode.arm} enters only on an MTF candidate line.` : null;
+}
+
+/**
+ * The MTF lines (mtf-structure.js mtfLines) and, in an MTF entry arm (the record's mode), the candidate lines
+ * (mtf-entry.js candidateLines) and the 1m execution's unavailable line; today's record: today's two lines exactly.
+ */
+function mtfBriefingLines(m3, b) {
+  const rec = m3.mtfStructure;
+  const level = priceOnTick(b.symbol);
+  const C = AN_STATE.mtfStructure;
+  if (!rec || typeof rec !== 'object' || !rec.mode || typeof rec.unavailable === 'string') return MTF.mtfLines(rec, { lineBytes: C.lineBytes, primaryBytes: C.primaryBytes, level });
+  const out = MTF.mtfLines(rec, { lineBytes: C.entryLineBytes, primaryBytes: C.entryPrimaryBytes, level });
+  if (rec.execution && typeof rec.execution.unavailable === 'string') out.push(`- MTF 1m execution: unavailable (${rec.execution.unavailable}).`);
+  out.push(...ME.candidateLines(rec, rec.mode, { level, sizing: rec.sizing || null, price: m3.price, bytes: C.candidateBytes, at: b.closedAt, positionOpen: rec.positionOpen === true }));
+  return out;
+}
 const { trendOf: ruleTrendOf } = require('./entry-rule');
 const { GLOBEX_OPEN_MIN, RTH_OPEN_MIN, RTH_CLOSE_MIN } = require('./clock'); // the session boundaries' one home
 
@@ -201,7 +225,16 @@ function gateStopRule(env = process.env) {
  * { unavailable: reason } without the strategy's stop rule.
  * Its side is the entry rule's (the Bias line's: biasSides on these sections), the Bias line's own frame reads beside it.
  */
-function mtfRecordOf({ bars, minutes, tick, fresh }) {
+function mtfRecordOf({ bars, minutes, tick, fresh, fine = null, closedAt = null, symbol = null, mtfMode = null }) {
+  // P1, the MTF entry arm (mtf-entry.js): today's (D, the default) builds exactly the record it always did.
+  const mode = mtfMode || ME.modeOf(RUNNER_STATE.mtfEntry, process.env);
+  if (mode.mtf) {
+    const rec = mtfEntryRecordOf({ bars, minutes, tick, fresh, fine, closedAt, symbol, mode });
+    // a whole-read failure in an MTF arm still names the arm (the setups stay context only); a mode
+    // refused (an MTF arm outside a replay) names none: every entry is refused there anyway.
+    if (rec && typeof rec.unavailable === 'string' && !mode.refused) rec.mode = ME.recordMode(mode);
+    return rec;
+  }
   const cfg = AN_STATE.mtfStructure;
   if (MTF.configProblem(cfg)) return null;
   // Never silent (review m3): without the stop rule the record says why, and the briefing prints one line saying so.
@@ -214,6 +247,83 @@ function mtfRecordOf({ bars, minutes, tick, fresh }) {
   const bias = Object.fromEntries(BIAS_RULE.biasFrames.map(tf => [tf, ruleTrendOf(view, tf)]));
   return MTF.mtfStructure({ bars, minutes, levels: MTF.levelsOf(cfg), hierarchy: cfg.hierarchy, tick, bufferTicks: rule.bufferTicks, equalAtr: AN_STATE.marketState.equalAtr,
     k: AN_STATE.indicators.swingK, depth: cfg.depth, sideMode: cfg.sideMode, side, bias, warmBars: cfg.warmBars });
+}
+
+/**
+ * P1: the MTF entry arm's record: the intraday record in the parent side mode (the 1h structure's side; the 4h as
+ * context), with its mode, the size hint's inputs (sizingOf) and, when the arm reads the execution hierarchy, the 1m
+ * record (15m > 3m, 1m timing; its side the 1h's, passed as the rule's) from the 1m data lane's bars, `since` the previous
+ * base close. Every failure is a reason, never a silent today: { unavailable } (the whole read), or execution
+ * { unavailable } (the 1m part only).
+ */
+function mtfEntryRecordOf({ bars, minutes, tick, fresh, fine, closedAt, symbol, mode }) {
+  if (mode.refused) return { unavailable: mode.refused };
+  const cfg = { ...AN_STATE.mtfStructure, sideMode: 'parent' };
+  const problem = MTF.configProblem(cfg, mode);
+  if (problem) return { unavailable: problem };
+  const g = gateStopRule();
+  if (!g.rule) return { unavailable: g.reason };
+  const view = { minutes, sections: { h1: { data: fresh.h1.data }, m15: { data: fresh.m15.data }, m3: { data: fresh.m3.data } } };
+  const bias = Object.fromEntries(BIAS_RULE.biasFrames.map(tf => [tf, ruleTrendOf(view, tf)]));
+  const common = { tick, bufferTicks: g.rule.bufferTicks, equalAtr: AN_STATE.marketState.equalAtr, k: AN_STATE.indicators.swingK, depth: cfg.depth, warmBars: cfg.warmBars };
+  let rec;
+  try {
+    rec = MTF.mtfStructure({ ...common, bars, minutes, levels: MTF.levelsOf(cfg), hierarchy: cfg.hierarchy, sideMode: 'parent', side: null, bias, mode: ME.recordMode(mode) });
+  } catch (err) { return { unavailable: `the MTF read failed: ${String(err && err.message).split('\n')[0]}` }; }
+  if (!rec) return { unavailable: 'no bars' };
+  rec.sizing = sizingOf(symbol);
+  if (mode.hierarchies.includes('execution')) rec.execution = executionOf({ common, fine, closedAt, minutes, side: rec.sides.parent, mode, cfg });
+  return rec;
+}
+
+/** Arm B's (and AB's, C's) 1m execution record, or { unavailable: reason }. */
+function executionOf({ common, fine, closedAt, minutes, side, mode, cfg }) {
+  if (!Array.isArray(fine) || !fine.length) return { unavailable: `no 1m bars: arm ${mode.arm} needs the runner's 1m data lane (a lane of timeframe 1, trigger data)` };
+  const lastClose = Date.parse(fine[fine.length - 1].t) + 60000;
+  if (!(closedAt instanceof Date) || lastClose !== closedAt.getTime()) return { unavailable: `the 1m bars end at ${new Date(lastClose).toISOString()}, ${lastClose < (closedAt ? closedAt.getTime() : 0) ? 'before' : 'not at'} this bar's close` };
+  const exCfg = { ...cfg, hierarchy: 'execution', sideMode: 'rule' };
+  const problem = MTF.configProblem(exCfg, mode);
+  if (problem) return { unavailable: problem };
+  try {
+    const levels = MTF.levelsOf(exCfg).filter(l => l.role !== 'above');
+    const record = MTF.mtfStructure({ ...common, bars: fine, minutes: 1, levels, hierarchy: 'execution', sideMode: 'rule', side, mode: ME.recordMode(mode, { execution: true }) });
+    return record ? { record, since: new Date(closedAt.getTime() - minutes * 60000).toISOString() } : { unavailable: 'no 1m bars' };
+  } catch (err) { return { unavailable: `the 1m read failed: ${String(err && err.message).split('\n')[0]}` }; }
+}
+
+/**
+ * The candidate lines' size hint inputs (mtf-entry.js sizeHint): the contract's tick and tick value (contracts.js), the
+ * composed cap (trade_lifecycle's risk.max_risk_usd), and the prop policy's floor, stretch and slippage with its account's
+ * fee (the one valid policy strategy; none or several: the dollars a contract only). Read once per strategies home.
+ */
+const sizingCache = new Map();
+function sizingOf(symbol, env = process.env) {
+  const C = require('./contracts');
+  const own = String(symbol || '').split(':')[0].toUpperCase();
+  const spec = C.specFor(own) || null;
+  const key = `${String(env.FTH_STRATEGIES_DIRS || '')}|${String(env.FTH_ACCOUNTS_DIRS || '')}|${symbol}`;
+  if (sizingCache.has(key)) return sizingCache.get(key);
+  const out = { tick: spec ? spec.tickSize : null, tickValue: spec ? spec.tickValue : null, capUsd: null, minContracts: null, stretchUsd: null, slipTicks: 0, feePerSide: null };
+  try {
+    const root = require('path').resolve(__dirname, '..', '..', '..');
+    const all = require('./strategies').loadStrategies(root, env).strategies;
+    const TL = require('./trade-lifecycle');
+    const doc = all.find(x => x && x.name === TL.STRATEGY);
+    if (doc && doc.risk && doc.risk.max_risk_usd > 0) out.capUsd = doc.risk.max_risk_usd;
+    const policies = all.filter(x => x && x.valid && x.signal === 'policy' && x.status !== 'disabled');
+    if (policies.length === 1 && policies[0].sizing) {
+      const z = policies[0].sizing;
+      out.minContracts = Number.isInteger(z.min_contracts) ? z.min_contracts : null;
+      out.stretchUsd = typeof z.floor_stretch_max_usd === 'number' ? z.floor_stretch_max_usd : null;
+      out.slipTicks = typeof z.stop_slippage_ticks === 'number' ? z.stop_slippage_ticks : 0;
+      const A = require('./accounts');
+      const acct = A.loadAccounts(root, env).accounts.find(a => a.name === policies[0].account);
+      const fee = acct ? A.feePerSide(acct, own) : null;
+      out.feePerSide = typeof fee === 'number' && Number.isFinite(fee) ? fee : null;
+    }
+  } catch (_err) { /* the hint says what it can't price */ }
+  sizingCache.set(key, out);
+  return out;
 }
 
 /** When the `minutes` candle containing `at` closes (candles from the trading day's 18:00 ET open). */
@@ -748,7 +858,7 @@ function htfTrendsOf(raw, minutes) {
  * The briefing for `symbol`'s closed bars on `minutes`-minute bars: each section from `prev` while it is
  * valid (same symbol and bar size, not expired), else recomputed with a new version.
  */
-function buildBriefing({ symbol, contractId = null, bars: raw, minutes, fineBars = null, prev = null, scan = [], scanError = null, blackouts = null, clock = null, roundSteps = null, now = new Date(), own = false, keyLevels = null }) {
+function buildBriefing({ symbol, contractId = null, bars: raw, minutes, fineBars = null, prev = null, scan = [], scanError = null, blackouts = null, clock = null, roundSteps = null, now = new Date(), own = false, keyLevels = null, mtfMode = null, positionOpen = false }) {
   const bars = normalizeBars(raw);
   if (bars.length < 3) throw new Error(`need closed bars, got ${bars.length}`);
   const last = bars[bars.length - 1];
@@ -799,7 +909,11 @@ function buildBriefing({ symbol, contractId = null, bars: raw, minutes, fineBars
   // The MTF structure read (mtf-structure.js), on the chain's entry frame only, beside the Market state: its side the entry
   // rule's, its stop buffer the lifecycle strategy's. A presented fact (SUMMARY_FIELDS: its two lines say it); nothing in
   // the gate, compose_check, order_plan, the trend rule or the Market state reads it.
-  if (!own && tfLabel(minutes) === BIAS_RULE.chain.entry) fresh.m3.data.mtfStructure = mtfRecordOf({ bars, minutes, tick, fresh });
+  if (!own && tfLabel(minutes) === BIAS_RULE.chain.entry) fresh.m3.data.mtfStructure = mtfRecordOf({ bars, minutes, tick, fresh, fine, closedAt, symbol, mtfMode });
+  // P1: a position open at this bar (the runner's held trade): an MTF arm's candidate lines are context,
+  // marked "position open: not a pick". An MTF record only: today's record never carries it.
+  const mrec = fresh.m3 && fresh.m3.data ? fresh.m3.data.mtfStructure : null;
+  if (positionOpen === true && mrec && typeof mrec === 'object' && mrec.mode) mrec.positionOpen = true;
   // Same symbol, bar size and contract (a roll to the next month is new prices, never the old month's levels).
   const usable = prev && prev.symbol === symbol && prev.minutes === minutes && (prev.contractId || null) === contractId && Date.parse(prev.closedAt) < closedAt.getTime();
   const sections = {};
@@ -920,7 +1034,7 @@ function summaryLines(b, et) {
     // The MTF structure lines (mtf-structure.js mtfLines): the primary 1h > 15m with its entry clause, then below:
     // 15m > 3m; directly under the Market state line, facts only; one `unavailable` line when the record cannot be made.
     // Prices through the briefing's own tick formatter (review m1: a 0.1-tick contract prints its stop on the tick).
-    ...(!own ? MTF.mtfLines(m3.mtfStructure, { lineBytes: AN_STATE.mtfStructure.lineBytes, primaryBytes: AN_STATE.mtfStructure.primaryBytes, level: priceOnTick(b.symbol) }) : []),
+    ...(!own ? mtfBriefingLines(m3, b) : []),
     alignment,
     own ? `- VWAP and the session's levels (today, overnight, opening range, IB, profile): each ${SESSION_ELSEWHERE}, one value in every briefing; ${typeof m3.setups === 'string' ? `the room below is this ${tf} bar's own levels` : `the room below and the setups' levels include them (the runner's values), with this ${tf} bar's own`}.`
       : `- VWAP (${vw.applies || '?'}): price ${vw.side || '?'}, ${Number.isFinite(vw.distanceAtr) ? Math.abs(vw.distanceAtr) : '?'} x ${tf} ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP ${vw.rthCrossesLast30 ?? '?'}, the session VWAP ${vw.sessionCrossesLast30 ?? '?'} (the regime's count).`,
@@ -970,12 +1084,16 @@ function summaryLines(b, et) {
   const checkOpts = m3.bar ? { barClose: Date.parse(m3.bar.t) + b.minutes * 60000, et, entries: m3.windowEntries, validBars: gateValidBars() } : null;
   const check = checkOpts ? SMo.checkLine(m3.candles, checkOpts) : null;
   const shownCheck = checkOpts ? SMo.checkLine(m3.candles, { ...checkOpts, checks: SMo.setupChecks(m3) }) : null;
-  if (shownCheck) out.push(shownCheck);
+  // P1 (coordinator 2026-11-18): an mtf_only arm (A, B, AB) enters only on an MTF candidate line: today's setups print as
+  // context, never an offer (no compose instruction, no standard plan, no fired setup's stop and target).
+  const only = mtfOnlyOf(m3);
+  if (shownCheck) out.push(only ? shownCheck.replace(/ Compose and check each \([^)]*\); pass unless every read is true; SKIP each one you don't compose, with its reason\.$/, ` ${only}`) : shownCheck);
   // Its standard plan (learning/setup-library.js planLine, the census's composeAt and planOf): R:R as code's fact.
-  const plan = check ? require('../learning/setup-library').planLine(b) : null;
+  const plan = check && !only ? require('../learning/setup-library').planLine(b) : null;
   if (plan) out.push(plan);
   if (typeof m3.setups === 'string') out.push(`- Setups: ${m3.setups}.`);
   else if (m3.candidates === null) out.push(`- Setups: unknown (${m3.scanError || 'the scan failed'}): no rules entry this bar.`);
+  else if (only) out.push(`- Rules setups: ${m3.candidates && m3.candidates.length ? `fired ${m3.candidates.map(c => `${c.name} ${c.direction}`).join(', ')}` : 'none fired on this bar'}. ${only}`);
   // Only rules setups fire; a composed one is the model's to read, so none fired is never "no setup".
   else if (!m3.candidates || !m3.candidates.length) out.push('- Rules setups: none fired on this bar; a composed setup is yours to read and check (trade-lifecycle).');
   else {

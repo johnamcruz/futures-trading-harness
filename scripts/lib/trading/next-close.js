@@ -450,6 +450,9 @@ function triggerMet(cand, bar) {
 /** The section (see the header), or null when the account isn't flat. */
 function possibleAtNextClose({ symbol, bars: raw, minutes, briefing, flat = false, registry = null, strategies = null, selected = null, entryRule = null, inAttempt = false, paper = false, sizing = null, blackouts = null, clock = null, roundSteps = null, setupTf = SM.DEFAULTS.setupTf }) {
   if (flat !== true) return null;
+  // P1 (coordinator 2026-11-18): an mtf_only arm (A, B, AB) prepares none of today's setups: its entries are the MTF
+  // candidate lines, read at the close (their drift and void then), never a prepared trigger.
+  const mtfOnly = require('./mtf-entry').mtfOnlyMode(briefing);
   const bars = normalizeBars(raw);
   const last = bars[bars.length - 1];
   if (!last || !isObj(briefing) || briefing.asOf !== last.t || briefing.minutes !== minutes) throw new Error('possibleAtNextClose: the briefing must be the one built from these closed bars (its asOf the last bar)');
@@ -458,6 +461,7 @@ function possibleAtNextClose({ symbol, bars: raw, minutes, briefing, flat = fals
   const next = { t: new Date(nextOpen).toISOString(), closedAt: new Date(nextOpen + step).toISOString() };
   const head = { symbol, minutes, asOf: last.t, closedAt: briefing.closedAt, next };
   const none = reasons => ({ ...head, none: reasons.join('; ') || 'no candidate', candidates: [], skipped: reasons });
+  if (mtfOnly) return none([`MTF entry arm ${mtfOnly.arm}: only an MTF candidate line is an entry, read at the close; today's setups are not prepared`]);
   const win = sessionWindow(new Date(next.closedAt), clock);
   if (win.entries !== 'allowed') return none([`no entries at the next close: ${win.text}`]);
   const news = newsState(blackouts, new Date(next.closedAt));
