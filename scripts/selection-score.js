@@ -35,7 +35,7 @@ function parse(argv) {
 
 function main(argv) {
   const o = parse(argv);
-  const boot = (({ bootstrapReps, ci, seed }) => ({ reps: bootstrapReps, ci, seed }))(require('./lib/tunables').replay().selection);
+  const boot = (({ bootstrapReps, ci, seed, intervalMinRows, intervalMinSessions }) => ({ reps: bootstrapReps, ci, seed, minRows: intervalMinRows, minSessions: intervalMinSessions }))(require('./lib/tunables').replay().selection);
   const runs = o.homes.map(home => {
     const runId = path.basename(path.resolve(home));
     const got = RUN.readRun({ home, runDir: path.join(home, 'replay', runId), minutes: o.minutes, symbol: o.symbol });

@@ -596,6 +596,8 @@
   "selection.bootstrapReps": { "value": 2000, "from": "new in feat/p1-mtf-entries (the pick table's by-session bootstrap draws: the selection scorecard's intervals)" },
   "selection.ci": { "value": 0.9, "from": "new in feat/p1-mtf-entries (the pick table's interval: 90%, the pre-registered keep rule's one-sided bound)" },
   "selection.seed": { "value": 20261118, "from": "new in feat/p1-mtf-entries (the pick table bootstrap's seed: reproducible intervals)" },
+  "selection.intervalMinRows": { "value": 5, "from": "new in feat/p1-mtf-entries (REVIEW-4 major 1: the pick table gives no interval for a cell of fewer rows; a bootstrap on one take prints an interval that excludes zero)" },
+  "selection.intervalMinSessions": { "value": 5, "from": "new in feat/p1-mtf-entries (REVIEW-4 major 1: nor for a cell spread over fewer sessions: the bootstrap resamples sessions)" },
   "latency.tickMs": {
    "value": 1000,
    "from": "replay/latency.js TICK_MS"
