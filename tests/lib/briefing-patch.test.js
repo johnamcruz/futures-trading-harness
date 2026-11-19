@@ -223,3 +223,10 @@ test('reseal: a block whose RECORDED hash did not match its text is left as reco
   assert.strictEqual(r.prompt, after);
   assert.deepStrictEqual(r.unsealed, ['bar_briefing']);
 });
+
+test('the lessons review (F4): the state-line patch anchors on an MTF arm\'s relabelled Alignment line too', () => {
+  const mtf = PROMPT.replace(/(--- bar_briefing[\s\S]*?)\n- Alignment: /, '$1\n- Alignment (context here): ');
+  assert.notEqual(mtf, PROMPT, 'the fixture has an Alignment line inside the briefing');
+  const r = B.applyPatch(mtf, B.stateLinePatch('- State (3m): new.'));
+  assert.ok(r.prompt.includes('- State (3m): new.\n- Alignment (context here): '), r.prompt.slice(0, 400));
+});

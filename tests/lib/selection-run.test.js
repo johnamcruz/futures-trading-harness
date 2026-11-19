@@ -248,4 +248,8 @@ test('the lessons review (F3): an echoed template "ENTER|WAIT|PASS" is two decis
   assert.equal(selectionOf('SELECTION: ENTER|WAIT|PASS - <side> <model> <trigger time>: <reason>').decision, 'UNLABELLED');
   assert.equal(selectionOf('SELECTION: PASS|WAIT - x').decision, 'UNLABELLED');
   assert.equal(selectionOf('SELECTION: PASS - long aggressive 10:12: room under 1R').decision, 'PASS');
+  // The fix review: the template's own one-word form echoed with its placeholders, and a comma list, are no decision.
+  assert.equal(selectionOf('SELECTION: ENTER - <side> <model> <trigger time>: <reason>').decision, 'UNLABELLED');
+  assert.equal(selectionOf('SELECTION: ENTER, WAIT or PASS - x').decision, 'UNLABELLED');
+  assert.equal(selectionOf('SELECTION: ENTER - long balanced 10:12: room 2.1R to the high').decision, 'ENTER');
 });

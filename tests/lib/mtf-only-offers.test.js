@@ -185,6 +185,15 @@ test('the lessons review (F1): in an MTF arm every Trend rule and Bias form mtf.
   for (const [a, b] of BIAS) assert.equal(M.mtfBiasText(a), b, a);
   const REFUSAL = /no entry|against it|refused|\bonly\b|no side \(the entry rule\)/;
   for (const [a] of [...RULE, ...BIAS]) assert.doesNotMatch(M.mtfTrendRuleText(M.mtfBiasText(a)), REFUSAL, a);
+  // Every form ruleLine really prints (the fix review): each 4h/1h/15m bias in up, range and down, and a 4h not read yet.
+  const T = require('../../scripts/lib/trading/mtf');
+  const seen = new Set();
+  for (const h4 of [1, 0, -1, undefined]) for (const h1 of [1, 0, -1]) for (const m15 of [1, 0, -1]) {
+    const line = T.ruleLine(T.ruleSummary({ 240: h4, 60: h1, 15: m15 }));
+    seen.add(line);
+    assert.doesNotMatch(M.mtfTrendRuleText(line), REFUSAL, line);
+  }
+  assert.ok([...seen].some(l => REFUSAL.test(l)), 'arm D\'s lines carry their refusals (the helper is not called there)');
   // The forms' sources: a new template in ruleLine or biasLine changes these counts and must be listed above.
   const src = f => require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'scripts', 'lib', 'trading', f), 'utf8');
   const rule = src('mtf.js'); const ruleFn = rule.slice(rule.indexOf('function ruleLine('), rule.indexOf('\n}\n', rule.indexOf('function ruleLine(')));

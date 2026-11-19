@@ -357,6 +357,7 @@ function candidateLines(rec, mode, { level = x => x, sizing = null, price = null
  *   mtfTrendRuleText(text)   drops "; no <side> against it", "; no entry", "; no entry yet", "; in a prop attempt no side
  *                            (the entry rule), else both sides open" and ": in a prop attempt only with the trend declared"
  *                            ("LONG allowed (prevailing 4h up); no short against it." -> "LONG allowed (prevailing 4h up).")
+ *                            and the no-side form's ": no entry against a trending ..." reasons (with its "no side:" stutter)
  *   mtfBiasText(line)        labels the line context and drops "; <side> refused", " only" and " -> no entry"
  *                            ("Bias: long only (4h up, 1h up; short refused)" -> "Bias (context here): long (4h up, 1h up)")
  */
@@ -364,7 +365,10 @@ const mtfTrendRuleText = text => String(text)
   .replace(/; no (long|short) against it(\.?)$/, '$2')
   .replace(/; no entry(?: yet)?(\.?)$/, '$1')
   .replace(/; in a prop attempt no side \(the entry rule\), else both sides open(\.?)$/, '$1')
-  .replace(/: in a prop attempt only with the trend declared\)/, ')');
+  .replace(/: in a prop attempt only with the trend declared\)/, ')')
+  // The no-side form's reasons (mtf.js trendRule): "...: no entry against a trending 4h or 1h", and its stutter.
+  .replace(/: no entry against a trending [^;)]+/g, '')
+  .replace(/^(Trend rule: )?no side \(no side: /, '$1no side (');
 const mtfBiasText = line => String(line)
   .replace(/; (long|short) refused\)/, ')')
   .replace(/\b(long|short) only\b/g, '$1')

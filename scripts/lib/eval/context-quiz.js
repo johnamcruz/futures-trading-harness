@@ -280,11 +280,11 @@ function briefingOfText(text, layers = null) {
   const bias = /\n- Bias(?: \(context here\))?: ([^\n]*)/.exec(t);
   if (!bias) return null;
   const fr = /\(4h (up|down|range), 1h (up|down|range)/.exec(bias[1]);
-  const [h4, h1] = fr ? [fr[1], fr[2]] : /^(neutral|no side)/.test(bias[1]) ? ['range', 'range'] : [null, null];
+  const [h4, h1] = fr ? [fr[1], fr[2]] : /^(neutral|no side yet)/.test(bias[1]) ? ['range', 'range'] : [null, null];
   const clock = /synthetic, (\d{1,2}:\d{2}) ET/.exec(t);
   const now = clock ? minOf(clock[1]) : null;
   const m3 = {};
-  const pb = new RegExp(`\\n- Pullback \\((\\w+), (long|short) leg ${NUM} -> ${NUM}\\): ([^\\n]*)`).exec(t);
+  const pb = new RegExp(`\\n- Pullback \\((?:arm D context: )?(\\w+), (long|short) leg ${NUM} -> ${NUM}\\): ([^\\n]*)`).exec(t);
   if (pb) {
     const small = new RegExp(`leg ${NUM}x ATR\\(14\\), under the`).exec(pb[5]);
     const depth = /depth (\d+)% of the leg/.exec(pb[5]);
