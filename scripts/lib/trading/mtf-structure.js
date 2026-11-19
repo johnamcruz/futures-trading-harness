@@ -685,11 +685,6 @@ function withSide(rec) {
   if (p && p.entry) {
     const s = rec.side;
     p.entryWithheld = !s ? 'no side' : s !== p.entry.side ? 'against the side' : p.warning ? 'warning' : p.stopTraded ? 'stop traded' : null;
-    // P1, entryPullback first: only the leg's first pullback; a rank not known is withheld (fails closed).
-    if (!p.entryWithheld && rec.mode && rec.mode.entryPullback === 'first') {
-      const rank = p.instance ? p.instance.rank : null;
-      p.entryWithheld = !Number.isInteger(rank) ? 'rank unknown' : rank !== 1 ? 'not first' : null;
-    }
   }
   return rec;
 }
@@ -756,8 +751,6 @@ function bodyOf(lv, cut, L, primary, sideText, mode = null) {
     const r = lv.entryWithheld;
     if (r === 'no side') return mode ? `none: no side (no ${mode.sideFrame} structure)` : 'none: no side (4h and 1h not aligned)';
     if (r === 'against the side') return mode ? `none: against the ${mode.sideFrame} structure (${sideText} only)` : `none: against the side (Bias: ${sideText} only)`;
-    if (r === 'not first') return `none: not first (pullback #${i.rank} of this ${P} leg): no entry under first-pullback-only`;
-    if (r === 'rank unknown') return `none: the pullback's rank in its ${P} leg is unknown: no entry under first-pullback-only`;
     if (r === 'warning') return `none: a close is through the ${P} protected ${lowHigh(w)} (the ${P} close decides)`;
     if (r === 'stop traded') return `none: the ${e.model} structural stop ${L(e.stop)} traded through at ${lv.stopTraded.et}`;
     return null;
@@ -872,4 +865,4 @@ function mtfLines(rec, { lineBytes = Infinity, primaryBytes = Infinity, level = 
   return [];
 }
 
-module.exports = { withSide, aboveRelation, WEAKENING_EVENTS, STAGES, CUTS, SIDE_MODES, GATED, configProblem, defaultPrims, levelsOf, candlesOf, protectedAt, parentSeries, levelSeries, mtfStructure, recordsOf, mtfLines };
+module.exports = { aboveRelation, WEAKENING_EVENTS, STAGES, CUTS, SIDE_MODES, GATED, configProblem, defaultPrims, levelsOf, candlesOf, protectedAt, parentSeries, levelSeries, mtfStructure, recordsOf, mtfLines };

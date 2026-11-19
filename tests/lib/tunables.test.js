@@ -122,17 +122,18 @@ test('tunables: the MTF structure read\'s keys (analysis.mtfStructure) load, BUI
 });
 
 test('tunables: the MTF entry arm (runner.mtfEntry, P1) loads with today\'s defaults, BUILT_IN carries it, and a bad arm, mode or combination is refused (critical, fail closed)', () => {
-  const want = { arm: 'D', exitMode: 'trail', entryPullback: 'any', minStage: 'established', models: ['aggressive', 'balanced', 'conservative'] };
+  const want = { arm: 'D', exitMode: 'trail', minStage: 'established', models: ['aggressive', 'balanced', 'conservative'] };
   assert.deepStrictEqual(clone(T.runner().mtfEntry), want);
   assert.deepStrictEqual(clone(T.BUILT_IN.runner.mtfEntry), want);
   const f = path.join(tmp(), 'r.json');
   const at = over => { fs.writeFileSync(f, JSON.stringify(writeAt(clone(committed('runner')), 'mtfEntry', { ...want, ...over }))); return () => T.load('runner', f); };
   for (const arm of ['A', 'B', 'AB', 'D']) assert.strictEqual(at({ arm })().mtfEntry.arm, arm);
-  assert.strictEqual(at({ arm: 'A', exitMode: 'prev_high_or_trail', entryPullback: 'first' })().mtfEntry.exitMode, 'prev_high_or_trail');
+  assert.strictEqual(at({ arm: 'A', exitMode: 'prev_high_or_trail' })().mtfEntry.exitMode, 'prev_high_or_trail');
   assert.throws(at({ arm: 'E' }), /mtfEntry\.arm: one of A, B, AB, D/);
   assert.throws(at({ arm: 'a' }), /mtfEntry\.arm: one of A, B, AB, D/);
   assert.throws(at({ exitMode: 'target' }), /mtfEntry\.exitMode: one of trail, prev_high_or_trail/);
-  assert.throws(at({ entryPullback: 'second' }), /mtfEntry\.entryPullback: one of any, first/);
+  // REVIEW-3 O1: no first-pullback rule (the rank is a fact, not a preference); the old key is refused like any unknown one.
+  assert.throws(at({ entryPullback: 'first' }), /mtfEntry\.entryPullback: not a known key/);
   // The owner's spec: the entry models (all three by default; balanced the default reading); some of the three, each once.
   assert.deepStrictEqual(at({ arm: 'B', models: ['balanced'] })().mtfEntry.models, ['balanced']);
   assert.throws(at({ models: [] }), /mtfEntry\.models/);
@@ -140,10 +141,9 @@ test('tunables: the MTF entry arm (runner.mtfEntry, P1) loads with today\'s defa
   assert.throws(at({ models: ['balanced', 'balanced'] }), /mtfEntry\.models: each entry model at most once/);
   for (const minStage of ['developing', 'potential']) assert.strictEqual(at({ arm: 'A', minStage })().mtfEntry.minStage, minStage);
   assert.throws(at({ arm: 'A', minStage: 'weakening' }), /mtfEntry\.minStage: one of established, developing, potential/);
-  assert.throws(at({ arm: 'D', minStage: 'developing' }), /mtfEntry: arm D \(today\) takes exitMode trail, entryPullback any and minStage established/);
-  // Today's arm has no MTF entry: the exit option and the first-only rule have nothing to act on there.
-  assert.throws(at({ arm: 'D', exitMode: 'prev_high_or_trail' }), /mtfEntry: arm D \(today\) takes exitMode trail, entryPullback any and minStage established/);
-  assert.throws(at({ arm: 'D', entryPullback: 'first' }), /mtfEntry: arm D \(today\) takes exitMode trail, entryPullback any and minStage established/);
+  assert.throws(at({ arm: 'D', minStage: 'developing' }), /mtfEntry: arm D \(today\) takes exitMode trail and minStage established/);
+  // Today's arm has no MTF entry: the exit option has nothing to act on there.
+  assert.throws(at({ arm: 'D', exitMode: 'prev_high_or_trail' }), /mtfEntry: arm D \(today\) takes exitMode trail and minStage established/);
   fs.writeFileSync(f, JSON.stringify(dropAt(clone(committed('runner')), 'mtfEntry.arm')));
   assert.throws(() => T.load('runner', f), /mtfEntry\.arm: missing/);
 });

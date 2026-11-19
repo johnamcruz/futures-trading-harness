@@ -286,7 +286,7 @@ function executionOf({ common, fine, closedAt, minutes, side, mode, cfg }) {
   if (problem) return { unavailable: problem };
   try {
     const levels = MTF.levelsOf(exCfg).filter(l => l.role !== 'above');
-    const record = MTF.mtfStructure({ ...common, bars: fine, minutes: 1, levels, hierarchy: 'execution', sideMode: 'rule', side, mode: ME.recordMode(mode, { execution: true }) });
+    const record = MTF.mtfStructure({ ...common, bars: fine, minutes: 1, levels, hierarchy: 'execution', sideMode: 'rule', side, mode: ME.recordMode(mode) });
     return record ? { record, since: new Date(closedAt.getTime() - minutes * 60000).toISOString() } : { unavailable: 'no 1m bars' };
   } catch (err) { return { unavailable: `the 1m read failed: ${String(err && err.message).split('\n')[0]}` }; }
 }

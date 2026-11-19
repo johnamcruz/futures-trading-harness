@@ -16,7 +16,7 @@ const W = require('../fixtures/mtf-structure/world');
 const AN = analysis();
 const CFG = AN.mtfStructure;
 const OPTS = { tick: 0.25, bufferTicks: 1, equalAtr: AN.marketState.equalAtr, k: AN.indicators.swingK, depth: CFG.depth, sideMode: 'rule', warmBars: 0, hierarchy: CFG.hierarchy };
-const MODE = Object.freeze({ arm: 'A', entryMode: 'mtf_only', hierarchies: ['intraday'], exitMode: 'trail', entryPullback: 'any', minStage: 'established' });
+const MODE = Object.freeze({ arm: 'A', entryMode: 'mtf_only', hierarchies: ['intraday'], exitMode: 'trail', minStage: 'established' });
 const run = (w, o = {}) => M.recordsOf({ ...OPTS, bars: w.bars, minutes: w.base, levels: [w.level, w.below], side: 'long', prims: w.prims, ...o });
 const P = r => r.levels[0];
 
@@ -125,20 +125,12 @@ test('mode: the ready entry carries its origin (before the buffer), the target (
   assert.equal(p.instance.rank, 1);
 });
 
-test('mode first: rank 1 ready; rank 2 withheld `not first`; no rank withheld `rank unknown` (fails closed); any: rank 2 ready', () => {
-  const first = { ...MODE, entryPullback: 'first' };
+test('an MTF mode has no first-pullback rule (REVIEW-3 O1): the ranked pullback is ready, and no rank filter is exported', () => {
   const base = { ...OPTS, bars: A.bars, minutes: A.base, levels: [A.level, A.below], sideMode: 'parent', prims: A.prims };
   const j = A.at(25, 1);
-  assert.equal(P(M.recordsOf({ ...base, mode: first })[j]).entryWithheld, null);
-  const rec = M.recordsOf({ ...base, mode: first })[j];
-  // The rank as the module computed it, then a second pullback and a missing rank, through withSide's own rule.
-  const again = r => { const x = JSON.parse(JSON.stringify(r)); return x; };
-  const two = again(rec); P(two).instance.rank = 2; P(two).entryWithheld = null;
-  assert.equal(P(M.withSide(two)).entryWithheld, 'not first');
-  const none = again(rec); P(none).instance.rank = null; P(none).entryWithheld = null;
-  assert.equal(P(M.withSide(none)).entryWithheld, 'rank unknown');
-  const anyTwo = again(M.recordsOf({ ...base, mode: MODE })[j]); P(anyTwo).instance.rank = 2; P(anyTwo).entryWithheld = null;
-  assert.equal(P(M.withSide(anyTwo)).entryWithheld, null);
+  const rec = M.recordsOf({ ...base, mode: MODE })[j];
+  assert.equal(P(rec).entryWithheld, null);
+  assert.equal('withSide' in M, false, 'not exported');
 });
 
 test('configProblem: today\'s config as before; an MTF mode accepts the parent side mode, and the execution hierarchy only in arm B', () => {

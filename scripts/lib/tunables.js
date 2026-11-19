@@ -170,15 +170,15 @@ const REPLAY = {
 
 const MTF_ARMS = Object.freeze(['A', 'B', 'AB', 'D']);
 const MTF_MODELS = Object.freeze(['aggressive', 'balanced', 'conservative']);
-const MTF_ENTRY_SHAPE = { arm: str(MTF_ARMS), exitMode: str(['trail', 'prev_high_or_trail']), entryPullback: str(['any', 'first']), minStage: str(['established', 'developing', 'potential']), models: list(str(MTF_MODELS)) };
-// The block's own check (after its keys' shapes): today's arm (D) holds no MTF entry, so it takes today's exit, any and
+const MTF_ENTRY_SHAPE = { arm: str(MTF_ARMS), exitMode: str(['trail', 'prev_high_or_trail']), minStage: str(['established', 'developing', 'potential']), models: list(str(MTF_MODELS)) };
+// The block's own check (after its keys' shapes): today's arm (D) holds no MTF entry, so it takes today's exit and
 // established (the module's own earliest ready).
 const MTF_ENTRY = shapes.custom(v => {
   const errs = shapeErrors(MTF_ENTRY_SHAPE, v, 'mtfEntry');
   if (errs.length) return errs;
   if (!v.models.length) return 'mtfEntry.models: at least one entry model';
   if (new Set(v.models).size !== v.models.length) return 'mtfEntry.models: each entry model at most once';
-  return v.arm === 'D' && (v.exitMode !== 'trail' || v.entryPullback !== 'any' || v.minStage !== 'established') ? 'arm D (today) takes exitMode trail, entryPullback any and minStage established' : null;
+  return v.arm === 'D' && (v.exitMode !== 'trail' || v.minStage !== 'established') ? 'arm D (today) takes exitMode trail and minStage established' : null;
 }, 'the MTF entry arm');
 const RUNNER = {
   version: VERSION,
@@ -191,8 +191,7 @@ const RUNNER = {
   },
   lifecycle: { maxSize: int(1) }, // the stop's buffer and floor are the strategy's own: strategies/trade_lifecycle/STRATEGY.md risk
   // P1, the MTF entry arm (trading/mtf-entry.js ARMS): A, B and AB enter only on an MTF ready candidate (1h/15m/3m,
-  // 15m/3m/1m, both), D is today. The exit option, the first-pullback rule, minStage and the entry models act only on MTF
-  // entries.
+  // 15m/3m/1m, both), D is today. The exit option, minStage and the entry models act only on MTF entries.
   mtfEntry: MTF_ENTRY,
   account: { snapshotMaxAgeMs: int(1), balanceToleranceUsd: nonneg(), snapshotFutureToleranceMs: ms(), verdictsKept: int(1) },
   clock: { serverTimeToleranceMs: int(1), wallStartMaxAgeMs: int(1), wallStartAheadMs: ms() },
@@ -371,7 +370,7 @@ const BUILT_IN = deepFreeze({
       factsMinChecked: 2, factsMaxItems: 20, lateEntryDriftShare: 0.25, freshPriceTimeoutMs: 3000,
     },
     lifecycle: { maxSize: 100 },
-    mtfEntry: { arm: 'D', exitMode: 'trail', entryPullback: 'any', minStage: 'established', models: ['aggressive', 'balanced', 'conservative'] },
+    mtfEntry: { arm: 'D', exitMode: 'trail', minStage: 'established', models: ['aggressive', 'balanced', 'conservative'] },
     account: { snapshotMaxAgeMs: 600000, balanceToleranceUsd: 0.01, snapshotFutureToleranceMs: 60000, verdictsKept: 500 },
     clock: { serverTimeToleranceMs: 300000, wallStartMaxAgeMs: 86400000, wallStartAheadMs: 5000 },
     cycle: { timeoutMinMinutes: 3, timeoutBars: 2, extraCyclesPerDay: 10, maxConsecutiveErrors: 3, slowFromMin: 3, coalesceHoldMs: 10000 },

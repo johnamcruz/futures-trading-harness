@@ -12,10 +12,9 @@
  *                    > 1m, on the 1m data lane's bars); AB: both; D: today (no MTF entry)
  *   replayRun(env)   true only under a replay clock the harness accepts (harness-now.js replayAt): an MTF arm runs only
  *                    there until the owner opts in to live (the coordinator's decision, 2026-11-18)
- *   modeOf(cfg, env, { isReplay })   { arm, entryMode, hierarchies, exitMode, entryPullback, minStage, models, sideMode, mtf,
+ *   modeOf(cfg, env, { isReplay })   { arm, entryMode, hierarchies, exitMode, minStage, models, sideMode, mtf,
  *                    refused }: refused (a reason) for a bad block, or an MTF arm outside a replay; never read as today
- *   recordMode(mode, { execution })  what a record carries (the execution record applies no first rule: it is ranked in
- *                    the 1h leg here)
+ *   recordMode(mode)                 what a record carries
  *   candidatesOf(rec, mode)          { side1h, list, chosen: { long, short } }: each hierarchy's primary ready (stage,
  *                    trigger, rank in the 1h leg, stop, target, age, withheld); one per side, the earliest not withheld
  *                    (a tie: the intraday)
@@ -39,7 +38,6 @@ const ARMS = Object.freeze({
   D: Object.freeze({ entryMode: 'today', hierarchies: Object.freeze([]) }),
 });
 const EXIT_MODES = Object.freeze(['trail', 'prev_high_or_trail']);
-const PULLBACK_MODES = Object.freeze(['any', 'first']);
 const MIN_STAGES = Object.freeze(['established', 'developing', 'potential']);
 const MODELS = Object.freeze(['aggressive', 'balanced', 'conservative']);
 const SIDES = Object.freeze(['long', 'short']);
@@ -54,30 +52,29 @@ function replayRun(env = process.env) {
 }
 
 function modeOf(cfg, env = process.env, { isReplay = replayRun } = {}) {
-  const bad = why => ({ arm: isObj(cfg) ? cfg.arm : null, entryMode: null, hierarchies: [], exitMode: null, entryPullback: null, minStage: null, sideMode: null, mtf: true, refused: `config/runner.json mtfEntry: ${why}; no entry (fails closed)` });
+  const bad = why => ({ arm: isObj(cfg) ? cfg.arm : null, entryMode: null, hierarchies: [], exitMode: null, minStage: null, sideMode: null, mtf: true, refused: `config/runner.json mtfEntry: ${why}; no entry (fails closed)` });
   if (!isObj(cfg)) return bad('missing');
   const arm = ARMS[cfg.arm];
   if (!arm || !Object.prototype.hasOwnProperty.call(ARMS, cfg.arm)) return bad(`arm ${JSON.stringify(cfg.arm)} is not one of ${Object.keys(ARMS).join(', ')}`);
   if (!EXIT_MODES.includes(cfg.exitMode)) return bad(`exitMode ${JSON.stringify(cfg.exitMode)} is not one of ${EXIT_MODES.join(', ')}`);
-  if (!PULLBACK_MODES.includes(cfg.entryPullback)) return bad(`entryPullback ${JSON.stringify(cfg.entryPullback)} is not one of ${PULLBACK_MODES.join(', ')}`);
   if (!MIN_STAGES.includes(cfg.minStage)) return bad(`minStage ${JSON.stringify(cfg.minStage)} is not one of ${MIN_STAGES.join(', ')}`);
   // The owner's MTF spec: the entry models that may become candidates (balanced the default reading); the loader requires
   // the key, a caller without it means all three.
   const models = cfg.models === undefined ? [...MODELS] : cfg.models;
   if (!Array.isArray(models) || !models.length || !models.every(x => MODELS.includes(x)) || new Set(models).size !== models.length) return bad(`models ${JSON.stringify(cfg.models)} must list some of ${MODELS.join(', ')}, each once`);
   const mtf = arm.entryMode !== 'today';
-  if (!mtf && (cfg.exitMode !== 'trail' || cfg.entryPullback !== 'any' || cfg.minStage !== 'established')) return bad('arm D (today) takes exitMode trail, entryPullback any and minStage established');
-  const out = { arm: cfg.arm, entryMode: arm.entryMode, hierarchies: [...arm.hierarchies], exitMode: cfg.exitMode, entryPullback: cfg.entryPullback, minStage: cfg.minStage, models: [...models], sideMode: mtf ? 'parent' : 'rule', mtf, refused: null };
+  if (!mtf && (cfg.exitMode !== 'trail' || cfg.minStage !== 'established')) return bad('arm D (today) takes exitMode trail and minStage established');
+  const out = { arm: cfg.arm, entryMode: arm.entryMode, hierarchies: [...arm.hierarchies], exitMode: cfg.exitMode, minStage: cfg.minStage, models: [...models], sideMode: mtf ? 'parent' : 'rule', mtf, refused: null };
   if (mtf && !isReplay(env)) out.refused = `MTF entry arm ${cfg.arm} runs only in a replay until the owner opts in (config/runner.json mtfEntry.arm); no entry`;
   return out;
 }
 
 /** Today's mode (arm D): what a caller that names no mode is judged under (the MTF reads refused). */
-const TODAY = Object.freeze({ arm: 'D', entryMode: 'today', hierarchies: Object.freeze([]), exitMode: 'trail', entryPullback: 'any', minStage: 'established', models: Object.freeze([...MODELS]), sideMode: 'rule', mtf: false, refused: null });
-const recordMode = (mode, { execution = false } = {}) => ({ arm: mode.arm, entryMode: mode.entryMode, hierarchies: [...mode.hierarchies], exitMode: mode.exitMode, entryPullback: execution ? 'any' : mode.entryPullback, minStage: mode.minStage });
+const TODAY = Object.freeze({ arm: 'D', entryMode: 'today', hierarchies: Object.freeze([]), exitMode: 'trail', minStage: 'established', models: Object.freeze([...MODELS]), sideMode: 'rule', mtf: false, refused: null });
+const recordMode = mode => ({ arm: mode.arm, entryMode: mode.entryMode, hierarchies: [...mode.hierarchies], exitMode: mode.exitMode, minStage: mode.minStage });
 
 const primaryOf = rec => (isObj(rec) && Array.isArray(rec.levels) ? rec.levels.find(l => isObj(l) && l.role === 'primary') || null : null);
-const sameMode = (rec, mode) => isObj(rec) && isObj(rec.mode) && ['arm', 'entryMode', 'exitMode', 'entryPullback', 'minStage'].every(k => rec.mode[k] === mode[k]);
+const sameMode = (rec, mode) => isObj(rec) && isObj(rec.mode) && ['arm', 'entryMode', 'exitMode', 'minStage'].every(k => rec.mode[k] === mode[k]);
 const ms = iso => (typeof iso === 'string' ? Date.parse(iso) : NaN);
 
 /** One hierarchy's candidate from its record's primary (null when it holds no entry). */
@@ -97,7 +94,6 @@ function candidateFrom(lv, { hierarchy, mode, leg1h, since, windowStart = null }
     rank = n === null ? null : developed ? n || null : n + 1;
     // a 1h leg begun before the 1m window holds pullbacks this window never saw: the rank is unknown.
     if (!(ms(windowStart) <= at)) rank = null;
-    if (!withheld && mode.entryPullback === 'first') withheld = !Number.isInteger(rank) ? 'rank unknown' : rank !== 1 ? 'not first' : null;
     if (!withheld && !(ms(e.since && e.since.at) > ms(since))) withheld = 'no 1m trigger since the previous close';
   }
   return {
@@ -277,8 +273,6 @@ function waitingOf(lv, timing, mode) {
 function voidText(x) {
   const w = {
     'stop traded': 'stop traded',
-    'not first': `not first: #${x.rank} of this 1h leg`,
-    'rank unknown': 'its rank in the 1h leg not known, first-pullback-only',
     warning: 'a close through the protected swing, until the parent frame closes',
     'no 1m trigger since the previous close': 'the 1m trigger fired before the previous close',
     'against the side': 'against the 1h structure',
@@ -349,4 +343,4 @@ function candidateLines(rec, mode, { level = x => x, sizing = null, price = null
   return out;
 }
 
-module.exports = { MODELS, mtfOnlyMode, mtfPlanProblems, setupMinutes, startProblems, TODAY, ARMS, EXIT_MODES, PULLBACK_MODES, MIN_STAGES, replayRun, modeOf, recordMode, candidatesOf, readyOf, entryModeProblems, sizeHint, candidateLines };
+module.exports = { mtfOnlyMode, mtfPlanProblems, setupMinutes, startProblems, TODAY, ARMS, replayRun, modeOf, recordMode, candidatesOf, readyOf, entryModeProblems, sizeHint, candidateLines };

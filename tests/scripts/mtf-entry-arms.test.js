@@ -39,6 +39,6 @@ test('arm D: the MTF record at every bar of the real fixtures is byte-identical 
 });
 
 test('an MTF arm\'s record is not today\'s (its mode, rank, context): the digest differs', () => {
-  const mode = ME.recordMode(ME.modeOf({ arm: 'A', exitMode: 'trail', entryPullback: 'any', minStage: 'potential' }, {}, { isReplay: () => true }));
+  const mode = ME.recordMode(ME.modeOf({ arm: 'A', exitMode: 'trail', minStage: 'potential' }, {}, { isReplay: () => true }));
   assert.notEqual(digest({ mode, sideMode: 'parent' }).hex, BASE_DIGEST);
 });

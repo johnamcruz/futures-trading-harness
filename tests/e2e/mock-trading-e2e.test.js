@@ -1078,7 +1078,7 @@ async function mtfChain(arm) {
   const tree = treeCopy(tmpDir(), r => {
     const f = path.join(r, 'config', 'runner.json');
     const cfg = JSON.parse(fs.readFileSync(f, 'utf8'));
-    cfg.mtfEntry = { ...cfg.mtfEntry, arm, exitMode: 'trail', entryPullback: 'any', minStage: 'established' };
+    cfg.mtfEntry = { ...cfg.mtfEntry, arm, exitMode: 'trail', minStage: 'established' };
     fs.writeFileSync(f, JSON.stringify(cfg, null, 2));
   });
   const at = new Date(Date.parse(LC.CLOSE) + 2000);

@@ -4919,7 +4919,7 @@ const mtfEval = (o = {}) => {
     config: { ...config, home, cycleBars: { MNQ: LC.BAR }, ...('mode' in o ? (o.mode ? { mtfMode: o.mode } : {}) : { mtfMode: MF.MODE('A') }) }, strategies: LC_REGISTRY,
   });
 };
-const LIVE_MODE = arm => require('../../scripts/lib/trading/mtf-entry').modeOf({ arm, exitMode: 'trail', entryPullback: 'any', minStage: 'established' }, {}, { isReplay: () => false });
+const LIVE_MODE = arm => require('../../scripts/lib/trading/mtf-entry').modeOf({ arm, exitMode: 'trail', minStage: 'established' }, {}, { isReplay: () => false });
 
 test('MTF arm A: an MTF long on the 1h structure goes though the EMA 4h is down ([mtf-trend] exempt); its stamp carries the candidate', () => {
   const r = mtfEval();
@@ -4942,7 +4942,7 @@ test('MTF arm A fails closed: against the 1h structure, withheld, no record, una
     [{ b: { m3: { mtfStructure: { unavailable: 'no stop rule' } } } }, /MTF structure unavailable/],
     // Forged: the record was composed on a ready briefing; the briefing on disk (the gate's) holds the ready withheld.
     [{ after: home => require('../../scripts/lib/trading/briefing').writeBriefing(home, MF.briefing({ mtf: { withheld: 'warning' } })) }, /withheld: warning/],
-    [{ b: { mtf: { rank: 2 } }, mode: MF.MODE('A', { entryPullback: 'first' }), composeMode: MF.MODE('A', { entryPullback: 'first' }) }, /built under another entry arm|not first/],
+    [{ b: { mtf: { rank: 2 } }, mode: MF.MODE('A', { exitMode: 'prev_high_or_trail' }), composeMode: MF.MODE('A', { exitMode: 'prev_high_or_trail' }) }, /built under another entry arm/],
   ];
   for (const [o, re] of cases) {
     const r = mtfEval(o);
@@ -5001,13 +5001,10 @@ test('a plan stop that is not the stamped structural stop is refused [mtf-stop] 
   assert.ok(checks(r).includes('mtf-trend'));
 });
 
-test('first-only at the gate: rank 2 refused (`not first`), rank 1 goes', () => {
-  const first = MF.MODE('A', { entryPullback: 'first' });
-  const rec = o => MF.record({ mode: first, ...o });
-  const go = mtfEval({ b: { m3: { mtfStructure: rec({}) } }, mode: first, composeMode: first });
+test('the rank is a fact at the gate (REVIEW-3 O1): a ready pullback #2 goes like #1', () => {
+  const m = MF.MODE('A');
+  const go = mtfEval({ b: { m3: { mtfStructure: MF.record({ mode: m, rank: 2 }) } }, mode: m, composeMode: m });
   assert.deepStrictEqual(go.violations, []);
-  const two = mtfEval({ b: { m3: { mtfStructure: rec({ rank: 2, withheld: 'not first' }) } }, mode: first, composeMode: first });
-  assert.ok(two.violations.some(v => v.check === 'composed-reads' && /withheld: not first/.test(v.message)), JSON.stringify(two.violations));
 });
 
 test('[entry-mode] mtf_only (arms A, B, AB): a non-MTF compose record and a rules setup are refused; exits go in every arm', () => {

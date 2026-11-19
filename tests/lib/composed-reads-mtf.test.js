@@ -55,8 +55,8 @@ test('a non-MTF entry under today\'s arm (D) keeps today\'s rule: the 4h down re
 test('fails closed: no mode (today) refuses the MTF reads; a refused (live) mode; against the 1h; withheld; another model; a stop off the structural stop; no record', () => {
   const no = (o, re) => { const r = run(o); assert.equal(r.ok, false, JSON.stringify(o)); assert.match(problems(r), re); };
   no({ x: { mtfMode: undefined } }, /the MTF entry reads are not in this entry mode \(arm D, today\)/);
-  no({ x: { mtfMode: ME.modeOf({ arm: 'D', exitMode: 'trail', entryPullback: 'any', minStage: 'established' }, {}, { isReplay: () => false }) } }, /the MTF entry reads are not in this entry mode \(arm D, today\)/);
-  no({ x: { mtfMode: ME.modeOf({ arm: 'A', exitMode: 'trail', entryPullback: 'any', minStage: 'established' }, {}, { isReplay: () => false }) } }, /runs only in a replay/);
+  no({ x: { mtfMode: ME.modeOf({ arm: 'D', exitMode: 'trail', minStage: 'established' }, {}, { isReplay: () => false }) } }, /the MTF entry reads are not in this entry mode \(arm D, today\)/);
+  no({ x: { mtfMode: ME.modeOf({ arm: 'A', exitMode: 'trail', minStage: 'established' }, {}, { isReplay: () => false }) } }, /runs only in a replay/);
   no({ b: { mtf: { side1h: 'short', entry: { side: 'short' } } } }, /against the 1h structure \(short only\)/);
   no({ b: { mtf: { withheld: 'stop traded' } } }, /withheld: stop traded/);
   no({ x: { reads: F.READS.map(r => (r.step === 'setup' ? { ...r, read: 'mtf ready balanced long' } : r)) } }, /the ready candidate is aggressive, not balanced/);
@@ -77,7 +77,7 @@ test('`target trail` on an MTF entry: the 1h structure\'s side (the 4h+1h rule n
 test('arm D (no mode, the default): every existing combination checks exactly as before (scenario 1 and the cited setup)', () => {
   for (const [reads, b, cited] of [[LC.READS, LC.briefing(), null], [LC.S2_READS, LC.s2Briefing(), ['momentum_continuation']]]) {
     const before = checkReads({ reads, side: 'long', briefing: b, tick: 0.25, entryRule: RULE, cited });
-    const d = checkReads({ reads, side: 'long', briefing: b, tick: 0.25, entryRule: RULE, cited, mtfMode: ME.modeOf({ arm: 'D', exitMode: 'trail', entryPullback: 'any', minStage: 'established' }, {}, { isReplay: () => false }) });
+    const d = checkReads({ reads, side: 'long', briefing: b, tick: 0.25, entryRule: RULE, cited, mtfMode: ME.modeOf({ arm: 'D', exitMode: 'trail', minStage: 'established' }, {}, { isReplay: () => false }) });
     assert.deepEqual(d, before);
   }
 });

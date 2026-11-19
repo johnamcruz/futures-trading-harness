@@ -21,7 +21,7 @@
 const LC = require('./lifecycle');
 const ME = require('../../scripts/lib/trading/mtf-entry');
 
-const MODE = (arm = 'A', over = {}) => ME.modeOf({ arm, exitMode: 'trail', entryPullback: 'any', minStage: 'established', ...over }, {}, { isReplay: () => true });
+const MODE = (arm = 'A', over = {}) => ME.modeOf({ arm, exitMode: 'trail', minStage: 'established', ...over }, {}, { isReplay: () => true });
 const LEG = { kind: 'BOS', at: '2026-10-07T12:00:00.000Z', et: '08:00' };
 
 function record({ mode = MODE('A'), side1h = 'long', entry = {}, withheld = null, rank = 1, stage = 'WEAKENING', context = { frame: '4h', way: 'down' }, extra = {} } = {}) {

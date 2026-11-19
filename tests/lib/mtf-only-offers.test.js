@@ -20,7 +20,7 @@ const REPO = path.join(__dirname, '..', '..');
 const DOC = JSON.parse(zlib.gunzipSync(fs.readFileSync(path.join(REPO, 'tests', 'fixtures', 'goal', 'bars.json.gz'))));
 const etHm = ms => new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(ms));
 const REPLAY = { isReplay: () => true };
-const mode = arm => ME.modeOf({ arm, exitMode: 'trail', entryPullback: 'any', minStage: 'potential' }, {}, REPLAY);
+const mode = arm => ME.modeOf({ arm, exitMode: 'trail', minStage: 'potential' }, {}, REPLAY);
 
 // 2021-05-25 09:45 ET: today's briefing offers a setup to check and its Standard plan (a real fixture bar).
 const DAY = '2021-05-25';
@@ -69,7 +69,7 @@ test('the cycle prompt\'s fired line: an mtf_only arm names the fired setups as 
   assert.match(a, / MNQ: MTF entry arm B: the only entries are the briefing's MTF candidate lines; rules setups fired \(orb long\): context only\./);
   assert.doesNotMatch(a, /MNQ fired on this bar|a setup you compose and check is still open/);
   assert.match(prompts({ ...cfg, mtfMode: mode('A') }, at, '/r').trade([{ symbol: 'MNQ', bar, scan: [] }]), / MNQ: MTF entry arm A: the only entries are the briefing's MTF candidate lines\./);
-  const d = prompts({ ...cfg, mtfMode: ME.modeOf({ arm: 'D', exitMode: 'trail', entryPullback: 'any', minStage: 'established' }, {}, REPLAY) }, at, '/r').trade([{ symbol: 'MNQ', bar, scan: [orb] }]);
+  const d = prompts({ ...cfg, mtfMode: ME.modeOf({ arm: 'D', exitMode: 'trail', minStage: 'established' }, {}, REPLAY) }, at, '/r').trade([{ symbol: 'MNQ', bar, scan: [orb] }]);
   assert.equal(d, prompts(cfg, at, '/r').trade([{ symbol: 'MNQ', bar, scan: [orb] }]), 'arm D: the prompt as without a mode');
   assert.match(d, /MNQ fired on this bar/);
 });

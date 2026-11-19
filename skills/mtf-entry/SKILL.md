@@ -91,7 +91,7 @@ no entry. `(position open: not a pick)`: context, never an entry.
 - `[mtf-cited]`: an MTF entry cites no setup (no `<strategy> fired` read beside it).
 - `[mtf-target]`, `[mtf-stop]`: its target is `target trail`; its plan's stop is the structural stop;
   `stop mtf` on any other entry.
-- `withheld: <reason>`: stop traded, not first, rank unknown, a warning close, the 1m
+- `withheld: <reason>`: stop traded, a warning close, the 1m
   trigger before the previous close, ran past (a close since the trigger over 0.5R),
   too old (over 60 minutes), an earlier session, drift unknown, a position open.
 - `[entry-mode]`: in arms A, B and AB only MTF entries go. Outside a replay an MTF arm

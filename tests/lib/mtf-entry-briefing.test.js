@@ -22,7 +22,7 @@ const etHm = ms => new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_Yor
 const barsOf = day => GF.decodeBars(DOC.blocks.find(x => x.sessions.includes(day)).bars);
 const REPLAY = { isReplay: () => true };
 const LIVE = { isReplay: () => false };
-const cfg = (arm, over = {}) => ({ arm, exitMode: 'trail', entryPullback: 'any', minStage: 'established', ...over });
+const cfg = (arm, over = {}) => ({ arm, exitMode: 'trail', minStage: 'established', ...over });
 
 /** The 3m bars of the 514 h window closing at `hm` ET, and 1m bars made from them (each 3m bar's o, h, l, c in thirds). */
 function windowAt(day, hm) {
@@ -101,7 +101,7 @@ test('arm B with the 1m bars: the execution record (15m > 3m, 1m timing), its si
   assert.equal(ex.sideMode, 'rule');
   assert.equal(ex.side, rec.sides.parent);
   assert.equal(rec.execution.since, new Date(X.now.getTime() - 180000).toISOString());
-  assert.equal(ex.mode.entryPullback, 'any');
+  assert.deepEqual(Object.keys(ex.mode).sort(), ['arm', 'entryMode', 'exitMode', 'hierarchies', 'minStage'], 'the record\'s mode: no first-pullback key (REVIEW-3 O1)');
   const ab = build(X, { mtfMode: ME.modeOf(cfg('AB', { minStage: 'potential' }), {}, REPLAY), fineBars: X.fine });
   assert.ok(ab.sections.m3.data.mtfStructure.execution.record);
   assert.ok(ab.sections.m3.data.mtfStructure.levels.length === 3);

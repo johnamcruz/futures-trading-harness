@@ -967,7 +967,6 @@
   "mtfEntry.arm": { "value": "D", "from": "new in feat/p1-mtf-entries (the MTF entry arm: D is today's behaviour; A, B, AB the replay arms, trading/mtf-entry.js ARMS)" },
   "mtfEntry.exitMode": { "value": "trail", "from": "new in feat/p1-mtf-entries (trail: today's exit; prev_high_or_trail: the owner's previous-high exit on MTF entries)" },
   "mtfEntry.minStage": { "value": "established", "from": "new in feat/p1-mtf-entries (the earliest stage a ready may fire at: established, the module's own; developing or potential: an early aligned timing CHoCH or CISD, its origin the stop)" },
-  "mtfEntry.entryPullback": { "value": "any", "from": "new in feat/p1-mtf-entries (any: every ranked pullback may be entered; first: only #1 of its 1h leg)" },
   "mtfEntry.models": { "value": ["aggressive", "balanced", "conservative"], "from": "new in feat/p1-mtf-entries (the owner's MTF spec: the entry models that may become candidates; balanced is the default reading, aggressive and conservative when enabled; a model not listed never becomes a candidate)" },
   "account.snapshotMaxAgeMs": {
    "value": 600000,

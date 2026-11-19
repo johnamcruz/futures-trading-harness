@@ -54,7 +54,7 @@ test('the items cannot drift: every MTF line an item prints is the REAL briefing
   const B = require('../../scripts/lib/trading/briefing');
   const ME = require('../../scripts/lib/trading/mtf-entry');
   const DOC = JSON.parse(zlib.gunzipSync(fs.readFileSync(path.join(ROOT, 'tests', 'fixtures', 'goal', 'bars.json.gz'))));
-  const mode = ME.modeOf({ arm: 'A', exitMode: 'prev_high_or_trail', entryPullback: 'any', minStage: 'potential' }, {}, { isReplay: () => true });
+  const mode = ME.modeOf({ arm: 'A', exitMode: 'prev_high_or_trail', minStage: 'potential' }, {}, { isReplay: () => true });
   const et = ms => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(ms)).replace(',', '');
   const wanted = new Set(qs.flatMap(q => [...q.text.matchAll(/\((?:real, )?(\d{4}-\d\d-\d\d \d\d:\d\d) ET/g)].map(m => m[1])));
   const at = new Map();

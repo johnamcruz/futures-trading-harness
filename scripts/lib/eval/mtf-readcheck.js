@@ -30,7 +30,7 @@ function probe() {
     DRIFT_R: 'the chosen candidate\'s drift past the trigger in R (a number); none without a candidate', DEPTH: 'the chosen candidate\'s depth class (shallow, moderate, deep or breached); none without a candidate', TURN: 'fresh, old turn, no turn, or none', BOS_SINCE: 'the BOS count its context gives, or none',
     IMPULSE_ATR: 'the impulse in ATR, or none', DISPLACED: 'its displacement candles, or none', CLEANNESS: 'its cleanness, or none', RANK: 'its pullback number, or none',
     STOP: 'its structural stop price, or none', PER_CONTRACT: 'its dollars a contract all in, or none',
-    WAITING: 'the waiting clause as printed, or none', VOID: 'yes if a candidate is void (stop traded, not first ...), else no', PULLBACK_DECIDED_BY: 'the frame whose line decides the pullback (15m or 3m)',
+    WAITING: 'the waiting clause as printed, or none', VOID: 'yes if a candidate is void (stop traded, ran past, too old ...), else no', PULLBACK_DECIDED_BY: 'the frame whose line decides the pullback (15m or 3m)',
   };
   return ['Read the MTF lines of this briefing and report, reason first, then one line per field, exactly "FIELD: value":', ...FIELDS.map(f => `${f}: <${ask[f]}>`)].join('\n');
 }

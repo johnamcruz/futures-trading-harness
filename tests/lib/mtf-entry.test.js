@@ -14,7 +14,7 @@ const W = require('../fixtures/mtf-structure/world');
 
 const AN = analysis();
 const OPTS = { tick: 0.25, bufferTicks: 1, equalAtr: AN.marketState.equalAtr, k: AN.indicators.swingK, depth: AN.mtfStructure.depth, warmBars: 0, hierarchy: 'intraday' };
-const CFG = (arm, over = {}) => ({ arm, exitMode: 'trail', entryPullback: 'any', minStage: 'established', ...over });
+const CFG = (arm, over = {}) => ({ arm, exitMode: 'trail', minStage: 'established', ...over });
 const REPLAY = { isReplay: () => true };
 const LIVE = { isReplay: () => false };
 const mode = (arm = 'A', over = {}) => ME.modeOf(CFG(arm, over), {}, REPLAY);
@@ -42,13 +42,12 @@ test('modeOf: the five arms; D is today; an MTF arm outside a replay is refused 
   const a = mode('A');
   assert.deepEqual([a.entryMode, a.mtf, a.refused, a.sideMode], ['mtf_only', true, null, 'parent']);
   for (const arm of ['A', 'B', 'AB']) assert.match(ME.modeOf(CFG(arm), {}, LIVE).refused, new RegExp(`arm ${arm} runs only in a replay until the owner opts in`));
-  for (const bad of [null, {}, CFG('E'), CFG('A', { minStage: 'weakening' }), CFG('A', { exitMode: 'x' }), CFG('A', { entryPullback: 'x' }), CFG('D', { minStage: 'potential' })]) {
+  for (const bad of [null, {}, CFG('E'), CFG('A', { minStage: 'weakening' }), CFG('A', { exitMode: 'x' }), CFG('D', { minStage: 'potential' })]) {
     const m = ME.modeOf(bad, {}, REPLAY);
     assert.ok(m.refused && m.mtf, JSON.stringify(bad));
   }
   assert.equal(ME.replayRun({}), false, 'no replay clock: live');
-  assert.deepEqual(ME.recordMode(a), { arm: 'A', entryMode: 'mtf_only', hierarchies: ['intraday'], exitMode: 'trail', entryPullback: 'any', minStage: 'established' });
-  assert.equal(ME.recordMode(mode('A', { entryPullback: 'first' }), { execution: true }).entryPullback, 'any', 'the execution record: first applied on the 1h rank');
+  assert.deepEqual(ME.recordMode(a), { arm: 'A', entryMode: 'mtf_only', hierarchies: ['intraday'], exitMode: 'trail', minStage: 'established' });
 });
 
 test('candidatesOf, arm A: the intraday primary\'s ready (stage, trigger, rank in the 1h leg, stop, age); the side the 1h structure\'s', () => {
@@ -84,18 +83,18 @@ test('candidatesOf, arm AB: one per side, the earliest; a tie goes to the intrad
   assert.equal(cs.chosen.long.hierarchy, 'intraday');
 });
 
-test('candidatesOf: first-only uses the 1h-leg rank (the intraday record\'s own rule; the execution one counted here); a rank not known is withheld', () => {
-  const m = mode('B', { entryPullback: 'first' });
+test('candidatesOf: the execution candidate\'s rank is counted in the 1h leg; a later pullback, or no 1h leg (rank not known), stays ready (REVIEW-3 O1: the rank is a fact, never a filter)', () => {
+  const m = mode('B');
   const rec = withExec(m, J);
   const x = ME.candidatesOf(rec, m, { price: trigOf(rec) }).list[0];
   assert.deepEqual([x.rank, x.withheld], [1, null]);
   const two = JSON.parse(JSON.stringify(rec));
   const pb = two.execution.record.levels.find(l => l.role === 'primary').pullbacks;
   pb.unshift({ at: pb[0].at, way: 'down' });
-  assert.deepEqual([ME.candidatesOf(two, m, { price: trigOf(two) }).list[0].rank, ME.candidatesOf(two, m, { price: trigOf(two) }).list[0].withheld], [2, 'not first']);
+  assert.deepEqual([ME.candidatesOf(two, m, { price: trigOf(two) }).list[0].rank, ME.candidatesOf(two, m, { price: trigOf(two) }).list[0].withheld], [2, null]);
   const noLeg = JSON.parse(JSON.stringify(rec));
   noLeg.levels.find(l => l.role === 'primary').parent.leg = null;
-  assert.equal(ME.candidatesOf(noLeg, m, { price: trigOf(noLeg) }).list[0].withheld, 'rank unknown');
+  assert.deepEqual([ME.candidatesOf(noLeg, m, { price: trigOf(noLeg) }).list[0].rank, ME.candidatesOf(noLeg, m, { price: trigOf(noLeg) }).list[0].withheld], [null, null]);
 });
 
 test('readyOf: an MTF long on the chosen candidate goes; the record carries the candidate', () => {
@@ -116,7 +115,7 @@ test('readyOf fails closed: refused mode, today, no record, unavailable, another
   no({ briefing: { sections: {} } }, /no MTF structure record/);
   no({ briefing: briefingOf({ unavailable: 'no stop rule' }) }, /MTF structure unavailable: no stop rule/);
   no({ briefing: briefingOf({ ...rec, mode: undefined }) }, /built under another entry arm/);
-  no({ mode: mode('A', { entryPullback: 'first' }) }, /built under another entry arm/);
+  no({ mode: mode('A', { exitMode: 'prev_high_or_trail' }) }, /built under another entry arm/);
   no({ mode: mode('A', { minStage: 'potential' }) }, /built under another entry arm/);
   no({ side: 'short' }, /against the 1h structure \(long only\): never against the 1h/);
   no({ side: 'up' }, /side must be long or short/);
@@ -124,7 +123,7 @@ test('readyOf fails closed: refused mode, today, no record, unavailable, another
   const lv = x => ({ ...rec, levels: rec.levels.map(l => (l.role === 'primary' ? { ...l, ...x } : l)) });
   no({ briefing: briefingOf(lv({ partial: true, entry: null })) }, /no ready MTF candidate the 1h's way \(long\)/);
   no({ briefing: briefingOf(lv({ entry: null })) }, /no ready MTF candidate the 1h's way \(long\)/);
-  for (const w of ['warning', 'stop traded', 'not first', 'rank unknown', 'against the side', 'no side']) no({ briefing: briefingOf(lv({ entryWithheld: w })) }, new RegExp(`withheld: ${w}`));
+  for (const w of ['warning', 'stop traded', 'against the side', 'no side']) no({ briefing: briefingOf(lv({ entryWithheld: w })) }, new RegExp(`withheld: ${w}`));
   no({ model: 'balanced' }, /the ready candidate is aggressive, not balanced/);
   no({ model: undefined }, /the ready candidate is aggressive, not undefined/);
   no({ briefing: briefingOf({ ...rec, levels: rec.levels.filter(l => l.role !== 'primary') }) }, /no ready MTF candidate/);
@@ -198,7 +197,6 @@ test('candidateLines: a withheld candidate is void, said plainly, one word for e
   const m = mode('A');
   const lv = x => { const r = recsOf(m)[J]; return { ...r, levels: r.levels.map(l => (l.role === 'primary' ? { ...l, ...x } : l)) }; };
   assert.deepEqual(ME.candidateLines(lv({ entryWithheld: 'stop traded', stopTraded: { et: '10:05' } }), m, { level: x => x, price: PX }).slice(0, 1), ['- MTF candidate: none ready the 1h\'s way (LONG); 3m aggressive: candidate void (stop traded).']);
-  assert.match(ME.candidateLines(lv({ entryWithheld: 'not first' }), m, { level: x => x, price: PX })[0], /3m aggressive: candidate void \(not first: #1 of this 1h leg\)\./);
 });
 
 test('candidateLines: over the budget the context\'s cleanness goes first, then the turn\'s times; the facts that decide stay', () => {
@@ -212,14 +210,14 @@ test('candidateLines: over the budget the context\'s cleanness goes first, then 
 });
 
 test('candidatesOf, execution: a POTENTIAL (not developed) takes the rank it would have, the next in the 1h leg', () => {
-  const m = mode('B', { minStage: 'potential', entryPullback: 'first' });
+  const m = mode('B', { minStage: 'potential' });
   const rec = withExec(m, J);
   const p = rec.execution.record.levels.find(l => l.role === 'primary');
   p.instance = { ...p.instance, developing: null };
   p.pullbacks = [];
   assert.deepEqual([ME.candidatesOf(rec, m, { price: trigOf(rec) }).list[0].rank, ME.candidatesOf(rec, m, { price: trigOf(rec) }).list[0].withheld], [1, null]);
   p.pullbacks = [{ at: rec.levels.find(l => l.role === 'primary').parent.leg.at, way: 'down' }];
-  assert.deepEqual([ME.candidatesOf(rec, m, { price: trigOf(rec) }).list[0].rank, ME.candidatesOf(rec, m, { price: trigOf(rec) }).list[0].withheld], [2, 'not first']);
+  assert.deepEqual([ME.candidatesOf(rec, m, { price: trigOf(rec) }).list[0].rank, ME.candidatesOf(rec, m, { price: trigOf(rec) }).list[0].withheld], [2, null]);
 });
 
 test('startProblems: an MTF arm outside a replay refuses to start; an arm reading the execution hierarchy needs the 1m data lane; today and arm A need nothing', () => {
@@ -250,13 +248,42 @@ test('replayRun : true only under a replay clock the harness accepts; FTH_REPLAY
   assert.equal(loadConfig({ FTH_HOME: home }).mtfMode.arm, 'D', 'the committed arm (today)');
 });
 
-test('an execution candidate whose 1h leg began before the 1m window has no rank (its earlier pullbacks unseen); under first it is withheld', () => {
-  const m = mode('B', { entryPullback: 'first' });
+test('loadConfig judges an MTF arm on its CALLER\'s env, never process.env (REVIEW-1 minor 8): a tree on arm A, the replay clock in one and not the other, both ways', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const { spawnSync } = require('child_process');
+  const { tmpDir, treeCopy } = require('../helpers');
+  const tree = treeCopy(tmpDir(), r => {
+    const f = path.join(r, 'config', 'runner.json');
+    const cfg = JSON.parse(fs.readFileSync(f, 'utf8'));
+    cfg.mtfEntry = { ...cfg.mtfEntry, arm: 'A' };
+    fs.writeFileSync(f, JSON.stringify(cfg, null, 2));
+  });
+  const replay = tmpDir();
+  fs.writeFileSync(path.join(replay, 'brokers.json'), JSON.stringify({ broker: 'sim', brokers: { sim: { description: 'replayed history', command: ['node', 'sim.js'], replay: true } } }));
+  const replayEnv = { FTH_HOME: replay, FTH_REPLAY_NOW: '2026-03-02T15:30:00Z' };
+  const liveEnv = { FTH_HOME: tmpDir() };
+  // The child's own process.env is one; the env handed to loadConfig is the other.
+  const probe = (processEnv, callerEnv) => {
+    const code = `const c = require(${JSON.stringify(path.join(tree, 'scripts', 'lib', 'trading', 'config'))}).loadConfig(${JSON.stringify(callerEnv)}); process.stdout.write(JSON.stringify({ arm: c.mtfMode.arm, refused: c.mtfMode.refused }));`;
+    const r = spawnSync(process.execPath, ['-e', code], { encoding: 'utf8', cwd: tree, env: { PATH: process.env.PATH, HOME: process.env.HOME, ...processEnv } });
+    assert.equal(r.status, 0, r.stderr);
+    return JSON.parse(r.stdout);
+  };
+  const a = probe(liveEnv, replayEnv);
+  assert.deepEqual(a, { arm: 'A', refused: null }, 'the caller replays, the process does not: arm A stands');
+  const b = probe(replayEnv, liveEnv);
+  assert.equal(b.arm, 'A');
+  assert.match(String(b.refused), /runs only in a replay/, 'the process replays, the caller does not: refused');
+});
+
+test('an execution candidate whose 1h leg began before the 1m window has no rank (its earlier pullbacks unseen); it stays ready, its rank printed as not known', () => {
+  const m = mode('B');
   const rec = withExec(m, J);
   const legAt = rec.levels.find(l => l.role === 'primary').parent.leg.at;
   rec.execution.record.windowStart = new Date(Date.parse(legAt) + 60000).toISOString();
   const x = ME.candidatesOf(rec, m, { price: trigOf(rec) }).list[0];
-  assert.deepEqual([x.rank, x.withheld], [null, 'rank unknown']);
+  assert.deepEqual([x.rank, x.withheld], [null, null]);
   rec.execution.record.windowStart = new Date(Date.parse(legAt) - 60000).toISOString();
   assert.equal(ME.candidatesOf(rec, m, { price: trigOf(rec) }).list[0].rank, 1);
   // The module records its window's start in an MTF arm.
