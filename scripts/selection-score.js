@@ -9,7 +9,8 @@
  *   node scripts/selection-score.js <run home> [<run home> ...] [--minutes 3] [--symbol MNQ]
  *
  * A run home is the replay's FTH_HOME (<workDir>/<runId>); its replay folder is <home>/replay/<runId> (the served bars).
- * Prints one JSON document: each run's table.
+ * Prints one JSON document: each run's table, its order counts (read, joined, orphaned; atCap: the gateway's order file
+ * at its retention cap, so earlier takes may be missing) and its rows.
  */
 
 const path = require('path');
@@ -39,7 +40,10 @@ function main(argv) {
   const runs = o.homes.map(home => {
     const runId = path.basename(path.resolve(home));
     const got = RUN.readRun({ home, runDir: path.join(home, 'replay', runId), minutes: o.minutes, symbol: o.symbol });
-    return { runId, selection: FP.pickTable(got.rows, boot), rows: got.rows.map(r => ({ key: r.key, at: r.at, state: r.state, outcome: r.outcome, firstOutcome: r.firstOutcome })) };
+    // REVIEW-4 minor 3: the orders read, joined to a candidate and orphaned, and whether the order file is at its cap (the
+    // gateway keeps the last runner.limits.entryOrdersKept: at the cap, earlier takes may be missing).
+    const atCap = got.orderCounts.read >= require('./lib/tunables').runner().limits.entryOrdersKept;
+    return { runId, selection: FP.pickTable(got.rows, boot), orders: { ...got.orderCounts, atCap }, rows: got.rows.map(r => ({ key: r.key, at: r.at, state: r.state, orders: r.orders, outcome: r.outcome, firstOutcome: r.firstOutcome })) };
   });
   return { minutes: o.minutes, runs };
 }

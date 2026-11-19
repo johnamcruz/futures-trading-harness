@@ -18,8 +18,9 @@
  *   ordersFrom(orders)             the run's MTF entry orders (entry-orders.json with the gate's mtf stamp): [{ at, bar
  *                                  (the stamp's: the bar the gate judged), side, model, instanceId, entry, stop }]
  *   candidateRows(picks, orders, ruler, { lastBar })   pickTable's rows (one per candidate)
+ *   orphanOrders(orders, rows)     the MTF orders no row took (counted in readRun's orderCounts)
  *   rulerOf(bars, minutes, symbol, { validBars, minRR, plan })   the ruler (below)
- *   readRun({ home, runDir, minutes, symbol })   { orders, picks, rows }
+ *   readRun({ home, runDir, minutes, symbol })   { orders, picks, rows, orphans, orderCounts: { read, joined, orphans } }
  */
 
 const fs = require('fs');
@@ -28,9 +29,13 @@ const { labelLines } = require('../label-line');
 
 const CAND = /^- MTF candidate (LONG|SHORT) \(chosen\): (aggressive|balanced|conservative) at stage [^,]+, trigger (\S+ \S+ \S+ \S+)[^;]*; .*?context: .*?(?:pullback #(\d+) of this 1h leg|its rank in the 1h leg not known).*?structural stop ([\d.]+)(?:: ([\d.]+) pts)?/;
 const WORD = /^\**\s*(ENTER|WAIT|PASS)\b\**\s*(?:[-–—:.,]\s*)?(.*)$/;
+// Two decisions on one line ("ENTER or WAIT", "PASS/ENTER") are none (REVIEW-4 minor 4).
+const TWO = /^\**\s*(ENTER|WAIT|PASS)\b\**\s*(?:or|\/)\s*\**\s*(ENTER|WAIT|PASS)\b/;
+// A fenced block (``` ... ```) is a quoted template, never the decision.
+const unfenced = text => String(text || '').replace(/^\s*```[^\n]*\n[\s\S]*?^\s*```[^\n]*$/gm, '');
 function selectionOf(text) {
   let out = { decision: 'UNLABELLED', reason: '' };
-  for (const l of labelLines(text, 'SELECTION')) { const m = WORD.exec(l); if (m) out = { decision: m[1], reason: m[2].replace(/^[-–—:\s]+/, '').trim() }; }
+  for (const l of labelLines(unfenced(text), 'SELECTION')) { const m = WORD.exec(l); if (m && !TWO.test(l)) out = { decision: m[1], reason: m[2].replace(/^[-–—:\s]+/, '').trim() }; }
   return out;
 }
 const decisionOf = text => selectionOf(text).decision;
@@ -73,7 +78,8 @@ const dayOf = at => require('../trading/clock').tradingDayKey(new Date(at));
 /**
  * The selection rows: one per candidate (side, model and trigger in a session: printed on consecutive bars it is one
  * candidate). Its state (selection-score.js pickTable): took when an MTF entry order was placed for it (its side and
- * model, on a bar it printed on: the gate's stamp), scored at that bar; else enterNoOrder (an ENTER and no order), scored
+ * model, on a bar it printed on: the gate's stamp), scored at that bar (two orders: the last, the limit re-placed after an
+ * expired one; `orders` counts them; the fill is not read here); else enterNoOrder (an ENTER and no order), scored
  * at its first ENTER; else passed (a PASS, or a WAIT it outlived), waited (a WAIT still open at the run's last bar) or
  * unlabelled, scored at its first print. `outcome` is the ruler's at the scored bar; `firstOutcome` the first print's.
  */
@@ -83,15 +89,19 @@ function candidateRows(picks, orders, ruler, { lastBar = null } = {}) {
   return [...groups.entries()].map(([key, ps]) => {
     const list = ps.slice().sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
     const last = list[list.length - 1];
-    const order = (orders || []).find(o => o.side === list[0].side && o.model === list[0].model && list.some(p => p.at === o.bar)) || null;
+    const mine = (orders || []).filter(o => o.side === list[0].side && o.model === list[0].model && list.some(p => p.at === o.bar));
+    const order = mine.length ? mine[mine.length - 1] : null;
     const enter = list.find(p => p.decision === 'ENTER') || null;
     const state = order ? 'took' : enter ? 'enterNoOrder'
       : list.some(p => p.decision === 'PASS') ? 'passed'
         : last.decision === 'WAIT' ? (lastBar && Date.parse(last.at) >= Date.parse(lastBar) ? 'waited' : 'passed') : 'unlabelled';
     const scored = order ? list.find(p => p.at === order.bar) : enter || list[0];
-    return { key, day: dayOf(list[0].at), side: list[0].side, model: list[0].model, first: list[0].at, at: scored.at, state, order, outcome: ruler(scored), firstOutcome: ruler(list[0]) };
+    return { key, day: dayOf(list[0].at), side: list[0].side, model: list[0].model, first: list[0].at, at: scored.at, state, order, orders: mine.length, orderList: mine, outcome: ruler(scored), firstOutcome: ruler(list[0]) };
   });
 }
+
+/** The MTF orders no candidate row took (REVIEW-4 minor 3): counted and reported, never silently dropped. */
+const orphanOrders = (orders, rows) => (orders || []).filter(o => !(rows || []).some(r => (r.orderList || []).includes(o)));
 
 // The head trader's final text (its result: the SELECTION line stands before the CYCLE RESULT line), by its harness;
 // a record without a transcript: its result line. Read only.
@@ -133,7 +143,8 @@ function rulerOf(bars, minutes, symbol, { validBars, minRR, plan } = {}) {
     if (!(s * (bar.c - p.stop) > 0)) return null;
     const run = entry => limitOutcome({ bars: list, tfMs, side: p.side, entry, stop: p.stop, target: entry + minRR * (entry - p.stop), fromMs: at, expiresMs: at + validBars * tfMs, eodMs: clock.eodOf(at), tick, plan });
     let o = run(bar.c);
-    if (o.filled === false) return { R: 0, points: 0, filled: false };
+    // REVIEW-4 minor 5: unfilled is a no-trade only when the whole window was served; else it is unknown.
+    if (o.filled === false) return list.some(b => b.ms + tfMs >= at + validBars * tfMs) ? { R: 0, points: 0, filled: false } : null;
     // A better fill: the same limit at the fill price fills on the same bar, its brackets from the structural stop.
     if (o.filled && Number.isFinite(o.entryPrice) && Math.abs(o.entryPrice - bar.c) >= tick / 2) o = run(o.entryPrice);
     if (!o.filled || !Number.isFinite(o.R)) return null;
@@ -153,7 +164,9 @@ function readRun({ home, runDir, minutes, symbol = null }) {
   const P = bars.length ? require('../eval/goal-trades').shippedOf(path.resolve(__dirname, '..', '..', '..'), {}) : null;
   const ruler = P ? rulerOf(bars, minutes, symbol, { validBars: P.validBars, minRR: P.minRR, plan: P.exit.plan }) : () => null;
   const lastBar = cycles.length ? barOf(cycles[cycles.length - 1], tfMs) : null;
-  return { orders, picks, rows: candidateRows(picks, orders, ruler, { lastBar }) };
+  const rows = candidateRows(picks, orders, ruler, { lastBar });
+  const orphans = orphanOrders(orders, rows);
+  return { orders, picks, rows, orphans, orderCounts: { read: orders.length, joined: orders.length - orphans.length, orphans: orphans.length } };
 }
 
-module.exports = { selectionOf, decisionOf, barOf, picksFrom, ordersFrom, candidateRows, rulerOf, readRun };
+module.exports = { selectionOf, decisionOf, barOf, picksFrom, ordersFrom, candidateRows, orphanOrders, rulerOf, readRun };

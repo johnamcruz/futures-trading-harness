@@ -171,4 +171,63 @@ test('the CLI (scripts/selection-score.js): its arguments; each run\'s pick tabl
   cycle(h, '2026-10-07T14:15:02Z', { prompt: LINE(), transcript: claude('no label') });
   const r = CLI.main([h]);
   assert.deepEqual([r.runs[0].selection.candidates, r.runs[0].selection.unlabelled, r.runs[0].rows[0].state], [1, 1, 'unlabelled']);
+  assert.deepEqual(r.runs[0].orders, { read: 0, joined: 0, orphans: 0, atCap: false });
+});
+
+test('selectionOf (REVIEW-4 minor 4): a line inside a fenced block is none; two decisions on one line are none', () => {
+  assert.equal(R.decisionOf('SELECTION: PASS - a\n```\nSELECTION: ENTER - <reason>\n```'), 'PASS', 'a fenced template never counts');
+  assert.equal(R.decisionOf('```text\nSELECTION: ENTER - x\n```'), 'UNLABELLED');
+  assert.equal(R.decisionOf('SELECTION: ENTER or WAIT - unsure'), 'UNLABELLED');
+  assert.equal(R.decisionOf('SELECTION: PASS/ENTER'), 'UNLABELLED');
+  assert.equal(R.decisionOf('SELECTION: PASS - or later, perhaps'), 'PASS', 'a reason may say "or"');
+});
+
+test('candidateRows (REVIEW-4 minor 3 and 6): an order on the other side is not the take; two orders for one candidate score at the last (the re-placed limit) and are counted; WAIT then ENTER with no order scores at the ENTER bar', () => {
+  const at = m => `2026-10-07T14:${m}:00.000Z`;
+  const p = (m, o) => ({ at: at(m), side: 'long', model: 'aggressive', trigger: 't', stop: 100, ...o });
+  const ruler = x => ({ R: Number(x.at.slice(14, 16)), points: 1, filled: true });
+  const short = R.candidateRows([p('15', { decision: 'ENTER' })], [{ bar: at('15'), side: 'short', model: 'aggressive' }], ruler);
+  assert.equal(short[0].state, 'enterNoOrder');
+  const two = R.candidateRows([p('15', { decision: 'ENTER' }), p('18', { decision: 'ENTER' }), p('21', { decision: 'WAIT' })], [{ bar: at('15'), side: 'long', model: 'aggressive' }, { bar: at('21'), side: 'long', model: 'aggressive' }], ruler);
+  assert.deepEqual([two[0].state, two[0].at, two[0].orders], ['took', at('21'), 2]);
+  const placed = [{ bar: at('15'), side: 'long', model: 'aggressive' }, { bar: at('30'), side: 'long', model: 'aggressive' }];
+  const rows2 = R.candidateRows([p('15', { decision: 'ENTER' })], placed, ruler);
+  const waitEnter = R.candidateRows([p('15', { decision: 'WAIT' }), p('18', { decision: 'ENTER' })], [], ruler);
+  assert.deepEqual([waitEnter[0].state, waitEnter[0].at, waitEnter[0].outcome.R], ['enterNoOrder', at('18'), 18]);
+  // the orders no candidate printed are returned apart (readRun counts them)
+  assert.deepEqual(R.orphanOrders(placed, rows2).map(o => o.bar), [at('30')]);
+});
+
+test('readRun (REVIEW-4 minor 6): a WAIT still open at the run\'s last cycle is waited; a harness without a parser, or a record with no text, is read from its own output, never the prompt; orders read, joined and orphaned are counted', () => {
+  const h = home();
+  cycle(h, '2026-10-07T14:15:02Z', { prompt: LINE(), transcript: claude('SELECTION: WAIT - not yet') });
+  let r = R.readRun({ home: h, runDir: path.join(h, 'nothing'), minutes: 3, symbol: 'MNQ' });
+  assert.equal(r.rows[0].state, 'waited');
+  const g = home();
+  cycle(g, '2026-10-07T14:15:02Z', { prompt: `${LINE()}\nSELECTION: ENTER - the prompt's`, transcript: 'SELECTION: PASS - the custom harness said so', harness: 'custom' });
+  cycle(g, '2026-10-07T14:18:02Z', { prompt: `${LINE({ et: '10:15' })}\nSELECTION: ENTER - the prompt's`, transcript: '', harness: 'claude' });
+  fs.writeFileSync(path.join(g, 'entry-orders.json'), JSON.stringify([{ at: '2026-10-07T15:00:20.000Z', side: 'buy', composed: { mtf: { bar: '2026-10-07T15:00:00.000Z', model: 'aggressive' } } }]));
+  r = R.readRun({ home: g, runDir: path.join(g, 'nothing'), minutes: 3, symbol: 'MNQ' });
+  assert.deepEqual(r.picks.map(x => x.decision), ['PASS', 'UNLABELLED']);
+  assert.deepEqual(r.orderCounts, { read: 1, joined: 0, orphans: 1 });
+});
+
+test('rulerOf (REVIEW-4 minor 5, 6): a limit whose valid_bars window runs past the served bars is unknown (null), never an unfilled 0R; the trade is flat at the end of day; the trail is armed at the minRR mark', () => {
+  const T = m => new Date(Date.parse('2026-10-07T13:30:00Z') + m * 60000).toISOString();
+  const bar = (m, o, h, l, c) => ({ t: T(m), o, h, l, c, v: 100 });
+  // the print at 13:33 (100); the next bar never comes back to 100 and the bars end there
+  const short = [bar(0, 99, 101, 98, 100), bar(3, 102, 103, 101, 102)];
+  assert.equal(R.rulerOf(short, 3, 'MNQ', SHIPPED)({ at: T(3), side: 'long', stop: 95 }), null, 'one bar served of the two the limit stands');
+  // a steady rise from 13:30 to 21:00 UTC: filled at 100 on the bar after the print, flat at the end of day (19:50 UTC), never later
+  const up = Array.from({ length: 150 }, (_, i) => { const b = 99 + i * 0.5; return bar(i * 3, b, b + 1, i === 1 ? 99.5 : b - 0.25, b + 0.5); });
+  const o = R.rulerOf(up, 3, 'MNQ', SHIPPED)({ at: T(3), side: 'long', stop: 95 });
+  assert.ok(o && o.filled && Number.isFinite(o.R), JSON.stringify(o));
+  const eodClose = up.find(b => b.t === '2026-10-07T19:48:00.000Z').c; // the bar whose close is the first at or after 19:50 UTC (15:50 ET)
+  assert.ok(o.R <= (eodClose - o.fill) / (o.fill - 95) + 1e-6, `flat by the end of day: ${o.R}`);
+  // a move to +1.6R that turns back: at a 1R mark the trail would have banked it; at the minRR (2R) mark it rides to the stop
+  const turn = [bar(0, 99, 101, 98, 100), bar(3, 100, 100.5, 99.75, 100.25), bar(6, 100.25, 108, 100, 107.5), bar(9, 107.5, 107.75, 94, 94.5), bar(12, 94.5, 95, 93, 93.5)];
+  assert.ok(SHIPPED.minRR >= 2);
+  const t = R.rulerOf(turn, 3, 'MNQ', SHIPPED)({ at: T(3), side: 'long', stop: 95 });
+  const t1 = R.rulerOf(turn, 3, 'MNQ', { ...SHIPPED, minRR: 1 })({ at: T(3), side: 'long', stop: 95 });
+  assert.notDeepEqual(t, t1, 'the mark that arms the trail is the shipped minRR');
 });
