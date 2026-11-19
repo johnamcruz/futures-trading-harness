@@ -19,7 +19,7 @@ const ITEMS = require('../fixtures/quiz/mtf-entry-items.json');
 const qs = ITEMS.questions;
 
 test('the mtf-entry items: about 37 (the facts the selection reads, the selection rules and the reading lessons), each valid, asked with mtf-entry looked up, each anchor in its prompt, each answer anchored on present skill text', () => {
-  assert.ok(qs.length >= 45 && qs.length <= 50, String(qs.length));
+  assert.ok(qs.length >= 48 && qs.length <= 50, String(qs.length));
   assert.deepEqual(qs.map(q => q.id), qs.map((_, i) => `me${i + 1}`));
   const gated = Q.loadQuiz().value;
   const ids = new Set();
@@ -44,6 +44,8 @@ test('the mtf-entry items: about 37 (the facts the selection reads, the selectio
   // The reading lessons (the six-morning replays and the pick evaluation, 2026-11-19): one item each, on the lesson's text.
   // The reading audit (2026-11-19, E2-E5): the 1h structure's side, the (early) candidate, the candidate's own stage, the class.
   for (const re of [/for a candidate the side is the 1h structure's/, /no 15m turn is needed/, /not the primary line's or a context line's/, /never cite the class as a rule/]) assert.ok(qs.some(q => re.test(q.anchor)), String(re));
+  // The audit's unreliable-pattern errors (STALE, DRIFT, NOT_READY), each with an item.
+  for (const re of [/a trigger over 60 minutes old, or from an earlier session, is void too/, /Once any close since the trigger was over 0\.5R the candidate is void for good/, /a printed candidate is READY/]) assert.ok(qs.some(q => re.test(q.anchor)), String(re));
   for (const re of [/the SELECTION line is the one that counts/, /the candidate line is the setup/, /compose again with the MTF reads only/, /Negative: the price is back toward the stop/, /A 1m candidate is timed by its 1m trigger/, /it fired inside the bar that just closed/, /does not refuse a verified MTF candidate/, /The Market state class describes the market/]) assert.ok(qs.some(q => re.test(q.anchor)), String(re));
 });
 

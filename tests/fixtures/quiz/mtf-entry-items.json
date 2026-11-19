@@ -810,6 +810,60 @@
     "PASS - the stages conflict: not ready"
    ],
    "answer": "any of ENTER, WAIT or PASS, with a reason from the candidate's own facts: that line is not a refusal of it"
+  },
+  {
+   "id": "me46",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "mtf-entry"
+   ],
+   "text": "Briefing lines (real, 2023-05-01 10:12 ET), flat:\n- MTF structure 1h > 15m (primary): stage POTENTIAL. 1h structure DOWN (its break record; the Bias line reads the 1h up: in this entry mode the side is the 1h structure's), 1h protected high 16369.25 (the origin of the last 1h break) holds on 1h closes. 15m pullback against the 1h: NONE yet (only a 3m CHoCH up 09:51 against the 1h; no 15m break up yet). 3m turning back DOWN: 10:06. Entry: on the MTF candidate lines.\n- MTF candidate SHORT (chosen): aggressive at stage POTENTIAL (early), trigger 3m CISD down 10:06 (6 min ago); drift 0.04R past the trigger; context: fresh turn (this session): 1h CHoCH down 05:00, no BOS down yet; 0 BOS since the turn; impulse 2.29 ATR in 12 bars, 1 displacement candle, cleanness 0.18; pullback #1 of this 1h leg; depth not known; structural stop 16309.75: 11.75 pts, $24.74 a contract all in; the $300 cap fits 12; 4h structure UP (context).\nThe chosen candidate's trigger fired \"6 min ago\". Which SELECTION reason reads the line right?",
+   "rule": "a trigger under 60 minutes old, drift under 0.5R since, is current: its age is a fact to weigh, not staleness",
+   "anchor": "a trigger over 60 minutes old, or from an earlier session, is void too",
+   "choices": [
+    "PASS - stale: the trigger fired 6 minutes ago, before this bar",
+    "any of ENTER, WAIT or PASS, with a reason from the candidate's own facts: that line is not a refusal of it",
+    "WAIT - for a fresh trigger this bar",
+    "PASS - the trigger is not new this bar: void"
+   ],
+   "answer": "any of ENTER, WAIT or PASS, with a reason from the candidate's own facts: that line is not a refusal of it"
+  },
+  {
+   "id": "me47",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "mtf-entry"
+   ],
+   "text": "Briefing lines (real, 2023-05-01 10:09 ET), flat:\n- MTF structure 1h > 15m (primary): stage POTENTIAL. 1h structure DOWN (its break record; the Bias line reads the 1h up: in this entry mode the side is the 1h structure's), 1h protected high 16369.25 (the origin of the last 1h break) holds on 1h closes. 15m pullback against the 1h: NONE yet (only a 3m CHoCH up 09:51 against the 1h; no 15m break up yet). 3m turning back DOWN: 10:06. Entry: on the MTF candidate lines.\n- MTF candidate SHORT (chosen): aggressive at stage POTENTIAL (early), trigger 3m CISD down 10:06 (3 min ago); drift 0.47R past the trigger; context: fresh turn (this session): 1h CHoCH down 05:00, no BOS down yet; 0 BOS since the turn; impulse 2.29 ATR in 12 bars, 1 displacement candle, cleanness 0.18; pullback #1 of this 1h leg; depth not known; structural stop 16309.75: 16.5 pts, $34.24 a contract all in; the $300 cap fits 8; 4h structure UP (context).\nThe chosen candidate reads \"drift 0.47R past the trigger\". Which SELECTION reason reads the line right?",
+   "rule": "void only once a close since the trigger was over 0.5R; 0.47R is under it: the candidate stands",
+   "anchor": "Once any close since the trigger was over 0.5R the candidate is void for good",
+   "choices": [
+    "PASS - the price ran past the trigger: the candidate is void",
+    "any of ENTER, WAIT or PASS, with a reason from the candidate's own facts: that line is not a refusal of it",
+    "PASS - drift over 0.25R: chasing",
+    "WAIT - until the drift is back to 0R"
+   ],
+   "answer": "any of ENTER, WAIT or PASS, with a reason from the candidate's own facts: that line is not a refusal of it"
+  },
+  {
+   "id": "me48",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "mtf-entry"
+   ],
+   "text": "Briefing lines (real, 2023-04-28 11:36 ET), flat:\n- MTF structure 1h > 15m (primary): stage CONFIRMED REVERSAL. 1h structure UP, 1h protected low 15970.75 (the origin of the last 1h break) holds on 1h closes (1h CHoCH down at 16188: a warning, not a reversal). 15m pullback against the 1h: DOWN, now over on the 15m: a 15m close 16218 above its protected high 16209.75 at 09:15; price back UP with the 1h; the 1h impulse high 16332 not yet broken. Entry: on the MTF candidate lines.\n- MTF candidate LONG (chosen): conservative at stage CONFIRMED REVERSAL, trigger 3m BOS up 11:33 (3 min ago); drift -0.21R past the trigger; context: fresh turn (the previous session): 1h CHoCH up 04-27 09:00, BOS up 04-27 09:00; 1 BOS since the turn; impulse 12.33 ATR in 41 bars, 7 displacement candles, cleanness 0.33; pullback #2 of this 1h leg; depth 45% (moderate): the stop 24.75 pts away, the impulse extreme 102.5 pts away; structural stop 16204.75: 24.75 pts, $50.74 a contract all in; the $300 cap fits 5; previous high 16332 (the exit target), 4.14R; 4h structure UP (context).\nThe context line (15m > 3m) reads stage NONE. Which SELECTION reason reads these lines right?",
+   "rule": "a printed candidate is READY; a context line's stage does not make it unready",
+   "anchor": "a printed candidate is READY",
+   "choices": [
+    "PASS - not ready: the 15m > 3m context line reads stage NONE",
+    "any of ENTER, WAIT or PASS, with a reason from the candidate's own facts: that line is not a refusal of it",
+    "WAIT - until the context line prints a stage",
+    "PASS - no 3m pullback: nothing is ready"
+   ],
+   "answer": "any of ENTER, WAIT or PASS, with a reason from the candidate's own facts: that line is not a refusal of it"
   }
  ]
 }

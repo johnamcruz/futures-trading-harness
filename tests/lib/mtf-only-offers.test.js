@@ -122,10 +122,10 @@ test('the reading audit (E1): in an MTF arm the Trend rule line drops its refusa
     assert.equal(rule, dRule.replace(/; no (long|short) against it\.$/, '.'), arm);
     assert.doesNotMatch(lineOf(t, /^- Bias: /), /refused/, arm);
     // The 3m detail's trendRule field too: no refusal clause anywhere in an MTF arm's briefing.
-    assert.equal(lineOf(t, /^  trendRule: /), lineOf(d, /^  trendRule: /).replace(/; no (long|short) against it\.$/, '.'), arm);
+    assert.equal(lineOf(t, /^ {2}trendRule: /), lineOf(d, /^ {2}trendRule: /).replace(/; no (long|short) against it\.$/, '.'), arm);
     assert.doesNotMatch(t, /no (long|short) against it/, arm);
   }
-  assert.match(lineOf(d, /^  trendRule: /), /; no (long|short) against it\.$/, 'arm D: the detail keeps it');
+  assert.match(lineOf(d, /^ {2}trendRule: /), /; no (long|short) against it\.$/, 'arm D: the detail keeps it');
   assert.equal(require('../../scripts/lib/trading/mtf-entry').mtfBiasText('Bias: long only (4h up, 1h up; short refused)'), 'Bias: long only (4h up, 1h up)');
   // The cycle prompt's bar line (the record for the gate) carries the same fence in an MTF arm, none in arm D.
   const { prompts, validateConfig } = require('../../scripts/lib/autotrader');
