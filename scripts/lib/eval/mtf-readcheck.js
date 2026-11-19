@@ -74,7 +74,10 @@ function grade(answer, exp) {
     const vals = got[f] || [];
     const want = exp[f];
     const last = vals.length ? clean(vals[vals.length - 1]) : null;
-    const one = last === null ? [] : [f === 'WAITING' ? last.replace(/^-?\s*mtf waiting:\s*/, '') : last];
+    let one = last === null ? [] : [f === 'WAITING' ? last.replace(/^-?\s*mtf waiting:\s*/, '') : last];
+    // A candidate whose depth is not printed ("depth not known"): "unknown" or "not known" says what the line says, and
+    // reads as none (a post-hoc normalisation after the final Part B, the coordinator's ruling; DEPTH only).
+    if (f === 'DEPTH' && want === 'none' && exp.READY && exp.READY !== 'none' && one.length && /^(unknown|not known)$/.test(one[0])) one = ['none'];
     // A free-text field (the waiting clause) is compared whole: its own words ("CHoCH or CISD") are no hedge.
     let ok = one.length === 1 && (f === 'WAITING' || !HEDGE.test(one[0]));
     if (ok) {

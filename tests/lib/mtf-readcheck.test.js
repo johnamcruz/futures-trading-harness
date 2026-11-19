@@ -120,3 +120,15 @@ test('the read check grades a number with its own unit ("0R", "0 min"); the cand
   assert.deepEqual(Object.values(RC.grade(report, exp).fields).filter(x => !x.ok).map(x => x.field), []);
   for (const f of ['TRIGGER_AGE', 'DRIFT_R', 'DEPTH']) assert.match(RC.probe(), new RegExp(`${f}: <the chosen candidate.*none without a candidate>$`, 'm'), f);
 });
+
+test('DEPTH on a candidate whose depth is not printed ("depth not known"): unknown or not known reads as none (a post-hoc normalisation, the coordinator\'s ruling after Part B); with no candidate, or any other field, it stays a miss; no DEPTH line stays a miss', () => {
+  const exp = { SIDE: 'long', READY: 'aggressive', DEPTH: 'none' };
+  const line = v => `SIDE: long\nREADY: aggressive\nDEPTH: ${v}`;
+  for (const v of ['unknown', 'not known', 'Unknown.', '**not known**']) assert.equal(RC.grade(line(v), exp).fields.DEPTH.ok, true, v);
+  assert.equal(RC.grade(line('none'), exp).fields.DEPTH.ok, true);
+  assert.equal(RC.grade(line('moderate'), exp).fields.DEPTH.ok, false);
+  assert.equal(RC.grade(line('unclear'), exp).fields.DEPTH.ok, false);
+  assert.equal(RC.grade('SIDE: long\nREADY: aggressive', exp).fields.DEPTH.ok, false, 'no DEPTH line');
+  assert.equal(RC.grade(line('unknown'), { ...exp, READY: 'none' }).fields.DEPTH.ok, false, 'no candidate: none is the answer');
+  assert.equal(RC.grade('READY: aggressive\nRANK: unknown', { READY: 'aggressive', RANK: 'none' }).fields.RANK.ok, false, 'only DEPTH');
+});
