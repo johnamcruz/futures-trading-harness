@@ -58,7 +58,7 @@ function modeOf(cfg, env = process.env, { isReplay = replayRun } = {}) {
   if (!arm || !Object.prototype.hasOwnProperty.call(ARMS, cfg.arm)) return bad(`arm ${JSON.stringify(cfg.arm)} is not one of ${Object.keys(ARMS).join(', ')}`);
   if (!EXIT_MODES.includes(cfg.exitMode)) return bad(`exitMode ${JSON.stringify(cfg.exitMode)} is not one of ${EXIT_MODES.join(', ')}`);
   if (!MIN_STAGES.includes(cfg.minStage)) return bad(`minStage ${JSON.stringify(cfg.minStage)} is not one of ${MIN_STAGES.join(', ')}`);
-  // The owner's MTF spec: the entry models that may become candidates (balanced the default reading); the loader requires
+  // The owner's MTF spec: the entry models that may become candidates (no default model); the loader requires
   // the key, a caller without it means all three.
   const models = cfg.models === undefined ? [...MODELS] : cfg.models;
   if (!Array.isArray(models) || !models.length || !models.every(x => MODELS.includes(x)) || new Set(models).size !== models.length) return bad(`models ${JSON.stringify(cfg.models)} must list some of ${MODELS.join(', ')}, each once`);

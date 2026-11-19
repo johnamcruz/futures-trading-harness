@@ -134,7 +134,7 @@ test('tunables: the MTF entry arm (runner.mtfEntry, P1) loads with today\'s defa
   assert.throws(at({ exitMode: 'target' }), /mtfEntry\.exitMode: one of trail, prev_high_or_trail/);
   // REVIEW-3 O1: no first-pullback rule (the rank is a fact, not a preference); the old key is refused like any unknown one.
   assert.throws(at({ entryPullback: 'first' }), /mtfEntry\.entryPullback: not a known key/);
-  // The owner's spec: the entry models (all three by default; balanced the default reading); some of the three, each once.
+  // The owner's spec: the entry models (all three by default, none preferred); some of the three, each once.
   assert.deepStrictEqual(at({ arm: 'B', models: ['balanced'] })().mtfEntry.models, ['balanced']);
   assert.throws(at({ models: [] }), /mtfEntry\.models/);
   assert.throws(at({ models: ['eager'] }), /mtfEntry\.models/);

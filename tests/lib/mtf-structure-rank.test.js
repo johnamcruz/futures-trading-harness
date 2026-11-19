@@ -1,7 +1,7 @@
 'use strict';
 
 // P1 (feat/p1-mtf-entries): the pullback's rank in its parent leg (mtf-structure.js levelSeries), the MTF entry mode's
-// record fields (entry origin, target, rank) and withheld reasons (`not first`, `rank unknown`), and the mode's line
+// record fields (entry origin, target, rank) and withheld reasons (no first-pullback rule: the rank is a fact), and the mode's line
 // clauses. The rank counts the instances that reached DEVELOPING (a setup CHoCH against the parent: a real setup-frame
 // pullback) since the parent's last break the side's way; a new parent BOS the side's way, or the break that turned the
 // parent (turn-confirmed, or a CHoCH promoted after the old protected swing broke), resets it. Causal: a prefix of the
