@@ -694,7 +694,7 @@
    ],
    "text": "Briefing lines (real, 2023-05-01 10:06 ET), flat:\n- MTF structure 1h > 15m (primary): stage POTENTIAL. 1h structure DOWN (its break record; the Bias line reads the 1h up: in this entry mode the side is the 1h structure's), 1h protected high 16369.25 (the origin of the last 1h break) holds on 1h closes. 15m pullback against the 1h: NONE yet (only a 3m CHoCH up 09:51 against the 1h; no 15m break up yet). 3m turning back DOWN: 10:06. Entry: on the MTF candidate lines.\n- MTF candidate SHORT (chosen): aggressive at stage POTENTIAL (early), trigger 3m CISD down 10:06 (new this bar); ran 0R past the trigger; context: 1h turn (this session): 1h CHoCH down 05:00, no BOS down yet; 0 BOS since the turn; impulse 2.29 ATR in 12 bars, 1 displacement candle, cleanness 0.18; pullback #1 of this 1h leg; depth not known; structural stop 16309.75: 11.25 pts, $23.74 a contract all in; the $300 cap fits 12; 4h structure UP (context).\nThe primary line's 15m pullback reads NONE yet (no 15m break up) and the chosen candidate is (early). Does it need a 15m turn before it is eligible?",
    "rule": "an (early) candidate is eligible: no 15m turn is needed; trade-session's pullback setup (wait for the 15m turn) is arm D's",
-   "anchor": "no 15m turn and no 3m trigger rule apply",
+   "anchor": "the 15m-turn rule and the 3m-trigger rule do not apply",
    "choices": [
     "no: an (early) candidate is eligible; no 15m turn is needed (waiting for the 15m turn is arm D's)",
     "yes: wait for the 15m turn first",
@@ -784,7 +784,7 @@
    ],
    "text": "Briefing lines (real, 2023-05-01 10:06 ET), flat:\n- MTF structure 1h > 15m (primary): stage POTENTIAL. 1h structure DOWN (its break record; the Bias line reads the 1h up: in this entry mode the side is the 1h structure's), 1h protected high 16369.25 (the origin of the last 1h break) holds on 1h closes. 15m pullback against the 1h: NONE yet (only a 3m CHoCH up 09:51 against the 1h; no 15m break up yet). 3m turning back DOWN: 10:06. Entry: on the MTF candidate lines.\n- MTF candidate SHORT (chosen): aggressive at stage POTENTIAL (early), trigger 3m CISD down 10:06 (new this bar); ran 0R past the trigger; context: 1h turn (this session): 1h CHoCH down 05:00, no BOS down yet; 0 BOS since the turn; impulse 2.29 ATR in 12 bars, 1 displacement candle, cleanness 0.18; pullback #1 of this 1h leg; depth not known; structural stop 16309.75: 11.25 pts, $23.74 a contract all in; the $300 cap fits 12; 4h structure UP (context).\nWhich SELECTION reason reads these lines right?",
    "rule": "an (early) candidate is eligible; no 15m turn is needed",
-   "anchor": "no 15m turn and no 3m trigger rule apply",
+   "anchor": "the 15m-turn rule and the 3m-trigger rule do not apply",
    "choices": [
     "WAIT - no 15m turn yet: wait for the 15m to turn",
     "any of ENTER, WAIT or PASS, with a reason from the candidate's own facts: that line is not a refusal of it",
@@ -856,7 +856,7 @@
    ],
    "text": "Briefing lines (real, 2023-04-28 11:36 ET), flat:\n- MTF structure 1h > 15m (primary): stage CONFIRMED REVERSAL. 1h structure UP, 1h protected low 15970.75 (the origin of the last 1h break) holds on 1h closes (1h CHoCH down at 16188: a warning, not a reversal). 15m pullback against the 1h: DOWN, now over on the 15m: a 15m close 16218 above its protected high 16209.75 at 09:15; price back UP with the 1h; the 1h impulse high 16332 not yet broken. Entry: on the MTF candidate lines.\n- MTF candidate LONG (chosen): conservative at stage CONFIRMED REVERSAL, trigger 3m BOS up 11:33 (3 min ago); 0.21R back toward the stop; context: 1h turn (the previous session): 1h CHoCH up 04-27 09:00, BOS up 04-27 09:00; 1 BOS since the turn; impulse 12.33 ATR in 41 bars, 7 displacement candles, cleanness 0.33; pullback #2 of this 1h leg; depth 45% (moderate): the stop 24.75 pts away, the impulse extreme 102.5 pts away; structural stop 16204.75: 24.75 pts, $50.74 a contract all in; the $300 cap fits 5; previous high 16332 (the exit target), 4.14R; 4h structure UP (context).\nThe context line (15m > 3m) reads stage NONE. Which SELECTION reason reads these lines right?",
    "rule": "a printed candidate is READY; a context line's stage does not make it unready",
-   "anchor": "READY: eligible to select",
+   "anchor": "it is eligible to select",
    "choices": [
     "PASS - not ready: the 15m > 3m context line reads stage NONE",
     "any of ENTER, WAIT or PASS, with a reason from the candidate's own facts: that line is not a refusal of it",

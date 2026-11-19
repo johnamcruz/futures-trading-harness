@@ -1076,10 +1076,12 @@ function summaryLines(b, et) {
   if (declared) out.push(declared);
   // The base timeframe's timing against the side the entry rule allows (ltf-timing.js timingLine).
   const timing = timingLine(m3.timing, et, tf);
-  if (timing) out.push(timing);
+  // The cold read (finding 2, 6): in an MTF arm the timing and Pullback lines are arm D's facts, labelled so.
+  const ctx = l => (mtfOnlyOf(m3) && l ? l.replace(/^- ([^:(]+?) ?\(/, '- $1 (arm D context: ').replace(/^- (Pullback|[0-9]+m timing) (?!\()/, '- $1 (arm D context) ') : l);
+  if (timing) out.push(ctx(timing));
   // Price against the prevailing side on the 15m: the leg, its depth, swings, counter-move and breaks (pullback-read.js).
   const pullback = own ? null : pullbackLine(m3.pullback);
-  if (pullback) out.push(pullback);
+  if (pullback) out.push(ctx(pullback));
   // The setup moment (learning/setup-moments.js): the reactions the model composes on, said as facts.
   // And the briefing's own setups on an allowed side (setupChecks: a compression break, a live CISD) on the same line;
   // the standard plan below stays the setup moment's.

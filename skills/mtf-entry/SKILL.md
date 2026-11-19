@@ -10,11 +10,13 @@ description: An MTF entry arm (replay only) - select among code-surfaced valid p
 - The briefing prints `- MTF candidate` lines: an MTF entry arm is on (a replay;
   `config/runner.json` `mtfEntry`). Read with `bos-vs-choch` (the MTF lines) and
   `pullback-vs-reversal`.
-- No candidate lines: this skill does not apply; today's entry rules do.
+- No candidate lines in an MTF arm: no entry this bar (only MTF entries go).
+- Arm D means the default (non-MTF) entry rules. Arm A: parent 1h, pullback 15m,
+  trigger 3m. Arm B: parent 15m, pullback 3m, trigger 1m.
 
 ## How It Works
 
-**Objective:** enter valid trends during structurally confirmed pullbacks and capture
+**Objective:** enter trends on code-surfaced pullback candidates and capture
 continuation with the existing trailing exit. The structure engine establishes
 observable facts; you interpret them and select opportunities.
 
@@ -29,7 +31,7 @@ observable facts; you interpret them and select opportunities.
 5. Early internal resumption (the aggressive trigger) against synchronized structural
    resumption (balanced, conservative).
 6. Failed execution attempts and renewed countertrend progression.
-7. Whether the current candidate remains actionable (not void).
+7. Whether the line prints `candidate void` (code decides void; never compute it).
 
 **Decision rules:**
 
@@ -48,29 +50,35 @@ observable facts; you interpret them and select opportunities.
 - A PASS gives your own reason. Never cite the class as a rule.
 - Never substitute an unrelated stop for the verified structural invalidation level.
 - 3m trigger: WAIT keeps it for the next bar. 1m trigger: ENTER or PASS (it lives one
-  bar). PASS rejects this opportunity.
+  bar); a WAIT on it counts as a PASS. PASS rejects this opportunity for this bar; a
+  candidate may print again.
+- A PASS names a fact from the candidate's line or your own read. The class alone is
+  no PASS reason.
+- Room for a candidate: in its own R (its structural stop), never the briefing's 1R.
 
 **State your decision** on one line of its own, at the line's start, before the
 CYCLE RESULT line: `SELECTION: ENTER - <reason>`, `SELECTION: WAIT - <reason>` or
 `SELECTION: PASS - <reason>`, naming the candidate (side, model, trigger time). The
 last such line counts; none is an unlabelled decision. In the PLAN, step 8's decision
-and the SELECTION line say the same thing; the SELECTION line is the one that counts.
+and the SELECTION line say the same thing (ENTER: take; WAIT or PASS: pass); the
+SELECTION line is the one that counts.
 
-**Entry and management:** enter only when the candidate is structurally valid and you
-select it; the verified execution invalidation stop (`stop mtf`); keep the original
+**Entry and management:** enter only a printed candidate that you select; the verified execution invalidation stop (`stop mtf`); keep the original
 risk reference throughout (the Position line's one R basis: the structural stop); the
 approved trail manages the stop.
 
 **Evidence discipline:** structure is observable information, not proof of future
 direction. Do not invent advantages for patterns testing has not shown.
 
-**What prints.** Only READY candidates get a `- MTF candidate` line. READY: eligible
-to select (bos-vs-choch's `Entry:` fact is arm D's). A candidate's stage is printed on
+**What prints.** Only READY candidates get a `- MTF candidate` line. READY: code
+checked it and it is eligible to select (bos-vs-choch's `Entry:` fact is arm D's).
+bos-vs-choch's stage table does not apply to a candidate line. A candidate's stage is printed on
 its own line (arm B: the 15m > 3m pullback timed on the 1m). bos-vs-choch's stage
 actions describe the primary line. A printed candidate is eligible at its own stage,
 not the primary line's or a context line's. A stage word names the pullback's stage:
 WEAKENING, REVERSING and CONFIRMED REVERSAL are the trend resuming, never ending.
-The earliest trigger per side is `(chosen)`: the only one the gate takes. Name it in
+The earliest trigger per side is `(chosen)`: the only one the gate takes; you still
+select or pass it. Name it in
 your SELECTION line and your reads (`mtf ready` with another model is refused: "the
 ready candidate is X, not Y"). A model still waiting is in the one `- MTF waiting`
 clause: not ready, not an entry. A void one says so plainly, whatever its reason
@@ -81,10 +89,10 @@ no entry. `(position open: not a pick)`: context, never an entry.
 
 | Part | Means |
 |---|---|
-| model, stage | aggressive (the first CHoCH or CISD back), balanced (a CHoCH back, then a BOS), conservative (15m CHoCH + fresh BOS): the models `mtfEntry.models` enables; `(early)`: before the MTF 15m pullback is established. Still eligible: no 15m turn and no 3m trigger rule apply (the Pullback setup and its three lines are arm D's) |
+| model, stage | aggressive (the first CHoCH or CISD back), balanced (a CHoCH back, then a BOS), conservative (15m CHoCH + fresh BOS): the models `mtfEntry.models` enables; `(early)`: before the MTF 15m pullback is established. Still eligible: the 15m-turn rule and the 3m-trigger rule do not apply (the Pullback setup and pullback-vs-reversal's three lines are arm D's) |
 | trigger 3m or 1m | the timing frame, the candidate's own; its age (`new this bar`, `N min ago`). A 1m candidate is timed by its 1m trigger: today's 3m pullback trigger does not apply to it. A 1m trigger fired since the previous 3m close is current: it fired inside the bar that just closed; enter at the next bar or pass (this bar or never) |
 | ran NR past the trigger, or NR back toward the stop | how far price moved from the trigger's close, in the trigger's R (its close to the stop). Back toward the stop: still valid. Once any close since the trigger ran over 0.5R past it, the candidate is void for good. A trigger over 60 minutes old, or from an earlier session, is void too |
-| 1h turn (the parent's frame) | the parent's last CHoCH the side's way (this session or the previous one) and the BOS that confirmed it, the BOS count since; "turn N sessions ago (older)": older; "no turn": the trend has run since its first break |
+| 1h turn (the parent's frame: 1h in arm A, 15m in arm B) | a fact, never a wait ("no BOS yet" included): the parent's last CHoCH the side's way (this session or the previous one) and the BOS that confirmed it, the BOS count since; "turn N sessions ago (older)": older; "no turn": the trend has run since its first break |
 | impulse | the move the pullback came from: its size in ATR, bars, displacement candles, cleanness (net move over the bars' ranges, 0-1) |
 | pullback #N of this 1h leg | its count since the 1h break that started the leg: a fact to weigh, not a preference |
 | depth N% (depth band): the stop X pts away, the impulse extreme Y pts away | how far the pullback retraced the parent impulse (shallow under 30%, moderate 30-75%, deep 75-100%, breached past the protected level) and the room it leaves: judge room against risk, never a forecast; depth alone is not an entry signal |
@@ -96,12 +104,15 @@ no entry. `(position open: not a pick)`: context, never an entry.
 - An MTF entry cites no setup: the candidate line is the setup. Never add a
   `<strategy> fired` read.
 - setup: `mtf ready <model> long|short`: the chosen candidate's model.
-- stop: `stop mtf <price>`: its structural stop (the printed one, or its origin). An
-  MTF entry takes no other stop, and no other entry takes `stop mtf`.
+- stop: `stop mtf <price>`: the printed structural stop price. An MTF entry takes no
+  other stop, and no other entry takes `stop mtf`. bar-briefing's "never an order's
+  stop" is about the MTF structure lines, not a candidate line.
+- size: the printed `cap fits K`.
 - target: `target trail`. The 2R mark arms today's trail. `min_rr` holds.
 - bias, location, entry: as always.
 
-**Refusals** (each one is final for that bar):
+**Refusals.** `[mtf-cited]`, `[mtf-target]`, `[mtf-stop]`: fix the read and compose
+once more. Every other refusal is final for that bar.
 
 - `against the 1h structure`: wrong side.
 - `[mtf-cited]`: you cited a setup beside an MTF entry. Remove the `fired` read and

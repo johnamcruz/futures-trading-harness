@@ -73,7 +73,9 @@ test('arm A (replay): the record carries the mode and the 1h-structure side; the
   // And the conflict audit's A7: the Bias and Alignment lines are labelled context.
   const E1 = l => (/^(- Trend rule| {2}trendRule): /.test(l) ? l.replace(/; no (long|short) against it\.$/, '.')
     : /^- Bias: /.test(l) ? l.replace(/; (long|short) refused\)/, ')').replace(/^- Bias: (long|short) only \(/, '- Bias: $1 (').replace(/^- Bias: /, '- Bias (context here): ')
-      : l.replace(/^- Alignment: /, '- Alignment (context here): '));
+      : l.replace(/^- Alignment: /, '- Alignment (context here): ')
+        // The cold read: the timing and Pullback lines are labelled arm D context.
+        .replace(/^- ([0-9]+m timing|Pullback) \(/, '- $1 (arm D context: '));
   assert.deepEqual(ta.filter(l => !IS_MTF(l) && !SETUPS(l)), td.filter(l => !IS_MTF(l) && !SETUPS(l)).map(E1), 'only the MTF lines (and the setups as context) differ');
   assert.ok(td.some(l => /^- Trend rule: .*; no (long|short) against it\.$/.test(l)), 'arm D keeps its refusal clause');
   assert.ok(ta.filter(SETUPS).every(l => /Context only: MTF entry arm A enters only on an MTF candidate line\.$/.test(l) || /^- Setups: /.test(l)), ta.filter(SETUPS).join('\n'));

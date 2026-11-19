@@ -43,9 +43,9 @@ test('the mtf-entry items: about 37 (the facts the selection reads, the selectio
   for (const re of [/Never enter against the 1h structure/, /A stage word alone is not an order/, /not ready, not an entry/, /A void one says so plainly/, /15m line decides the pullback/i, /WAIT keeps it for the next bar/, /PASS rejects this opportunity/, /A void candidate stays void/, /eligibility, not an obligation/, /The last such line counts/]) assert.ok(qs.some(q => re.test(q.anchor)), String(re));
   // The reading lessons (the six-morning replays and the pick evaluation, 2026-11-19): one item each, on the lesson's text.
   // The reading audit (2026-11-19, E2-E5): the 1h structure's side, the (early) candidate, the candidate's own stage, the class.
-  for (const re of [/For a candidate the side is the 1h structure's/, /no 15m turn and no 3m trigger rule apply/, /not the primary line's or a context line's/, /Never cite the class as a rule/]) assert.ok(qs.some(q => re.test(q.anchor)), String(re));
+  for (const re of [/For a candidate the side is the 1h structure's/, /the 15m-turn rule and the 3m-trigger rule do not apply/, /not the primary line's or a context line's/, /Never cite the class as a rule/]) assert.ok(qs.some(q => re.test(q.anchor)), String(re));
   // The audit's unreliable-pattern errors (STALE, DRIFT, NOT_READY), each with an item.
-  for (const re of [/A trigger over 60 minutes old, or from an earlier session, is void too/, /Once any close since the trigger ran over 0\.5R past it, the candidate is void for good/, /READY: eligible to select/]) assert.ok(qs.some(q => re.test(q.anchor)), String(re));
+  for (const re of [/A trigger over 60 minutes old, or from an earlier session, is void too/, /Once any close since the trigger ran over 0\.5R past it, the candidate is void for good/, /it is eligible to select/]) assert.ok(qs.some(q => re.test(q.anchor)), String(re));
   for (const re of [/the SELECTION line is the one that counts/, /the candidate line is the setup/, /compose again with the MTF reads only/, /Back toward the stop: still valid/, /A 1m candidate is timed by its 1m trigger/, /it fired inside the bar that just closed/, /does not refuse a verified MTF candidate/, /The class is a fact to weigh, never a refusal/]) assert.ok(qs.some(q => re.test(q.anchor)), String(re));
 });
 
