@@ -22,7 +22,8 @@
  * delays its closes or leaves bracket legs behind; losses counted from real
  * fills; malformed brackets; order_plan's arguments sent as they are; a prop attempt's daily close (recorded once
  * flat, or missed and then refused); and a runner that crashed mid-day
- * catching up the next morning (and before a holiday).
+ * catching up the next morning (and before a holiday); an MTF entry arm's chain in a replay (P1: compose_check, order_plan,
+ * the gateway's stamp, the runner's lock and trail on the structural stop).
  */
 
 const test = require('node:test');
@@ -1056,3 +1057,106 @@ test('mock trading, runner reviews (live): a journal_add that fails is logged an
   const next = await nextEntry(w);
   assert.ok(next.ok, next.error);
 });
+
+/**
+ * P1 (coordinator 2026-11-18, item 4): an MTF entry arm end to end on the mock exchange, in a temp FTH_ROOT whose
+ * config/runner.json selects arm A or arm B (its 1m execution record's candidate) (tests/helpers.js treeCopy), under a replay clock with a replay broker (the only place
+ * an MTF arm runs): the briefing with the MTF record (tests/fixtures/mtf-entry.js: an aggressive ready LONG, its
+ * structural stop 21528.75, 46 ticks under 21540.25), the real compose_check CLI records the MTF reads, the real
+ * order_plan CLI turns the record into place_order arguments, the real gateway (the tree's) lets them through and stamps
+ * the entry as an MTF one; then the runner holds it on today's exit (trail mode): +2R arms the lock, the stop rises, and
+ * the trailed stop banks the profit. The stop is the printed structural stop all the way to the bracket.
+ */
+async function mtfChain(arm) {
+  const { spawnSync } = require('child_process');
+  const { treeCopy } = require('../helpers');
+  const MF = require('../fixtures/mtf-entry');
+  const LC = require('../fixtures/lifecycle');
+  const { writeBriefing } = require('../../scripts/lib/trading/briefing');
+  const { readRecords } = require('../../scripts/lib/trading/trade-lifecycle');
+  const { composedExit } = require('../../scripts/lib/trading/strategies');
+  const tree = treeCopy(tmpDir(), r => {
+    const f = path.join(r, 'config', 'runner.json');
+    const cfg = JSON.parse(fs.readFileSync(f, 'utf8'));
+    cfg.mtfEntry = { ...cfg.mtfEntry, arm, exitMode: 'trail', entryPullback: 'any', minStage: 'established' };
+    fs.writeFileSync(f, JSON.stringify(cfg, null, 2));
+  });
+  const at = new Date(Date.parse(LC.CLOSE) + 2000);
+  const w = world(at.toISOString());
+  // A replay: the broker is the replay one, the clock the replay's.
+  const bf = path.join(w.home, 'brokers.json');
+  const brokers = JSON.parse(fs.readFileSync(bf, 'utf8'));
+  brokers.brokers.mock.replay = true;
+  fs.writeFileSync(bf, JSON.stringify(brokers));
+  // A replay's tick specs are the replay day's (as the translator records them on a replay broker).
+  recordBrokerSpecs(w.home, { broker: 'mock', roots: ['MNQ', 'NQ', 'MES', 'ES'], day: '2026-10-07' });
+  Object.assign(w.env, { MOCK_REPLAY: '1', FTH_REPLAY_NOW: at.toISOString(), FTH_STRATEGIES_DIRS: path.join(tree, 'strategies'), FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }) });
+  fs.mkdirSync(path.join(w.home, 'mtf'), { recursive: true });
+  fs.writeFileSync(path.join(w.home, 'mtf', 'MNQ.json'), JSON.stringify({ symbol: 'MNQ', asOf: LC.BAR, closedAt: LC.BAR, biases: { 240: -1, 60: 1, 15: 1 } }));
+  // Arm B reads the 1m execution record (15m > 3m, 1m timing): the same candidate as its 1m trigger, fired since the
+  // previous 3m close, its side the 1h structure's (tests/lib/composed-reads-mtf.test.js builds it the same way).
+  const mode = MF.MODE(arm);
+  const rec = MF.record({ mode });
+  if (arm === 'B') {
+    const ex = MF.record({ mode });
+    ex.hierarchy = 'execution';
+    ex.mode = require('../../scripts/lib/trading/mtf-entry').recordMode(mode, { execution: true });
+    ex.windowStart = '2026-10-06T00:00:00.000Z';
+    rec.execution = { record: ex, since: new Date(Date.parse(LC.CLOSE) - STEP).toISOString() };
+  }
+  writeBriefing(w.home, MF.briefing({ m3: { mtfStructure: rec } }));
+  exchange.setPrice(w.state, MNQ_ID, 21540.25);
+  // The agent's plan in the journal (the gate's plan-required), as an agent writes it before an entry.
+  fs.appendFileSync(w.journal, `${JSON.stringify({ ts: at.toISOString(), kind: 'plan', contractId: 'MNQ', tags: ['setup:trade_lifecycle', 'MNQ'], text: 'MTF aggressive long, the structural stop 21528.75' })}\n`);
+  const cli = (script, args) => spawnSync(process.execPath, [path.join(tree, 'scripts', script), ...args], { encoding: 'utf8', cwd: tree, env: { ...w.env, CLAUDE_PLUGIN_ROOT: tree } });
+  // compose_check: the MTF reads, recorded OK with the candidate.
+  const c = cli('compose-check.js', ['--symbol', 'MNQ', '--side', 'long', '--size', '1', '--reads', JSON.stringify(MF.READS)]);
+  const cr = readRecords(w.home, 'MNQ').at(-1);
+  assert.ok(cr && cr.ok, c.stdout + c.stderr);
+  assert.deepStrictEqual([cr.mtf.model, cr.mtf.hierarchy, cr.mtf.trigger.frame, cr.mtf.stop, cr.plan.stop.price, cr.plan.stop.ticks], ['aggressive', arm === 'B' ? 'execution' : 'intraday', arm === 'B' ? '1m' : '3m', 21528.75, 21528.75, 46]);
+  // order_plan: the record's order (the structural stop's 46 ticks).
+  const barsFile = path.join(w.home, 'MNQ-3m.json');
+  fs.writeFileSync(barsFile, JSON.stringify([{ t: LC.BAR, o: 21530, h: 21541, l: 21529, c: 21540.25, v: 500 }]));
+  const p = cli('strategies.js', ['plan', barsFile, '--symbol', 'MNQ', '--strategy', 'trade_lifecycle', '--side', 'long', '--account-id', '7']);
+  const plan = JSON.parse(p.stdout.slice(p.stdout.indexOf('{')));
+  const args = plan.args || plan.placeOrder || plan;
+  assert.strictEqual(args.stopLossBracket.ticks, 46, p.stdout + p.stderr);
+  // The gateway (the tree's): the MTF entry goes, its stamp says MTF.
+  const gw = createMcpClient({ command: process.execPath, args: [path.join(tree, 'scripts', 'mcp-gateway.js')], env: { ...w.env, CLAUDE_PLUGIN_ROOT: tree }, cwd: tree, timeoutMs: 20000 });
+  try {
+    const placed = await attempt(gw, 'place_order', { ...args, accountId: 7 });
+    assert.ok(placed.ok, placed.error);
+  } finally {
+    gw.close();
+  }
+  assert.deepStrictEqual([position(w).type, position(w).size], [1, 1]);
+  const stopLeg = working(w).find(o => o.type === 4);
+  assert.strictEqual(stopLeg.stopPrice, 21528.75, 'the bracket stop is the printed structural stop');
+  const stamped = entryOrders(w.home).at(-1);
+  assert.ok(stamped && stamped.composed && stamped.composed.mtf, JSON.stringify(stamped));
+  assert.deepStrictEqual([stamped.composed.mtf.model, stamped.composed.mtf.hierarchy, stamped.composed.stop], ['aggressive', arm === 'B' ? 'execution' : 'intraday', 21528.75]);
+  // The runner (today's exit, trail mode): up past 2R (21563.25) arms the lock; then back to the trailed stop.
+  exchange.update(w.state, s => { delete s.bars; });
+  const fill = position(w).averagePrice;
+  const risk = fill - 21528.75;
+  const r = await runDay(w, {
+    from: new Date(at.getTime() + 1000).toISOString(), until: new Date(at.getTime() + 24 * 60000).toISOString(),
+    // As runner-wiring.js wires a composed trade's exit: its policy's (evaluator.js composedExit), from the tree's strategies.
+    deps: { exitPlanOf: s => composedExit(s, loadStrategies(tree, w.env).strategies).plan, strategyNamed: name => loadStrategies(tree, w.env).strategies.find(x => x.name === name && x.valid) || null },
+    before: ms => {
+      if (ms >= at.getTime() + 4 * 60000 && ms < at.getTime() + 14 * 60000) exchange.setPrice(w.state, MNQ_ID, fill + 3.5 * risk);
+      if (ms >= at.getTime() + 14 * 60000 && position(w)) exchange.setPrice(w.state, MNQ_ID, working(w).find(o => o.type === 4).stopPrice - 0.25);
+    },
+  });
+  const moves = exchange.read(w.state).calls.filter(x => x.tool === 'modify_order');
+  assert.ok(moves.length >= 1, `the runner moved the stop: ${r.logs.filter(l => /ERROR/.test(l)).join(' | ')}`);
+  assert.ok(moves.every(m => m.args.stopPrice > 21528.75), 'only ever toward the market');
+  assert.ok(moves.some(m => m.args.stopPrice >= fill + 0.5 * risk), 'the lock: the stop at +0.5R or better after +2R');
+  assert.strictEqual(position(w), null, 'out on the trailed stop');
+  const exit = exchange.read(w.state).fills.at(-1);
+  assert.ok(exit.price >= fill + 0.5 * risk && exit.profitAndLoss > 0, `banked (exit ${exit.price}, entry ${fill}, 1R ${risk})`);
+  assert.ok(r.events.some(e => e.kind === 'position_managed' && e.setup === 'trade_lifecycle'), JSON.stringify(r.events.map(e => e.kind)));
+}
+
+test('mock trading, MTF arm A (replay): compose_check, order_plan and the gateway carry the MTF entry with its structural stop; the gate stamps it; the runner locks and trails it', { timeout: 240000 }, () => mtfChain('A'));
+test('mock trading, MTF arm B (replay): the 1m execution record\'s candidate reaches the gateway the same way (stamped, the structural stop, the lock and the trail)', { timeout: 240000 }, () => mtfChain('B'));

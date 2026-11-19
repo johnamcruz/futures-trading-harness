@@ -192,3 +192,13 @@ test('no target to trail past: the line says so, never "target not reached" or "
   assert.match(l, /; no target \(the stop holds until its own exit\)\.$/);
   assert.doesNotMatch(l, /target not reached|before the target/);
 });
+
+test('P1: an MTF entry under prev_high_or_trail: the line adds its target and state (not reached / rejected / broken: riding); a held trade without one is unchanged; the R basis is the structural stop', () => {
+  const ph = state => ({ target: 15700, sign: 1, state, at: null, why: null });
+  assert.strictEqual(line(LONG_T, { ...LONG_H, prevHigh: ph('pending') }), L1354.replace(/\.$/, '; target 15700 (previous high): not reached.'));
+  assert.strictEqual(line(LONG_T, { ...LONG_H, prevHigh: ph('broken') }), L1354.replace(/\.$/, '; target 15700 (previous high): broken: riding.'));
+  assert.strictEqual(line(SHORT_T, { ...SHORT_H, prevHigh: { target: 13500, sign: -1, state: 'rejected' } }), L0307.replace(/\.$/, '; target 13500 (previous low): rejected.'));
+  assert.strictEqual(line(LONG_T, LONG_H), L1354);
+  // The R basis is the held trade's risk (the runner's: the structural stop, from the gate's stamp): 1R 9.5 pts here.
+  assert.match(line(LONG_T, { ...LONG_H, prevHigh: ph('pending') }), /1R 9\.5 pts/);
+});

@@ -118,7 +118,8 @@ function takePendingStamp(env, key) {
 
 function entryStamp(env, args, stamp = null, key = null) {
   const given = isObj(stamp) ? stamp : key !== null ? takePendingStamp(env, key) : null;
-  if (given) return { record: given.record || null, expiresAt: given.expiresAt || null, ...Object.fromEntries(['entry', 'stop', 'target'].filter(k => Number.isFinite(given[k])).map(k => [k, given[k]])), ...(given.side ? { side: given.side } : {}) };
+  // P1: a verified MTF entry's stamp rides along (the exit option's target, the rank, the trigger for the lag).
+  if (given) return { record: given.record || null, expiresAt: given.expiresAt || null, ...Object.fromEntries(['entry', 'stop', 'target'].filter(k => Number.isFinite(given[k])).map(k => [k, given[k]])), ...(given.side ? { side: given.side } : {}), ...(isObj(given.mtf) ? { mtf: given.mtf } : {}) };
   return isComposedEntry(env, args) ? { record: null, expiresAt: null } : null;
 }
 

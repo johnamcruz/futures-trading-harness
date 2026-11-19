@@ -138,7 +138,24 @@ function withEntry(fill, entries, specOf = () => null) {
   const e = fill.profitAndLoss === null || fill.profitAndLoss === undefined ? entries.find(x => String(x.orderId) === String(fill.orderId)) : null;
   if (!e) return fill;
   const spec = specOf(contractRoot(fill.contractId));
-  return { ...fill, entry: { setup: e.setup || null, stopTicks: e.stopTicks || null, tickValue: spec ? spec.tickValue : null } };
+  const mtf = e.composed && typeof e.composed === 'object' && e.composed.mtf && typeof e.composed.mtf === 'object' ? e.composed.mtf : null;
+  return { ...fill, entry: { setup: e.setup || null, stopTicks: e.stopTicks || null, tickValue: spec ? spec.tickValue : null, ...(mtf ? { mtf: { ...mtf, lag: lagOf(fill, e, mtf) } } : {}) } };
+}
+
+/**
+ * P1: an MTF entry's trigger-to-entry lag: seconds from the trigger bar's close to the fill, and the fill past the
+ * trigger bar's close against the trade (points, and R by the plan's 1R: |entry - stop|); unknown parts null.
+ */
+function lagOf(fill, e, mtf) {
+  const r2 = x => Math.round(x * 100) / 100;
+  const t = mtf.trigger && typeof mtf.trigger === 'object' ? mtf.trigger : {};
+  const at = Date.parse(t.at);
+  const filled = Date.parse(fill.creationTimestamp);
+  const sign = /^(buy|long)$/i.test(String(e.side || e.composed.side)) ? 1 : /^(sell|short)$/i.test(String(e.side || e.composed.side)) ? -1 : 0;
+  const price = Number(fill.price);
+  const points = sign && Number.isFinite(price) && Number.isFinite(t.price) ? r2(sign * (price - t.price)) : null;
+  const risk = Math.abs(Number(e.composed.entry) - Number(e.composed.stop));
+  return { seconds: Number.isFinite(at) && Number.isFinite(filled) ? Math.round((filled - at) / 1000) : null, points, r: points !== null && risk > 0 ? r2(points / risk) : null };
 }
 
 /** The account's fills (search_trades through the broker adapter) in (since, until], each with its entry. */
@@ -180,9 +197,11 @@ function treeDigest(root, dirs) {
  * a version whose broker settings are unknown: never the same as another's. R33's canonical strategy,
  * account and policy fingerprints and the rulebook seal are not built yet: null until they are.
  */
-function fingerprints(root, { code, broker = null, error = null } = {}) {
+function fingerprints(root, { code, broker = null, error = null, mtfEntry = require('../tunables').runner().mtfEntry } = {}) {
   const of = dirs => (root ? treeDigest(root, dirs) : null);
-  return { v: 1, code: code === undefined ? of(CODE_DIRS) : code, harness: of(HARNESS_DIRS), strategies: null, accounts: null, policy: null, rulebook: null, broker, ...(error ? { fingerprintError: error } : {}) };
+  // P1: the MTF entry arm by value, named only when it is not today's (arm D): every older version keeps its fingerprints.
+  const arm = mtfEntry && mtfEntry.arm && mtfEntry.arm !== 'D' ? { mtfEntry: { ...mtfEntry } } : {};
+  return { v: 1, code: code === undefined ? of(CODE_DIRS) : code, harness: of(HARNESS_DIRS), strategies: null, accounts: null, policy: null, rulebook: null, broker, ...arm, ...(error ? { fingerprintError: error } : {}) };
 }
 
 /**

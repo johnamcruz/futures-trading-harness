@@ -162,3 +162,11 @@ test('fillGuard: a composed fill beyond the plan\'s stop is flattened; one away 
   // The stop from the rationale ("stop <price>") when the stamp has none.
   assert.strictEqual(LR.fillGuard({ ...long(21489, 21479), entry: { side: 'buy', stopPrice: 21490, composed: { entry: 21500 } } }).action, 'flatten');
 });
+
+test('P1: entryStamp keeps a verified MTF entry\'s stamp (the exit option\'s target, the rank, the trigger), and nothing for any other', () => {
+  const LR = require('../../scripts/lib/trading/lifecycle-runner');
+  const mtf = { arm: 'A', exitMode: 'prev_high_or_trail', prevHigh: 21598, rank: 1, trigger: { at: '2026-10-07T14:00:00.000Z', price: 21540.25 } };
+  assert.deepStrictEqual(LR.entryStamp({}, {}, { record: 'r', expiresAt: 'x', entry: 1, stop: 2, target: 3, side: 'long', mtf }).mtf, mtf);
+  assert.strictEqual('mtf' in LR.entryStamp({}, {}, { record: 'r', expiresAt: 'x', entry: 1, stop: 2, target: 3, side: 'long' }), false);
+  assert.strictEqual('mtf' in LR.entryStamp({}, {}, { record: 'r', expiresAt: 'x', mtf: 'forged' }), false);
+});
