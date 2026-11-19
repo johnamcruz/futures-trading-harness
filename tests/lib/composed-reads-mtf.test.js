@@ -108,7 +108,8 @@ test('[mtf-cited]: a `fired` read beside the `mtf ready` read is refused by name
   const reads = F.READS.concat([{ step: 'setup', skill: 'momentum-and-volume', read: 'momentum_continuation fired up', why: 'x' }]);
   const r = checkReads({ reads, side: 'long', briefing: b, tick: 0.25, entryRule: RULE, mtfMode: F.MODE('A'), cited: ['momentum_continuation'] });
   assert.equal(r.ok, false);
-  assert.match(problems(r), /\[mtf-cited\] an MTF entry cites no setup/);
+  // The message (the reading lesson: the model read the old one as a requirement to cite): what was wrong and what to do.
+  assert.ok(problems(r).includes('[mtf-cited] you cited a setup beside an MTF entry: an MTF entry cites no setup (the candidate line is the setup). Remove the "<strategy> fired" read and compose again with the MTF reads only; no entry'), problems(r));
   assert.equal(r.mtf, undefined);
 });
 

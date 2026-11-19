@@ -92,3 +92,20 @@ test('through the real briefing: an MTF read that throws in arm A (here a mode t
   const lines = B.renderBriefing(b, { now: NOW }).split('\nDetail by timeframe:')[0].split('\n');
   assert.ok(!lines.some(l => OFFER.test(l)), lines.filter(l => OFFER.test(l)).join('\n'));
 });
+
+test('the reading lesson (the six mornings: 7 of 13 SELECTION lines): an MTF arm\'s trade prompt asks for the SELECTION line right before the result line, after the PLAN; arm D\'s prompt is unchanged, its PLAN text as before', () => {
+  const { prompts, RESULT_LINE } = require('../../scripts/lib/autotrader');
+  const cfg = require('../../scripts/lib/autotrader').validateConfig({ harness: 'claude', symbols: ['MNQ'], timeframe: 3 });
+  const at = new Date('2026-10-07T14:00:02Z');
+  const bar = { t: '2026-10-07T13:57:00.000Z', c: 21540 };
+  for (const arm of ['A', 'B', 'AB']) {
+    const p = prompts({ ...cfg, mtfMode: mode(arm) }, at, '/r').trade([{ symbol: 'MNQ', bar, scan: [] }]);
+    assert.ok(p.endsWith(RESULT_LINE), arm);
+    assert.match(p, /Write the trader-process skill's PLAN \(1 HTF to 9 Manage\), then, with an MTF candidate line printed, your SELECTION line on its own line \(`SELECTION: ENTER\|WAIT\|PASS - <reason>`, the mtf-entry skill: the one that counts\), then the result line\./, arm);
+  }
+  const d = prompts(cfg, at, '/r').trade([{ symbol: 'MNQ', bar, scan: [] }]);
+  assert.match(d, / Write the trader-process skill's PLAN \(1 HTF to 9 Manage\) before the result line\./);
+  assert.doesNotMatch(d, /SELECTION/, 'arm D: no SELECTION instruction');
+  const dm = prompts({ ...cfg, mtfMode: ME.modeOf({ arm: 'D', exitMode: 'trail', minStage: 'established' }, {}, REPLAY) }, at, '/r').trade([{ symbol: 'MNQ', bar, scan: [] }]);
+  assert.equal(dm, d, 'arm D: the prompt as without a mode');
+});

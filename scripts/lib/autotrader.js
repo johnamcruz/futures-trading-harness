@@ -788,6 +788,9 @@ const RESULT_TEMPLATE = `CYCLE RESULT: <${CYCLE_OUTCOMES.join(' | ')}> - <reason
 // its first and last step only (the prompt's size budget; trade-session step 0 loads the skill with the block).
 const PLAN_STEPS = ['HTF', 'Context', 'Location', 'Setup', 'Confluence', 'Entry', 'Risk', 'Decision', 'Manage'];
 const PLAN_TEXT = ` Write the trader-process skill's PLAN (1 ${PLAN_STEPS[0]} to ${PLAN_STEPS.length} ${PLAN_STEPS[PLAN_STEPS.length - 1]}) before the result line.`;
+// An MTF entry arm (mtf_only): the SELECTION line named where the PLAN and the result line are, right before the result
+// line, so the PLAN's step 8 never stands in for it (the reading lesson: the six mornings labelled 7 of 13). Arm D: as above.
+const MTF_PLAN_TEXT = PLAN_TEXT.replace(' before the result line.', ', then, with an MTF candidate line printed, your SELECTION line on its own line (`SELECTION: ENTER|WAIT|PASS - <reason>`, the mtf-entry skill: the one that counts), then the result line.');
 const RESULT_LINE = ` End with the cycle result as plain text in your final message, never as a tool call. Your last line must be exactly: ${RESULT_TEMPLATE}.`;
 
 /**
@@ -902,7 +905,7 @@ function prompts(cfg, now, root = '') {
         stable: stableHead(root),
         time: ` The cycle's time: ${etStamp(now)} (${now.toISOString()}).`,
         facts: `${recover}${lanes}${bars.join('')}${news ? ` ${news}` : ''}${eodText}${capText}${account}${verdicts.join('')}${historyText(history, Boolean(lanes), marketOf(list, cfg.timeframe))}${unreviewed ? ` ${unreviewed}` : ''}${own}${lessons.length ? ` Your recurring mistakes and lessons (confidence; notes from your own past, not rules): ${lessons.join(' | ')}.` : ''}${missing}`,
-        instructions: ` ${skillsText(cfg, root)}, then run the trade-session skill for ${symbols}${new Set(list.map(x => x.symbol)).size > 1 ? ' (one symbol at a time, open positions first)' : ''}${also}${acct}${mode ? ` in ${mode}` : ''}.${PLAN_TEXT}`,
+        instructions: ` ${skillsText(cfg, root)}, then run the trade-session skill for ${symbols}${new Set(list.map(x => x.symbol)).size > 1 ? ' (one symbol at a time, open positions first)' : ''}${also}${acct}${mode ? ` in ${mode}` : ''}.${mtfOnly ? MTF_PLAN_TEXT : PLAN_TEXT}`,
         desk: manageOnly || cfg.paper ? '' : entry ? `${ENTRY_TEXT}${cachedText(cached)}` : managedDesk ? `${MANAGED_DESK_TEXT}${cachedText(cached)}` : `${roster(cfg, (cached && cached.roles) || [], frames)}${managedCycle ? MANAGED_NO_ENTRY_TEXT : ''}${cachedText(cached)}`,
         situation: situationText,
         result: RESULT_LINE,
