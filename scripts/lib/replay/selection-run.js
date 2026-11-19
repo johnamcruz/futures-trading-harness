@@ -32,7 +32,8 @@ const CAND = /^- MTF candidate (LONG|SHORT) \(chosen\): (aggressive|balanced|con
 const WORD = /^\**\s*(ENTER|WAIT|PASS)\b\**\s*(?:[-–—:.,]\s*)?(.*)$/;
 // Two decisions on one line ("ENTER or WAIT", "PASS/ENTER", "ENTER, WAIT", an echoed "ENTER|WAIT|PASS") are none
 // (REVIEW-4 minor 4; the lessons review, F3).
-const TWO = /^\**\s*(ENTER|WAIT|PASS)\b\**\s*(?:or|\/|\||,)\s*\**\s*(ENTER|WAIT|PASS)\b/;
+// A comma is a list only with a third word after it ("ENTER, WAIT or PASS"): "PASS, WAIT is not possible ..." is a PASS.
+const TWO = /^\**\s*(ENTER|WAIT|PASS)\b\**\s*(?:(?:or|\/|\|)\s*\**\s*(ENTER|WAIT|PASS)\b|,\s*(ENTER|WAIT|PASS)\s*(?:,|or)\s*(ENTER|WAIT|PASS)\b)/;
 // An echoed template (its placeholders, `<side>`, `<reason>`) is no decision either (the fix review).
 const TEMPLATE = /<(side|model|reason|trigger time)>/;
 // A fenced block (``` ... ```) is a quoted template, never the decision.

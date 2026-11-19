@@ -194,6 +194,8 @@ test('the lessons review (F1): in an MTF arm every Trend rule and Bias form mtf.
     assert.doesNotMatch(M.mtfTrendRuleText(line), REFUSAL, line);
   }
   assert.ok([...seen].some(l => REFUSAL.test(l)), 'arm D\'s lines carry their refusals (the helper is not called there)');
+  // The no-side form exactly (its stutter dropped): 4h up, 1h down.
+  assert.equal(M.mtfTrendRuleText(T.ruleLine(T.ruleSummary({ 240: 1, 60: -1, 15: 1 }))), 'Trend rule: no side (longs against the 1h down trend; shorts against the 4h up trend).');
   // The forms' sources: a new template in ruleLine or biasLine changes these counts and must be listed above.
   const src = f => require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'scripts', 'lib', 'trading', f), 'utf8');
   const rule = src('mtf.js'); const ruleFn = rule.slice(rule.indexOf('function ruleLine('), rule.indexOf('\n}\n', rule.indexOf('function ruleLine(')));

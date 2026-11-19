@@ -43,7 +43,7 @@ test('an MTF arm\'s cycle prompt keeps bos-vs-choch and mtf-entry in the prompt 
       cycles += 1;
       // The cycle prompt as the runner builds it: the day line, the premarket plan, the news line.
       const w = bars.slice(Math.max(0, j + 1 - W), j + 1);
-      let day = null; try { day = RW.dayLine({ symbol: 'MNQ', tickSize: 0.25 }, w); } catch (_e) { day = null; }
+      let day; try { day = RW.dayLine({ symbol: 'MNQ', tickSize: 0.25 }, w); } catch (_e) { day = null; }
       const items = [{ symbol: 'MNQ', verdicts: [], scan: [], notEntries: [], entryBlocked: null, cited: [], bar: { t: bars[j].t, c: bars[j].c, contractId: 'MNQ', trend: (b.sections.m3.data || {}).trendRule, day, recent: bars.slice(j - 9, j + 1), plan: SC.premarketPlan([], 'MNQ', now) } }];
       const opts = { state: { ...FLAT, at: now.toISOString() }, entry: true, journalRead: true, news: SC.newsLine({ items: [] }, now), history: [], lessons: [], trades: [], unavailable: [] };
       const base = Buffer.byteLength(AT.prompts({ ...cfg, mtfMode: mode }, now, ROOT).trade(items, opts));
