@@ -593,7 +593,6 @@
   }
  },
  "replay": {
-  "selection.minLegR": { "value": 2, "from": "new in feat/p1-mtf-entries (the selection scorecard's secondary legs table: a trend leg counts at 2R or more, the owner's 2R+)" },
   "selection.bootstrapReps": { "value": 2000, "from": "new in feat/p1-mtf-entries (the pick table's by-session bootstrap draws: the selection scorecard's intervals)" },
   "selection.ci": { "value": 0.9, "from": "new in feat/p1-mtf-entries (the pick table's interval: 90%, the pre-registered keep rule's one-sided bound)" },
   "selection.seed": { "value": 20261118, "from": "new in feat/p1-mtf-entries (the pick table bootstrap's seed: reproducible intervals)" },

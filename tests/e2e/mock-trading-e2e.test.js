@@ -1135,6 +1135,13 @@ async function mtfChain(arm) {
   const stamped = entryOrders(w.home).at(-1);
   assert.ok(stamped && stamped.composed && stamped.composed.mtf, JSON.stringify(stamped));
   assert.deepStrictEqual([stamped.composed.mtf.model, stamped.composed.mtf.hierarchy, stamped.composed.stop], ['aggressive', arm === 'B' ? 'execution' : 'intraday', 21528.75]);
+  // The selection scorecard reads this order as the gateway wrote it: a take, joined to the candidate the cycle printed on
+  // the bar the gate judged (selection-run.js ordersFrom, candidateRows; REVIEW-3 major 4).
+  const RUN = require('../../scripts/lib/replay/selection-run');
+  const orders = RUN.ordersFrom(entryOrders(w.home));
+  assert.deepStrictEqual(orders.map(o => [o.side, o.model, o.bar, o.stop]), [['long', 'aggressive', new Date(LC.BAR).toISOString(), 21528.75]], JSON.stringify(stamped.composed.mtf));
+  const rows = RUN.candidateRows([{ at: orders[0].bar, side: 'long', model: 'aggressive', trigger: 'the trigger', stop: 21528.75, decision: 'ENTER' }], orders, () => null);
+  assert.deepStrictEqual([rows[0].state, rows[0].at], ['took', orders[0].bar]);
   // The runner (today's exit, trail mode): up past 2R (21563.25) arms the lock; then back to the trailed stop.
   exchange.update(w.state, s => { delete s.bars; });
   const fill = position(w).averagePrice;

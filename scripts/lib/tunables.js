@@ -151,9 +151,8 @@ const REPLAY = {
   curatedMoments: { leadSetup: int(0), firstBar: int(0) },
   windowBars: int(1),
   setupLibrary: { minRR: pos() },
-  // P1, the selection scorecard (replay/selection-score.js): the pick table's by-session bootstrap (draws, interval, seed);
-  // the secondary legs table counts a trend leg at minLegR or more (the owner's 2R+).
-  selection: { minLegR: pos(), bootstrapReps: int(100), ci: frac(), seed: int() },
+  // P1, the selection scorecard (replay/selection-score.js): the pick table's by-session bootstrap (draws, interval, seed).
+  selection: { bootstrapReps: int(100), ci: frac(), seed: int() },
   trendCapture: { minMoveAtr: pos(), catchShare: pos(1), messageChars: int(1), curationSessions: list(str(), { min: 1 }), censusBatch: int(1), sizeEdges: list(num({ min: 1 }), { min: 1 }) },
   exitScore: { cutR: pos(), rightR: pos(), lateGivebackR: pos(), horizonBars: int(1), matchBars: int(0) },
   setupMoments: { setupTf: int(1), quietSample: frac(), seed: int(), levels: str(['key', 'wide']), setupTfs: list(int(1), { min: 1 }) },

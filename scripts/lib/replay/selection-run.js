@@ -1,89 +1,97 @@
 'use strict';
 
 /**
- * P1: the selection scorecard's inputs read from a replay run (selection-score.js scores them): the run home
- * (`home`: its cycle logs, entry orders and events) and its replay folder (`runDir`: its served bars). Read only.
+ * P1: the selection scorecard's rows read from a replay run (selection-score.js pickTable scores them): the run home
+ * (`home`: its cycle records and entry orders) and its replay folder (`runDir`: its served bars). Read only.
  *
- *   picksFrom(cycles)              each trade cycle's chosen MTF candidate line(s) the 1h's way, from the cycle's prompt
- *                                  ("- MTF candidate LONG (chosen): <model> at stage ..., pullback #N of this 1h leg"):
- *                                  [{ at (the cycle's bar close), side, model, rank }]
- *   entriesFrom(orders, events)    the run's MTF entries (an entry order with the gate's mtf stamp) with their exit (the
- *                                  runner's position_closed after it: its price, R and who closed it; none: a bracket's
- *                                  own stop or target, or still open)
- *   tookAt(picks, entries, stepMs) marks each pick taken when an MTF entry its way was placed in its cycle's bar
- *   refRiskOf(entries, picks)      the run's reference 1R: the median entry's structural stop distance, else the median
- *                                  candidate line's stop points; null when neither is known
- *   readRun({ home, runDir, session, minutes, symbol })   { legs, entries, picks, refRiskPts, rows } (legs: goal-metrics.js
- *                                  trendLegs on the served bars of the run's days, legsFrom; rows: candidateRows on the
- *                                  ruler, the symbol's tick)
- *   candidateRows(picks, ruler, { lastBar })   the selection rows (selection-score.js pickTable)
+ *   selectionOf(text)              the model's decision line (the mtf-entry skill): { decision: ENTER | WAIT | PASS |
+ *                                  UNLABELLED, reason }. A labelled line (label-line.js, the quiz's rule: the label at the
+ *                                  line's start, its colon or a dash, markdown bold around them), the label and the
+ *                                  decision word case-sensitive; the LAST such line wins; none: UNLABELLED
+ *   decisionOf(text)               selectionOf(text).decision
+ *   barOf(cycle, tfMs)             the bar a cycle decided on: its prompt's bar briefing ("as of <time>"), else its
+ *                                  cycleAt floored to the bar grid (cycleAt is the replay clock at the cycle's start: the
+ *                                  bar's close plus the runner's seconds)
+ *   picksFrom(cycles, tfMs)        each cycle's chosen MTF candidate line(s) the 1h's way ("- MTF candidate LONG (chosen):
+ *                                  <model> at stage ..."): [{ at (the bar), side, model, trigger, rank, stop, stopPts,
+ *                                  decision, reason }], one per bar and side
+ *   ordersFrom(orders)             the run's MTF entry orders (entry-orders.json with the gate's mtf stamp): [{ at, bar
+ *                                  (the stamp's: the bar the gate judged), side, model, instanceId, entry, stop }]
+ *   candidateRows(picks, orders, ruler, { lastBar })   pickTable's rows (one per candidate)
+ *   rulerOf(bars, minutes, symbol, { validBars, minRR, plan })   the ruler (below)
+ *   readRun({ home, runDir, minutes, symbol })   { orders, picks, rows }
  */
 
 const fs = require('fs');
 const path = require('path');
-const FP = require('./selection-score');
+const { labelLines } = require('../label-line');
 
 const CAND = /^- MTF candidate (LONG|SHORT) \(chosen\): (aggressive|balanced|conservative) at stage [^,]+, trigger (\S+ \S+ \S+ \S+)[^;]*; .*?context: .*?(?:pullback #(\d+) of this 1h leg|its rank in the 1h leg not known).*?structural stop ([\d.]+)(?:: ([\d.]+) pts)?/;
-// The model's decision (the mtf-entry skill): one labelled line, at a line's start, case-sensitive, in the cycle's
-// output; the LAST such line wins; none: 'unlabelled' (counted apart, never read as a pass).
-const DECISION = /^SELECTION: (ENTER|WAIT|PASS)(?: - |$)/;
-const decisionOf = text => { let d = null; for (const l of String(text || '').split('\n')) { const m = DECISION.exec(l.trim()); if (m) d = m[1]; } return d || 'unlabelled'; };
+const WORD = /^\**\s*(ENTER|WAIT|PASS)\b\**\s*(?:[-–—:.,]\s*)?(.*)$/;
+function selectionOf(text) {
+  let out = { decision: 'UNLABELLED', reason: '' };
+  for (const l of labelLines(text, 'SELECTION')) { const m = WORD.exec(l); if (m) out = { decision: m[1], reason: m[2].replace(/^[-–—:\s]+/, '').trim() }; }
+  return out;
+}
+const decisionOf = text => selectionOf(text).decision;
 
-function picksFrom(cycles) {
+const ASOF = /^--- bar_briefing \{[^}]*\} as of (\S+) ---$/m;
+function barOf(c, tfMs) {
+  const m = ASOF.exec(String((c && c.prompt) || ''));
+  if (m && Number.isFinite(Date.parse(m[1]))) return new Date(Date.parse(m[1])).toISOString();
+  const at = Date.parse(c && (c.cycleAt || c.at));
+  return Number.isFinite(at) && tfMs > 0 ? new Date(Math.floor(at / tfMs) * tfMs).toISOString() : null;
+}
+
+function picksFrom(cycles, tfMs) {
   const out = [];
   for (const c of cycles || []) {
+    const at = barOf(c, tfMs);
+    if (!at) continue;
+    const { decision, reason } = selectionOf(c.output);
     for (const line of String(c.prompt || '').split('\n')) {
       const m = CAND.exec(line);
-      if (m) out.push({ at: c.bar, side: m[1].toLowerCase(), model: m[2], trigger: m[3], rank: m[4] ? Number(m[4]) : null, stop: Number(m[5]), stopPts: m[6] ? Number(m[6]) : null, decision: decisionOf(c.output) });
+      if (m) out.push({ at, side: m[1].toLowerCase(), model: m[2], trigger: m[3], rank: m[4] ? Number(m[4]) : null, stop: Number(m[5]), stopPts: m[6] ? Number(m[6]) : null, decision, reason });
     }
   }
-  // One per cycle bar and side (the prompt may hold the line twice: the briefing and a role's report).
+  // One per bar and side (the prompt may hold the line twice: the briefing and a role's report).
   const seen = new Set();
   return out.filter(p => { const k = `${p.at}|${p.side}`; if (seen.has(k)) return false; seen.add(k); return true; });
 }
 
-function entriesFrom(orders, events) {
-  const closes = (events || []).filter(e => e && e.kind === 'position_closed').sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
-  return (orders || []).filter(o => o && o.composed && o.composed.mtf).map(o => {
-    const side = /^(buy|long)$/i.test(o.side) ? 'long' : 'short';
-    const c = closes.find(e => Date.parse(e.at) > Date.parse(o.at) && (!e.side || e.side === side));
-    const why = c ? String(c.why || '') : '';
-    return {
-      at: o.at, side, rank: o.composed.mtf.rank ?? null, record: o.composed.record || null, entry: o.composed.entry ?? null, stop: o.composed.stop ?? null,
-      exit: c ? c.lastClose ?? null : null, exitAt: c ? c.at : null, r: c && Number.isFinite(c.rNow) ? Math.round(c.rNow * 100) / 100 : null,
-      exitBy: !c ? 'open' : /previous (high|low)/.test(why) ? 'runner' : /trail|time stop/.test(why) ? 'trail' : /\[exit\]|model/.test(why) ? 'model' : 'runner',
-    };
-  });
-}
-
-function tookAt(picks, entries, stepMs) {
-  return picks.map(p => ({ ...p, took: entries.some(e => e.side === p.side && Date.parse(e.at) >= Date.parse(p.at) && Date.parse(e.at) < Date.parse(p.at) + stepMs) }));
+const sideOf = s => (/^(0|buy|long)$/i.test(String(s)) ? 'long' : /^(1|sell|short)$/i.test(String(s)) ? 'short' : null);
+function ordersFrom(orders) {
+  return (orders || []).filter(o => o && o.composed && o.composed.mtf && Number.isFinite(Date.parse(o.composed.mtf.bar))).map(o => ({
+    at: o.at, bar: new Date(Date.parse(o.composed.mtf.bar)).toISOString(), side: sideOf(o.composed.side || o.side), model: o.composed.mtf.model || null,
+    instanceId: o.composed.mtf.instanceId || null, entry: o.composed.entry ?? null, stop: o.composed.stop ?? null,
+  }));
 }
 
 // The candidate's trading session (clock.js tradingDayKey, the 18:00 ET rollover).
 const dayOf = at => require('../trading/clock').tradingDayKey(new Date(at));
 
 /**
- * The selection rows (pickTable's): one per candidate (side, model and trigger: printed on consecutive bars it is one
- * candidate), its state from the model's decisions (took: an entry its way placed while it printed; waited: a WAIT still
- * open at its last print; passed: a PASS, or a WAIT the candidate outlived to void or expire), and its outcome on the ruler
- * (`ruler(pick)`, the first print's: { R, points } or null).
+ * The selection rows: one per candidate (side, model and trigger in a session: printed on consecutive bars it is one
+ * candidate). Its state (selection-score.js pickTable): took when an MTF entry order was placed for it (its side and
+ * model, on a bar it printed on: the gate's stamp), scored at that bar; else enterNoOrder (an ENTER and no order), scored
+ * at its first ENTER; else passed (a PASS, or a WAIT it outlived), waited (a WAIT still open at the run's last bar) or
+ * unlabelled, scored at its first print. `outcome` is the ruler's at the scored bar; `firstOutcome` the first print's.
  */
-function candidateRows(picks, ruler, { lastBar = null } = {}) {
+function candidateRows(picks, orders, ruler, { lastBar = null } = {}) {
   const groups = new Map();
   for (const p of picks) { const k = `${p.side}|${p.model}|${p.trigger}|${dayOf(p.at)}`; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(p); }
   return [...groups.entries()].map(([key, ps]) => {
     const list = ps.slice().sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
     const last = list[list.length - 1];
-    const state = list.some(p => p.took || p.decision === 'ENTER') ? 'took'
+    const order = (orders || []).find(o => o.side === list[0].side && o.model === list[0].model && list.some(p => p.at === o.bar)) || null;
+    const enter = list.find(p => p.decision === 'ENTER') || null;
+    const state = order ? 'took' : enter ? 'enterNoOrder'
       : list.some(p => p.decision === 'PASS') ? 'passed'
         : last.decision === 'WAIT' ? (lastBar && Date.parse(last.at) >= Date.parse(lastBar) ? 'waited' : 'passed') : 'unlabelled';
-    return { key, day: dayOf(list[0].at), side: list[0].side, model: list[0].model, first: list[0].at, state, outcome: ruler(list[0]) };
+    const scored = order ? list.find(p => p.at === order.bar) : enter || list[0];
+    return { key, day: dayOf(list[0].at), side: list[0].side, model: list[0].model, first: list[0].at, at: scored.at, state, order, outcome: ruler(scored), firstOutcome: ruler(list[0]) };
   });
 }
-
-const median = xs => { const a = xs.filter(x => Number.isFinite(x) && x > 0).sort((x, y) => x - y); return a.length ? a[Math.floor((a.length - 1) / 2)] : null; };
-const refRiskOf = (entries, picks) => median(entries.map(e => (Number.isFinite(e.entry) && Number.isFinite(e.stop) ? Math.abs(e.entry - e.stop) : NaN))) ?? median(picks.map(p => p.stopPts));
 
 // The head trader's final text (its result: the SELECTION line stands before the CYCLE RESULT line), by its harness;
 // a record without a transcript: its result line. Read only.
@@ -97,48 +105,55 @@ function finalText(c) {
 }
 
 const readJson = (f, dflt) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (_e) { return dflt; } };
-const jsonl = f => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8').split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch (_e) { return null; } }).filter(Boolean) : []);
-
-function readRun({ home, runDir, session, minutes, symbol = null }) {
-  const days = fs.existsSync(path.join(home, 'logs', 'cycles')) ? fs.readdirSync(path.join(home, 'logs', 'cycles')).sort() : [];
-  const cycles = days.flatMap(d => fs.readdirSync(path.join(home, 'logs', 'cycles', d)).filter(f => f.endsWith('-trade.json')).map(f => readJson(path.join(home, 'logs', 'cycles', d, f), null)).filter(Boolean)
-    .map(c => ({ bar: c.cycleAt || c.at, prompt: c.prompt, output: finalText(c) })));
-  const orders = readJson(path.join(home, 'entry-orders.json'), []);
-  const events = days.flatMap(d => jsonl(path.join(home, 'logs', `events-${d}.jsonl`)));
-  const entries = entriesFrom(Array.isArray(orders) ? orders : [], events);
-  const picks = tookAt(picksFrom(cycles), entries, minutes * 60000);
-  const bars = require('./trend-capture').servedBars(runDir, minutes);
-  const legs = bars.length ? FP.legsFrom(require('../eval/goal-metrics').trendLegs(bars, days, { session, minutes })) : [];
-  return { legs, entries, picks, refRiskPts: refRiskOf(entries, picks), rows: candidateRows(picks, rulerOf(bars, minutes, symbol), { lastBar: cycles.length ? cycles[cycles.length - 1].bar : null }) };
-}
 
 /**
- * The ruler (one for every candidate, taken or not): the shipped exit (experience-log.js limitOutcome with the policy's
- * composed exit: the 2R mark arms the trail) from the first print's close, a limit at that close with its structural stop
- * (never moved), flat at the end of day. null when it can't be measured (no bars, the stop on the wrong side, unfilled).
+ * The ruler (one for every candidate, taken or not): a limit at the scored bar's close, good for the composed record's
+ * `validBars` base bars (trade_lifecycle valid_bars), with the printed structural stop. A fill at a better open (a gap
+ * through the limit) keeps the structural stop, as the runner's fillGuard re-anchors it, and the R is on the fill to that
+ * stop (the runner's basis). The exit is the shipped one (experience-log.js limitOutcome with the policy's composed exit
+ * plan: the minRR mark arms the trail), flat at the end of day. A limit that never fills: no trade, { R: 0, points: 0,
+ * filled: false }. null when it can't be measured (no bars, no bar at the time, the stop on the wrong side).
  */
-function rulerOf(bars, minutes, symbol) {
+function rulerOf(bars, minutes, symbol, { validBars, minRR, plan } = {}) {
   if (!bars.length) return () => null;
+  if (!(validBars >= 1) || !(minRR > 0)) throw new Error('rulerOf: validBars and minRR are required (the shipped trade_lifecycle\'s)');
   const { limitOutcome } = require('../learning/experience-log');
-  const GT = require('../eval/goal-trades');
-  const P = GT.shippedOf(require('path').resolve(__dirname, '..', '..', '..'), {});
   const tfMs = minutes * 60000;
   const list = bars.map(b => ({ ...b, ms: Date.parse(b.t) }));
-  const { tickOf } = require('../trading/contracts');
-  const tick = tickOf(symbol);
+  const tick = require('../trading/contracts').tickOf(symbol);
   if (!(tick > 0)) return () => null;
-  const days = [...new Set(list.map(b => require('../trading/clock').tradingDayKey(new Date(b.ms))))].sort();
+  const days = [...new Set(list.map(b => dayOf(b.ms)))].sort();
   const clock = require('../learning/setup-library').runnerClock({ from: days[0], to: days[days.length - 1] });
+  const r2 = x => Math.round(x * 100) / 100;
   return p => {
     const at = Date.parse(p.at);
     const bar = list.find(b => b.ms + tfMs === at);
     if (!bar || !Number.isFinite(p.stop)) return null;
     const s = p.side === 'long' ? 1 : -1;
-    const risk = s * (bar.c - p.stop);
-    if (!(risk > 0)) return null;
-    const o = limitOutcome({ bars: list, tfMs, side: p.side, entry: bar.c, stop: p.stop, target: bar.c + s * P.minRR * risk, fromMs: at, expiresMs: at + tfMs, eodMs: clock.eodOf(at), tick, plan: P.exit.plan });
-    return o.filled && Number.isFinite(o.R) ? { R: o.R, points: Math.round(o.R * risk * 100) / 100 } : null;
+    if (!(s * (bar.c - p.stop) > 0)) return null;
+    const run = entry => limitOutcome({ bars: list, tfMs, side: p.side, entry, stop: p.stop, target: entry + minRR * (entry - p.stop), fromMs: at, expiresMs: at + validBars * tfMs, eodMs: clock.eodOf(at), tick, plan });
+    let o = run(bar.c);
+    if (o.filled === false) return { R: 0, points: 0, filled: false };
+    // A better fill: the same limit at the fill price fills on the same bar, its brackets from the structural stop.
+    if (o.filled && Number.isFinite(o.entryPrice) && Math.abs(o.entryPrice - bar.c) >= tick / 2) o = run(o.entryPrice);
+    if (!o.filled || !Number.isFinite(o.R)) return null;
+    return { R: o.R, points: r2(o.R * s * (o.entryPrice - p.stop)), filled: true, fill: o.entryPrice };
   };
 }
 
-module.exports = { decisionOf, picksFrom, entriesFrom, tookAt, refRiskOf, candidateRows, readRun };
+function readRun({ home, runDir, minutes, symbol = null }) {
+  const tfMs = minutes * 60000;
+  const dir = path.join(home, 'logs', 'cycles');
+  const days = fs.existsSync(dir) ? fs.readdirSync(dir).sort() : [];
+  const cycles = days.flatMap(d => fs.readdirSync(path.join(dir, d)).filter(f => f.endsWith('-trade.json')).sort().map(f => readJson(path.join(dir, d, f), null)).filter(Boolean)
+    .map(c => ({ prompt: c.prompt, cycleAt: c.cycleAt || c.at, output: finalText(c) })));
+  const orders = ordersFrom(readJson(path.join(home, 'entry-orders.json'), []));
+  const picks = picksFrom(cycles, tfMs);
+  const bars = require('./trend-capture').servedBars(runDir, minutes);
+  const P = bars.length ? require('../eval/goal-trades').shippedOf(path.resolve(__dirname, '..', '..', '..'), {}) : null;
+  const ruler = P ? rulerOf(bars, minutes, symbol, { validBars: P.validBars, minRR: P.minRR, plan: P.exit.plan }) : () => null;
+  const lastBar = cycles.length ? barOf(cycles[cycles.length - 1], tfMs) : null;
+  return { orders, picks, rows: candidateRows(picks, orders, ruler, { lastBar }) };
+}
+
+module.exports = { selectionOf, decisionOf, barOf, picksFrom, ordersFrom, candidateRows, rulerOf, readRun };
