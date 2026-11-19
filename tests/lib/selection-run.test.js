@@ -41,6 +41,7 @@ test('selectionOf: a labelled line at a line start (the quiz\'s rule: colon or a
   assert.equal(R.decisionOf('The skill says to write "SELECTION: ENTER - x".'), 'UNLABELLED');
   assert.equal(R.decisionOf('SELECTION: ENTERED - x'), 'UNLABELLED');
   assert.equal(R.decisionOf('SELECTION: enter - x'), 'UNLABELLED');
+  assert.equal(R.decisionOf('Selection: PASS - x'), 'UNLABELLED', 'the label is case-sensitive too');
   assert.equal(R.decisionOf('SELECTIONS: ENTER'), 'UNLABELLED');
   assert.equal(R.decisionOf(null), 'UNLABELLED');
 });
