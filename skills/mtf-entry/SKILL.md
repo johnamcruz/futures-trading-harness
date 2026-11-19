@@ -42,7 +42,8 @@ observable facts; you interpret them and select opportunities.
 - Do not reuse invalidated execution confirmations: a void candidate stays void.
 - Never enter against the 1h (never against it).
 - Never substitute an unrelated stop for the verified structural invalidation level.
-- WAIT keeps an active candidate for a later bar; PASS rejects this opportunity.
+- WAIT keeps an active candidate for a later bar (a 3m trigger); a 1m-trigger candidate
+  lives one bar, so a WAIT on it is a pass. PASS rejects this opportunity.
 
 **State your decision** on one line of its own, at the line's start, before the
 CYCLE RESULT line: `SELECTION: ENTER - <reason>`, `SELECTION: WAIT - <reason>` or
@@ -58,7 +59,9 @@ approved trail manages the stop.
 direction. Do not invent advantages for patterns testing has not shown.
 
 **What prints.** Only READY candidates get a `- MTF candidate` line; the earliest
-trigger per side is `(chosen)`. A model still waiting is in the one `- MTF waiting`
+trigger per side is `(chosen)`, the only one the gate takes: name it in your
+SELECTION line and your reads (`mtf ready` with another model is refused, "the ready
+candidate is X, not Y"). A model still waiting is in the one `- MTF waiting`
 clause: not ready, not an entry. A void one says so plainly, whatever its reason
 ("candidate void (stop traded)", "candidate void (price ran 0.8R past the trigger)"):
 no entry. `(position open: not a pick)`: context, never an entry.
@@ -67,13 +70,13 @@ no entry. `(position open: not a pick)`: context, never an entry.
 
 | Part | Means |
 |---|---|
-| model, stage | balanced (a CHoCH back, then a BOS) is the default; aggressive (the first CHoCH or CISD back) and conservative (15m CHoCH + fresh BOS) when enabled (`mtfEntry.models`); `(early)`: before the 15m pullback is established |
-| trigger 3m or 1m | the timing frame; its age (`new this bar`, `N min ago`); a 1m trigger fired since the last close: enter at the next bar or pass |
+| model, stage | aggressive (the first CHoCH or CISD back), balanced (a CHoCH back, then a BOS), conservative (15m CHoCH + fresh BOS): the models `mtfEntry.models` enables; `(early)`: before the 15m pullback is established |
+| trigger 3m or 1m | the timing frame; its age (`new this bar`, `N min ago`); a 1m trigger fired since the last close: enter at the next bar or pass (this bar or never) |
 | drift NR past the trigger | how far price ran past the trigger's close, in the trigger's R (its close to the stop); once any close since the trigger was over 0.5R the candidate is void for good; a trigger over 60 minutes old, or from an earlier session, is void too |
 | fresh turn | the parent's last CHoCH the side's way (this session or the previous one) and the BOS that confirmed it, the BOS count since; "turn N sessions ago (not fresh)": older; "no turn": the trend has run since its first break |
 | impulse | the move the pullback came from: its size in ATR, bars, displacement candles, cleanness (net move over the bars' ranges, 0-1) |
 | pullback #N of this 1h leg | its count since the 1h break that started the leg: a fact to weigh, not a preference |
-| depth N% (class): the stop X pts away, the impulse extreme Y pts away | how far the pullback retraced the parent impulse (shallow under 30%, moderate 30-75%, deep 75-100%, breached past the protected level) and the room it leaves: judge room against risk, never a forecast; the pivot is not "held" (about 1 in 4 pullbacks resume to the impulse extreme from the first entry-ready bar, the random-walk odds); depth alone is not an entry signal |
+| depth N% (class): the stop X pts away, the impulse extreme Y pts away | how far the pullback retraced the parent impulse (shallow under 30%, moderate 30-75%, deep 75-100%, breached past the protected level) and the room it leaves: judge room against risk, never a forecast; depth alone is not an entry signal |
 | structural stop, `$ a contract all in`, `cap fits K` | the stop (the trigger's origin, a tick beyond) and the size the code will take; under the floor: the stretch only while healthy, else skip |
 | previous high (exit target) | the exit option; under 1R: weigh whether the room pays; "already past": no exit target, the trail |
 

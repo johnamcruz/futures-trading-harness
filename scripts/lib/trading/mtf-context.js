@@ -1,9 +1,10 @@
 'use strict';
 
 /**
- * P1, the MTF candidate's CONTEXT facts (the owner: "a clean CHoCH then BOS, a strong impulse, and the first pullback after
- * a fresh turn"): facts the model weighs, never a filter or a gate. Pure and causal: each is computed from what the MTF
- * read knows at the candidate's bar; the displacement label is the one rule (cisd.js strongCandle, displacement.js's
+ * P1, the MTF candidate's CONTEXT facts (the owner's decision kept the turn, the BOS count since it and the impulse's
+ * strength): facts the model weighs, never a filter, a gate or a preference ("fresh" says when the turn was, "cleanness"
+ * measures the impulse; neither is advice; the flip test judges whether they move a pick). Pure and causal: each is
+ * computed from what the MTF read knows at the candidate's bar; the displacement label is the one rule (cisd.js strongCandle, displacement.js's
  * candleDisplaced), unchanged.
  *
  *   impulseQuality({ candles, from, to, start, extreme, dir, atr, displaced })   the parent impulse on the setup frame's
