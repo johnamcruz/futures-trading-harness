@@ -46,8 +46,8 @@ test('reconciled pairs: while an arm D rule stands, its reconciling text is in t
   const PAIRS = [
     { id: 'C1', a: /never counter/i, by: ['Arm D (default) rules are facts here, never refusals', 'never counter'] },
     { id: 'C2', a: /the side is the\s+Bias line's/i, by: ['Side: the 1h structure\'s.', 'For a candidate the side is the 1h structure\'s.'] },
-    { id: 'C3', a: /\bchop\b[^.]{0,40}sit out/i, by: ['the class and class table', 'any class rule is arm D\'s'] },
-    { id: 'C4', a: /wait for the 15m turn/i, by: ['the Pullback setup and 15m turn', 'the 15m-turn rule and the 3m-trigger rule do not apply'] },
+    { id: 'C3', a: /\bchop\b[^.]{0,40}sit out/i, by: ['the class and class table', 'any class rule is arm D\'s', 'the class, the 1h label and no 15m turn are context, never the reason'] },
+    { id: 'C4', a: /wait for the 15m turn/i, by: ['the Pullback setup and 15m turn', 'no 15m turn are context, never the reason', 'the 15m-turn rule and the 3m-trigger rule do not apply'] },
     { id: 'C20', a: /never (enter )?against the 1h/i, by: ['Never enter against the 1h structure; its trend label is context.'] },
     { id: 'C21', a: /\bPOTENTIAL\b[^\n]{0,90}monitor/, by: ['bos-vs-choch\'s stage actions and `Entry:` describe the primary line'] },
   ];
@@ -61,6 +61,8 @@ test('reconciled pairs: while an arm D rule stands, its reconciling text is in t
 
 test('term guards in the mtf-entry skill: no "stale" (void is the candidate\'s only dead word); the stage words are defined, as the pullback\'s stage, never a forecast', () => {
   assert.doesNotMatch(SKILL, /\bstale\b/i);
+  // The re-ask's STALE misread: a 1m trigger fired inside the bar that just closed is current (the iteration round).
+  assert.ok(norm(SKILL).includes('A 1m trigger fired since the previous 3m close is current, not expired: it fired inside the bar that just closed; enter or pass now'));
   const s = norm(SKILL);
   assert.ok(s.includes('A stage word names the pullback\'s stage: WEAKENING, REVERSING and CONFIRMED REVERSAL mean price turned back toward the parent trend (a definition, not a forecast).'), 'the stage words\' definition');
   // Every other sentence naming a stage word with weakening or reversal in it names the pullback (C5).

@@ -22,8 +22,8 @@ observable facts; you interpret them and select opportunities.
 **Market reading**, in order:
 
 1. The parent trend and its protected structure. The side is the primary line's
-   "1h structure UP" or "DOWN". The 4h "(context)" is a fact, never a refusal.
-2. The MTF pullbacks (arm A: 15m; arm B: 3m): active and completed.
+   1h structure (UP or DOWN); the 4h is context.
+2. The MTF pullbacks: active and completed.
 3. The setup timeframe's structure relative to the parent (the 15m line decides the
    pullback; the 3m line only times it).
 4. The execution timeframe's CHoCH and BOS aligned with the parent.
@@ -44,13 +44,13 @@ observable facts; you interpret them and select opportunities.
 - Never enter against the 1h structure; its trend label is context. For a candidate
   the side is the 1h structure's. The Trend rule line does not refuse a verified MTF
   candidate (the gate exempts it from `[mtf-trend]`).
-- The class is a fact to weigh, never a refusal; any class rule is arm D's. A PASS
-  names a fact from the candidate's line or your own read. Never cite the class as a
-  rule.
+- The class is a fact to weigh, never a refusal; any class rule is arm D's. Never
+  cite the class as a rule. A PASS reason is a candidate-line fact or your own read; the
+  class, the 1h label and no 15m turn are context, never the reason.
 - Never substitute an unrelated stop for the verified structural invalidation level.
 - 3m trigger: WAIT keeps it for the next bar. 1m trigger: ENTER or PASS; a WAIT counts
   as a PASS. PASS rejects this opportunity (this bar only).
-- Room: in the candidate's own R (its structural stop).
+- Room: in the candidate's own R.
 
 **State your decision** on its own line, before the CYCLE RESULT line:
 `SELECTION: ENTER - <side> <model> <trigger time>: <reason>`, or the same with WAIT or
@@ -81,7 +81,7 @@ no entry. `(position open: not a pick)`: context, never an entry.
 | Part | Means |
 |---|---|
 | model, stage | aggressive (the first CHoCH or CISD back), balanced (a CHoCH back, then a BOS), conservative (15m CHoCH + fresh BOS); `(early)`: before the MTF pullback (arm A: 15m; arm B: 3m) is established. Still eligible: the 15m-turn rule and the 3m-trigger rule do not apply |
-| trigger 3m or 1m | the timing frame, the candidate's own; its age (`new this bar`, `N min ago`). A 1m candidate is timed by its 1m trigger. A 1m trigger fired since the previous 3m close is current: it fired inside the bar that just closed; enter at the next bar or pass |
+| trigger 3m or 1m | the timing frame, the candidate's own; its age (`new this bar`, `N min ago`). A 1m candidate is timed by its 1m trigger. A 1m trigger fired since the previous 3m close is current, not expired: it fired inside the bar that just closed; enter or pass now |
 | ran NR past the trigger, or NR back toward the stop | how far price moved from the trigger's close, in the trigger's R (its close to the stop). Back toward the stop: still valid. Once any close since the trigger ran over 0.5R past it, the candidate is void for good. A trigger over 60 minutes old, or from an earlier session, is void too |
 | 1h turn (the parent's frame: 1h in arm A, 15m in arm B) | a fact, never a wait: the parent's last CHoCH the side's way (this session or the previous one), the BOS that confirmed it, the BOS count since; "N sessions ago (older)"; "no turn": the trend has run since its first break |
 | impulse | the move the pullback came from: its size in ATR, bars, displacement candles, cleanness (net move over the bars' ranges, 0-1) |
