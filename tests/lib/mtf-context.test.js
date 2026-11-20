@@ -24,11 +24,11 @@ test('impulseQuality: long and short math (net move in ATR, bars, displacement c
 });
 
 test('the texts: a fresh turn (CHoCH then BOS, the BOS count), a CHoCH not yet confirmed, no turn; the impulse, its cut drops cleanness first', () => {
-  assert.equal(C.turnText({ way: 'up', choch: { et: '10:15' }, bos: { et: '10:42' }, bosCount: 1 }, '1h', { sessionsAgo: 0 }), 'fresh turn (this session): 1h CHoCH up 10:15, BOS up 10:42; 1 BOS since the turn');
-  assert.equal(C.turnText({ way: 'down', choch: { et: '09:00' }, bos: null, bosCount: 0 }, '15m', { sessionsAgo: 1 }), 'fresh turn (the previous session): 15m CHoCH down 09:00, no BOS down yet; 0 BOS since the turn');
+  assert.equal(C.turnText({ way: 'up', choch: { et: '10:15' }, bos: { et: '10:42' }, bosCount: 1 }, '1h', { sessionsAgo: 0 }), '1h turn (this session): 1h CHoCH up 10:15, BOS up 10:42; 1 BOS since the turn');
+  assert.equal(C.turnText({ way: 'down', choch: { et: '09:00' }, bos: null, bosCount: 0 }, '15m', { sessionsAgo: 1 }), '15m turn (the previous session): 15m CHoCH down 09:00, no BOS down yet; 0 BOS since the turn');
   // older than the previous session, or its age unknown: a turn, not fresh, its age said.
-  assert.equal(C.turnText({ way: 'up', choch: { et: '11-10 09:00' }, bos: { et: '11-10 11:00' }, bosCount: 2 }, '1h', { sessionsAgo: 3 }), 'turn 3 sessions ago (not fresh): 1h CHoCH up 11-10 09:00, BOS up 11-10 11:00; 2 BOS since the turn');
-  assert.equal(C.turnText({ way: 'up', choch: { et: '10:15' }, bos: null, bosCount: 0 }, '1h'), 'turn of unknown age (not fresh): 1h CHoCH up 10:15, no BOS up yet; 0 BOS since the turn');
+  assert.equal(C.turnText({ way: 'up', choch: { et: '11-10 09:00' }, bos: { et: '11-10 11:00' }, bosCount: 2 }, '1h', { sessionsAgo: 3 }), '1h turn 3 sessions ago (older): 1h CHoCH up 11-10 09:00, BOS up 11-10 11:00; 2 BOS since the turn');
+  assert.equal(C.turnText({ way: 'up', choch: { et: '10:15' }, bos: null, bosCount: 0 }, '1h'), '1h turn of unknown age (older): 1h CHoCH up 10:15, no BOS up yet; 0 BOS since the turn');
   assert.equal(C.isFresh({ choch: {} }, 1), true);
   assert.equal(C.isFresh({ choch: {} }, 2), false);
   assert.equal(C.isFresh({ choch: null }, 0), false);

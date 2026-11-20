@@ -1086,3 +1086,15 @@ test('quiz accuracy, census follow-up: q144 has one defensible key: the protecte
   for (const [a, want] of [['The 15m BOS stop is looser than 11935.\nANSWER: A', true], ['ANSWER: STOP hold: hold', true], ['ANSWER: C', false], ['ANSWER: C) STOP 11912.5: protected-swing', false],
     ['ANSWER: A) STOP 11912.5: protected-swing', false], ['ANSWER: B', false], ['ANSWER: D', false], ['ANSWER: A\nwait\nANSWER: C', false], ['ANSWER: A or C', false]]) assert.strictEqual(g(a), want, a);
 });
+
+test('the lessons review (F4): briefingOfText reads an MTF arm\'s relabelled Bias and Pullback lines as it reads arm D\'s', () => {
+  const ME = require('../../scripts/lib/trading/mtf-entry');
+  const armD = '\n- Bias: long only (4h up, 1h range; short refused)\n- Pullback (15m, long leg 21500.00 -> 21580.00): depth 40% of the leg, a pullback in the trend.\n';
+  const mtf = armD.replace(/\n- Bias: ([^\n]*)/, (m, b) => `\n- ${ME.mtfBiasText(`Bias: ${b}`)}`).replace('\n- Pullback (', '\n- Pullback (arm D context: ');
+  assert.notEqual(mtf, armD);
+  assert.ok(Q.briefingOfText(armD));
+  assert.deepStrictEqual(Q.briefingOfText(mtf), Q.briefingOfText(armD));
+  // An unknown trend stays unknown (not read as ranging).
+  const unknown = Q.briefingOfText('\n- Bias: no side (the 1h trend not in the briefing) → no entry\n');
+  assert.ok(!unknown || JSON.stringify(unknown).indexOf('range') < 0, JSON.stringify(unknown));
+});

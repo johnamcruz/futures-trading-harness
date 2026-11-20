@@ -1026,10 +1026,10 @@ function summaryLines(b, et) {
     `Summary (${b.symbol} ${tf}, ${m3.et} ET):`,
     `- Session: ${m3.windowText || `${m3.window} until ${et(m3.windowUntil)} ET`}.`,
     `- Price ${m3.price}. 1R = ${m3.oneR ? `${m3.oneR.points} pts (${m3.oneR.basis})` : 'unknown'}; every distance below is in points and R.`,
-    `- Trend rule: ${rule}`,
+    `- Trend rule: ${mtfOnlyOf(m3) ? ME.mtfTrendRuleText(rule) : rule}`,
     // The side the entry rule (BG) allows, from its own check (bias-line.js): the runner's briefing only (a frame's has no
     // session facts, so no declared trend).
-    ...(!own && biasLine(b) ? [`- ${biasLine(b)}.`] : []),
+    ...(!own && biasLine(b) ? [`- ${mtfOnlyOf(m3) ? ME.mtfBiasText(biasLine(b)) : biasLine(b)}.`] : []),
     // The Market state (market-state.js): one present-tense read, the precedence applied once (taught in trade-session's
     // table); a read, not a filter: no gate, hook, compose or decision code reads it, and it is never a data field.
     ...(!own && stateOf(b, STATE_TH) ? [`- ${marketStateLine(stateOf(b, STATE_TH))}.`] : []),
@@ -1037,7 +1037,8 @@ function summaryLines(b, et) {
     // 15m > 3m; directly under the Market state line, facts only; one `unavailable` line when the record cannot be made.
     // Prices through the briefing's own tick formatter (review m1: a 0.1-tick contract prints its stop on the tick).
     ...(!own ? mtfBriefingLines(m3, b) : []),
-    alignment,
+    // The conflict audit's A7 (C9): in an MTF arm the Alignment line is context, never a side rule.
+    mtfOnlyOf(m3) ? alignment.replace(/^- Alignment: /, '- Alignment (context here): ') : alignment,
     own ? `- VWAP and the session's levels (today, overnight, opening range, IB, profile): each ${SESSION_ELSEWHERE}, one value in every briefing; ${typeof m3.setups === 'string' ? `the room below is this ${tf} bar's own levels` : `the room below and the setups' levels include them (the runner's values), with this ${tf} bar's own`}.`
       : `- VWAP (${vw.applies || '?'}): price ${vw.side || '?'}, ${Number.isFinite(vw.distanceAtr) ? Math.abs(vw.distanceAtr) : '?'} x ${tf} ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP ${vw.rthCrossesLast30 ?? '?'}, the session VWAP ${vw.sessionCrossesLast30 ?? '?'} (the regime's count).`,
     `- News: ${news.error ? news.error : news.inBlackout ? `in a blackout (${news.reason || 'event'}) until ${et(news.until)}` : news.next ? `next ${news.next.reason || 'event'} at ${et(news.next.start)} (in ${news.next.inMinutes} min)` : 'no blackout ahead'}.`,
@@ -1075,10 +1076,12 @@ function summaryLines(b, et) {
   if (declared) out.push(declared);
   // The base timeframe's timing against the side the entry rule allows (ltf-timing.js timingLine).
   const timing = timingLine(m3.timing, et, tf);
-  if (timing) out.push(timing);
+  // The cold read (finding 2, 6): in an MTF arm the timing and Pullback lines are arm D's facts, labelled so.
+  const ctx = l => (mtfOnlyOf(m3) && l ? l.replace(/^- ([^:(]+?) ?\(/, '- $1 (arm D context: ') : l);
+  if (timing) out.push(ctx(timing));
   // Price against the prevailing side on the 15m: the leg, its depth, swings, counter-move and breaks (pullback-read.js).
   const pullback = own ? null : pullbackLine(m3.pullback);
-  if (pullback) out.push(pullback);
+  if (pullback) out.push(ctx(pullback));
   // The setup moment (learning/setup-moments.js): the reactions the model composes on, said as facts.
   // And the briefing's own setups on an allowed side (setupChecks: a compression break, a live CISD) on the same line;
   // the standard plan below stays the setup moment's.
@@ -1277,12 +1280,14 @@ function renderBriefing(b, { now = new Date() } = {}) {
   const et = v => etTimes(v, day);
   const lines = [`Bar briefing ${b.symbol} ${b.minutes}m, bar ${et(b.asOf)} ET closed ${et(b.closedAt)} ET (${day}), price ${b.price}; times in ET, distances in points and R (computed once per section; reuse it, don't recompute):`];
   lines.push(...summaryLines(b, et), '', 'Detail by timeframe:');
+  // The reading audit's E1: an MTF arm's 3m detail prints the trend rule without its refusal clause, as its summary does.
+  const mtfOnly = Boolean(mtfOnlyOf((b.sections.m3 || {}).data));
   for (const name of SECTIONS) {
     const s = b.sections[name];
     if (!s) continue;
     const stale = Date.parse(s.validUntil) <= now.getTime() ? ' EXPIRED (the next briefing replaces it)' : '';
     lines.push(`[${name}] version ${s.version}, valid until ${et(s.validUntil)} ET${stale}`);
-    for (const [k, v] of detailEntries(s.data)) lines.push(`  ${k}: ${fmt(et(v))}`);
+    for (const [k, v] of detailEntries(s.data)) lines.push(`  ${k}: ${fmt(et(mtfOnly && name === 'm3' && k === 'trendRule' ? ME.mtfTrendRuleText(v) : v))}`);
   }
   return `${lines.join('\n')}\n`;
 }

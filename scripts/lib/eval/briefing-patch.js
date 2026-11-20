@@ -286,7 +286,7 @@ function stateLineFor(cycle, fs = loadFrameState()) {
 }
 
 /** The patch that shows `line` where the live briefing does: right before `- Alignment:` in the runner's briefing, once. */
-const stateLinePatch = line => ({ name: 'state-line', within: { ...BRIEFING }, line: '^- Alignment:', op: 'before', text: line, unless: '^- State \\(' });
+const stateLinePatch = line => ({ name: 'state-line', within: { ...BRIEFING }, line: '^- Alignment( \\(context here\\))?:', op: 'before', text: line, unless: '^- State \\(' });
 
 function statePatch(cycle, fs = loadFrameState()) {
   const line = stateLineFor(cycle, fs);

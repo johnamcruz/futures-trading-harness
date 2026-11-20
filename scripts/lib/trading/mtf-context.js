@@ -2,7 +2,7 @@
 
 /**
  * P1, the MTF candidate's CONTEXT facts (the owner's decision kept the turn, the BOS count since it and the impulse's
- * strength): facts the model weighs, never a filter, a gate or a preference ("fresh" says when the turn was, "cleanness"
+ * strength): facts the model weighs, never a filter, a gate or a preference (the turn's age says when it was, "cleanness"
  * measures the impulse; neither is advice; the flip test judges whether they move a pick). Pure and causal: each is
  * computed from what the MTF read knows at the candidate's bar; the displacement label is the one rule (cisd.js strongCandle, displacement.js's
  * candleDisplaced), unchanged.
@@ -14,8 +14,8 @@
  *                                  ranges, 0-1) }, or null when it can't be measured
  *   sessionsBetween(from, to)      trading sessions back from `to` to `from` (0 the same; weekends not counted)
  *   isFresh(turn, sessionsAgo)     a CHoCH turn in this session or the previous one
- *   turnText(turn, frame, { sessionsAgo })   "fresh turn (this session): 1h CHoCH up 10:15, BOS up 10:42; 1 BOS since the
- *                                  turn", "turn 3 sessions ago (not fresh): ...", or "no turn: trend since 10:42, 3 BOS"
+ *   turnText(turn, frame, { sessionsAgo })   "1h turn (this session): 1h CHoCH up 10:15, BOS up 10:42; 1 BOS since the
+ *                                  turn", "1h turn 3 sessions ago (older): ...", or "no turn: trend since 10:42, 3 BOS"
  *                                  (turn: mtf-structure.js parent.turn)
  *   impulseText(q)                 "impulse 2.4 ATR in 9 bars, 2 displacement candles, cleanness 0.78"; cut: cleanness
  *                                  first
@@ -70,8 +70,8 @@ function turnText(turn, frame, { sessionsAgo = null } = {}) {
   const bos = n => `${n} BOS`;
   if (turn.choch) {
     const b = turn.bos ? `, BOS ${turn.way} ${turn.bos.et}` : `, no BOS ${turn.way} yet`;
-    const head = isFresh(turn, sessionsAgo) ? `fresh turn (${sessionsAgo === 0 ? 'this session' : 'the previous session'})`
-      : Number.isInteger(sessionsAgo) ? `turn ${sessionsAgo} sessions ago (not fresh)` : 'turn of unknown age (not fresh)';
+    const head = isFresh(turn, sessionsAgo) ? `${frame} turn (${sessionsAgo === 0 ? 'this session' : 'the previous session'})`
+      : Number.isInteger(sessionsAgo) ? `${frame} turn ${sessionsAgo} sessions ago (older)` : `${frame} turn of unknown age (older)`;
     return `${head}: ${frame} CHoCH ${turn.way} ${turn.choch.et}${b}; ${bos(turn.bosCount)} since the turn`;
   }
   return `no turn: trend since ${turn.since ? turn.since.et : '?'}, ${bos(turn.bosCount)}`;

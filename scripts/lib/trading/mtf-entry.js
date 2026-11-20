@@ -291,14 +291,21 @@ const cutAt = (cut, name) => LINE_CUTS.indexOf(name) <= cut;
 
 /** One ready candidate's line at a cut level (LINE_CUTS' index): the core (model, stage, trigger, its age and drift, the
  * rank, the structural stop and its size, the 4h) and the trend's context (the parent's turn, the impulse's strength). */
+/** The conflict audit's A8 (C16): the drift's sign in words. Back toward the stop (negative): "0.53R back toward the
+ * stop"; past the trigger (zero or positive): "ran 0.17R past the trigger". */
+/** The turn at the line's tightest cut (A8, C13): "1h turn, 2 BOS since", "older turn, 2 BOS since", "no turn, 3 BOS". */
+const turnShort = (t, fresh, frame) => (t.choch ? `${fresh ? `${frame} turn` : 'older turn'}, ${t.bosCount} BOS since` : `no turn, ${t.bosCount} BOS`);
+
+const driftText = d => (Number(d) < 0 ? `${r2(-d)}R back toward the stop` : `ran ${d}R past the trigger`);
+
 function candidateLine(x, c, mode, { level, sizing, price, cut, positionOpen }) {
   const MC = require('./mtf-context');
   const chosen = positionOpen ? ' (position open: not a pick)' : c.chosen[x.side] === x ? ' (chosen)' : '';
   const age = !x.age ? '' : x.age.barsAgo === 0 ? ' (new this bar)' : ` (${x.age.minAgo} min ago)`;
-  const trig = `trigger ${x.trigger.frame} ${x.trigger.kind || 'break'} ${wayOf(x.side)} ${x.trigger.et}${age}; drift ${x.driftR}R past the trigger`;
+  const trig = `trigger ${x.trigger.frame} ${x.trigger.kind || 'break'} ${wayOf(x.side)} ${x.trigger.et}${age}; ${driftText(x.driftR)}`;
   const t = x.turn;
   const fresh = MC.isFresh(t, x.turnSessions);
-  const turn = !t ? 'turn not known' : cutAt(cut, 'turnTimes') ? (t.choch ? `${fresh ? 'fresh turn' : 'old turn'}, ${t.bosCount} BOS since` : `no turn, ${t.bosCount} BOS`) : MC.turnText(t, x.parentFrame || '1h', { sessionsAgo: x.turnSessions });
+  const turn = !t ? 'turn not known' : cutAt(cut, 'turnTimes') ? turnShort(t, fresh, x.parentFrame || '1h') : MC.turnText(t, x.parentFrame || '1h', { sessionsAgo: x.turnSessions });
   const rank = Number.isInteger(x.rank) && x.leg ? `pullback #${x.rank} of this 1h leg` : 'its rank in the 1h leg not known';
   // The coordinator's ruling 2: depth as ROOM, never a forecast: the distances to the stop and to the impulse extreme.
   const room = Number.isFinite(price) && Number.isFinite(x.impulseExtreme) ? `: the stop ${r2(Math.abs(price - x.stop))} pts away, the impulse extreme ${r2(Math.abs(x.impulseExtreme - price))} pts away` : '';
@@ -343,4 +350,29 @@ function candidateLines(rec, mode, { level = x => x, sizing = null, price = null
   return out;
 }
 
-module.exports = { mtfOnlyMode, mtfPlanProblems, setupMinutes, startProblems, TODAY, ARMS, replayRun, modeOf, recordMode, candidatesOf, readyOf, entryModeProblems, sizeHint, candidateLines };
+/**
+ * The reading audit (E1) and the lessons review (F1): in an MTF arm the arm D side rules refuse no MTF candidate (the gate
+ * exempts a verified MTF entry from [mtf-trend]; the candidate's side is the 1h structure's), so EVERY refusal, "no entry"
+ * or "only" clause that mtf.js ruleLine and bias-line.js biasLine can print is dropped there; arm D: as is.
+ *   mtfTrendRuleText(text)   drops "; no <side> against it", "; no entry", "; no entry yet", "; in a prop attempt no side
+ *                            (the entry rule), else both sides open" and ": in a prop attempt only with the trend declared"
+ *                            ("LONG allowed (prevailing 4h up); no short against it." -> "LONG allowed (prevailing 4h up).")
+ *                            and the no-side form's ": no entry against a trending ..." reasons (with its "no side:" stutter)
+ *   mtfBiasText(line)        labels the line context and drops "; <side> refused", " only" and " -> no entry"
+ *                            ("Bias: long only (4h up, 1h up; short refused)" -> "Bias (context here): long (4h up, 1h up)")
+ */
+const mtfTrendRuleText = text => String(text)
+  .replace(/; no (long|short) against it(\.?)$/, '$2')
+  .replace(/; no entry(?: yet)?(\.?)$/, '$1')
+  .replace(/; in a prop attempt no side \(the entry rule\), else both sides open(\.?)$/, '$1')
+  .replace(/: in a prop attempt only with the trend declared\)/, ')')
+  // The no-side form's reasons (mtf.js trendRule): "...: no entry against a trending 4h or 1h", and its stutter.
+  .replace(/: no entry against a trending [^;)]+/g, '')
+  .replace(/^(Trend rule: )?no side \(no side: /, '$1no side (');
+const mtfBiasText = line => String(line)
+  .replace(/; (long|short) refused\)/, ')')
+  .replace(/\b(long|short) only\b/g, '$1')
+  .replace(/ → no entry$/, '')
+  .replace(/^Bias: /, 'Bias (context here): ');
+
+module.exports = { turnShort, driftText, mtfTrendRuleText, mtfBiasText, mtfOnlyMode, mtfPlanProblems, setupMinutes, startProblems, TODAY, ARMS, replayRun, modeOf, recordMode, candidatesOf, readyOf, entryModeProblems, sizeHint, candidateLines };

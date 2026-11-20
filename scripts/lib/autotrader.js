@@ -788,6 +788,12 @@ const RESULT_TEMPLATE = `CYCLE RESULT: <${CYCLE_OUTCOMES.join(' | ')}> - <reason
 // its first and last step only (the prompt's size budget; trade-session step 0 loads the skill with the block).
 const PLAN_STEPS = ['HTF', 'Context', 'Location', 'Setup', 'Confluence', 'Entry', 'Risk', 'Decision', 'Manage'];
 const PLAN_TEXT = ` Write the trader-process skill's PLAN (1 ${PLAN_STEPS[0]} to ${PLAN_STEPS.length} ${PLAN_STEPS[PLAN_STEPS.length - 1]}) before the result line.`;
+// An MTF entry arm (mtf_only): the SELECTION line named where the PLAN and the result line are, right before the result
+// line, so the PLAN's step 8 never stands in for it (the reading lesson: the six mornings labelled 7 of 13). Arm D: as above.
+const MTF_PLAN_TEXT = PLAN_TEXT.replace(' before the result line.', ', then, with an MTF candidate line printed, your SELECTION line on its own line (`SELECTION: ENTER - <side> <model> <trigger time>: <reason>`, or WAIT or PASS in its place: the one that counts), then the result line.');
+// The conflict audit's A1 (C1-C4, C8, C10, C21): which rule decides an MTF candidate, in an MTF arm only, placed last
+// (after this cycle's reads, right before the result line: the model follows the nearest text). No default decision.
+const MTF_PRECEDENCE = ' An MTF candidate printed: `mtf-entry` decides it; its side, class, pullback and selection rules override other skills\'. Window, account, size and management rules still apply. Side: the 1h structure\'s. Arm D (default) rules are facts here, never refusals: the 4h; the Trend rule, Bias and Alignment lines; the class and class table; the take rule; never counter; the Pullback setup and 15m turn; the 3m trigger; late or far past value; a level ahead; a valid setup is the trade; the count; a STATE-read pass. No entry: `candidate void` printed, or a reply this cycle refuses it (never predict one). Else ENTER, WAIT (3m trigger only; on 1m it is a PASS) or PASS, with your reason, on the SELECTION line.';
 const RESULT_LINE = ` End with the cycle result as plain text in your final message, never as a tool call. Your last line must be exactly: ${RESULT_TEMPLATE}.`;
 
 /**
@@ -799,7 +805,9 @@ const RESULT_LINE = ` End with the cycle result as plain text in your final mess
 function withCycleData(prompt, data) {
   if (!data) return prompt;
   if (typeof prompt !== 'string' || !prompt.endsWith(RESULT_LINE)) throw new Error('withCycleData: the prompt does not end with its result line');
-  return `${prompt.slice(0, -RESULT_LINE.length)}${data}${RESULT_LINE}`;
+  // An MTF arm's precedence paragraph stays last, after the reads (the conflict audit's A1).
+  const tail = prompt.endsWith(`${MTF_PRECEDENCE}${RESULT_LINE}`) ? `${MTF_PRECEDENCE}${RESULT_LINE}` : RESULT_LINE;
+  return `${prompt.slice(0, -tail.length)}${data}${tail}`;
 }
 
 /**
@@ -862,7 +870,7 @@ function prompts(cfg, now, root = '') {
       const bars = list.filter(x => x.bar).map(({ symbol, bar, scan, verdicts, notEntries, entryBlocked = null, cited = [], minutes = cfg.timeframe, repeat = false }) =>
         // The bar's close is the last of the recent bars below; the trend line is one sentence.
         ` ${symbol}: a ${minutes}-minute bar just closed (opened ${etTime(bar.t)}); closed ${minutes}-minute bars, oldest first, are in ${bar.file} (get_bars format; contractId ${bar.contractId}) - use that file; don't fetch ${minutes}-minute bars.`
-        + (repeat ? '' : bar.trend ? ` ${symbol} ${String(bar.trend).trim().replace(/\.$/, '')} (recorded for the order gate, which enforces it).` : ` ${symbol}: no multi-timeframe record this bar, so the gate refuses trend strategies' entries.`)
+        + (repeat ? '' : bar.trend ? ` ${symbol} ${(mtfOnly ? require('./trading/mtf-entry').mtfTrendRuleText : x => x)(String(bar.trend).trim().replace(/\.$/, ''))} ${mtfOnly ? '(recorded; a fact in this arm: the gate does not apply `[mtf-trend]` to a verified MTF candidate)' : '(recorded for the order gate, which enforces it)'}.` : ` ${symbol}: no multi-timeframe record this bar, so the gate refuses trend strategies' entries.`)
         + (bar.plan && !repeat ? ` ${sentence(bar.plan)}` : '')
         + (bar.day && !repeat ? ` ${sentence(bar.day)}` : '')
         + recentBarsText(symbol, bar.recent, minutes)
@@ -902,10 +910,10 @@ function prompts(cfg, now, root = '') {
         stable: stableHead(root),
         time: ` The cycle's time: ${etStamp(now)} (${now.toISOString()}).`,
         facts: `${recover}${lanes}${bars.join('')}${news ? ` ${news}` : ''}${eodText}${capText}${account}${verdicts.join('')}${historyText(history, Boolean(lanes), marketOf(list, cfg.timeframe))}${unreviewed ? ` ${unreviewed}` : ''}${own}${lessons.length ? ` Your recurring mistakes and lessons (confidence; notes from your own past, not rules): ${lessons.join(' | ')}.` : ''}${missing}`,
-        instructions: ` ${skillsText(cfg, root)}, then run the trade-session skill for ${symbols}${new Set(list.map(x => x.symbol)).size > 1 ? ' (one symbol at a time, open positions first)' : ''}${also}${acct}${mode ? ` in ${mode}` : ''}.${PLAN_TEXT}`,
+        instructions: ` ${skillsText(cfg, root)}, then run the trade-session skill for ${symbols}${new Set(list.map(x => x.symbol)).size > 1 ? ' (one symbol at a time, open positions first)' : ''}${also}${acct}${mode ? ` in ${mode}` : ''}.${mtfOnly ? MTF_PLAN_TEXT : PLAN_TEXT}`,
         desk: manageOnly || cfg.paper ? '' : entry ? `${ENTRY_TEXT}${cachedText(cached)}` : managedDesk ? `${MANAGED_DESK_TEXT}${cachedText(cached)}` : `${roster(cfg, (cached && cached.roles) || [], frames)}${managedCycle ? MANAGED_NO_ENTRY_TEXT : ''}${cachedText(cached)}`,
         situation: situationText,
-        result: RESULT_LINE,
+        result: mtfOnly ? `${MTF_PRECEDENCE}${RESULT_LINE}` : RESULT_LINE,
       };
       if (raw) return parts;
       return tradeOrder(cfg).map(k => parts[k]).join('');
@@ -1576,6 +1584,7 @@ module.exports = {
   headDeliveryOf,
   oneDelivery,
   RESULT_LINE,
+  MTF_PRECEDENCE,
   CYCLE_OUTCOMES,
   RESULT_TEMPLATE,
   outcomeOf,

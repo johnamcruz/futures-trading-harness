@@ -13,7 +13,7 @@ const R = require('../../scripts/lib/replay/selection-run');
 const { writeCycleLog } = require('../../scripts/lib/cycle-log');
 const { tmpDir } = require('../helpers');
 
-const LINE = (o = {}) => `- MTF candidate ${o.side || 'LONG'} (chosen): ${o.model || 'aggressive'} at stage WEAKENING, trigger 3m CHoCH ${o.way || 'up'} ${o.et || '10:12'} (new this bar); drift 0R past the trigger; context: fresh turn (this session): 1h CHoCH up 09:00, BOS up 09:45; 1 BOS since the turn; impulse 2.6 ATR in 8 bars, 2 displacement candles, cleanness 0.81; pullback #1 of this 1h leg; depth 55% (moderate): the stop 11.5 pts away, the impulse extreme 30 pts away; structural stop ${o.stop || 21528.75}: 11.5 pts, $24.24 a contract all in; the $300 cap fits 12; 4h structure UP (context).`;
+const LINE = (o = {}) => `- MTF candidate ${o.side || 'LONG'} (chosen): ${o.model || 'aggressive'} at stage WEAKENING, trigger 3m CHoCH ${o.way || 'up'} ${o.et || '10:12'} (new this bar); ran 0R past the trigger; context: 1h turn (this session): 1h CHoCH up 09:00, BOS up 09:45; 1 BOS since the turn; impulse 2.6 ATR in 8 bars, 2 displacement candles, cleanness 0.81; pullback #1 of this 1h leg; depth 55% (moderate): the stop 11.5 pts away, the impulse extreme 30 pts away; structural stop ${o.stop || 21528.75}: 11.5 pts, $24.24 a contract all in; the $300 cap fits 12; 4h structure UP (context).`;
 const BRIEF = (asOf, line) => `Autonomous cycle.\n--- bar_briefing {"symbol":"MNQ"} as of ${asOf} ---\n${line}\n--- end of bar_briefing {"symbol":"MNQ"} (sha256 x) ---`;
 const claude = text => JSON.stringify({ type: 'result', subtype: 'success', result: text });
 
@@ -241,4 +241,17 @@ test('rulerOf (REVIEW-4 minor 5, 6): a limit whose valid_bars window runs past t
   const t = R.rulerOf(turn, 3, 'MNQ', SHIPPED)({ at: T(3), side: 'long', stop: 95 });
   const t1 = R.rulerOf(turn, 3, 'MNQ', { ...SHIPPED, minRR: 1 })({ at: T(3), side: 'long', stop: 95 });
   assert.notDeepEqual(t, t1, 'the mark that arms the trail is the shipped minRR');
+});
+
+test('the lessons review (F3): an echoed template "ENTER|WAIT|PASS" is two decisions on one line: unlabelled, never an ENTER', () => {
+  const { selectionOf } = require('../../scripts/lib/replay/selection-run');
+  assert.equal(selectionOf('SELECTION: ENTER|WAIT|PASS - <side> <model> <trigger time>: <reason>').decision, 'UNLABELLED');
+  assert.equal(selectionOf('SELECTION: PASS|WAIT - x').decision, 'UNLABELLED');
+  assert.equal(selectionOf('SELECTION: PASS - long aggressive 10:12: room under 1R').decision, 'PASS');
+  // The fix review: the template's own one-word form echoed with its placeholders, and a comma list, are no decision.
+  assert.equal(selectionOf('SELECTION: ENTER - <side> <model> <trigger time>: <reason>').decision, 'UNLABELLED');
+  assert.equal(selectionOf('SELECTION: ENTER, WAIT or PASS - x').decision, 'UNLABELLED');
+  assert.equal(selectionOf('SELECTION: ENTER - long balanced 10:12: room 2.1R to the high').decision, 'ENTER');
+  assert.equal(selectionOf('SELECTION: PASS, WAIT is not possible on a 1m trigger').decision, 'PASS', 'a reason that starts with a decision word');
+  assert.equal(selectionOf('SELECTION: ENTER, WAIT, PASS - x').decision, 'UNLABELLED');
 });

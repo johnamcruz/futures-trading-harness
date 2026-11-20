@@ -92,3 +92,114 @@ test('through the real briefing: an MTF read that throws in arm A (here a mode t
   const lines = B.renderBriefing(b, { now: NOW }).split('\nDetail by timeframe:')[0].split('\n');
   assert.ok(!lines.some(l => OFFER.test(l)), lines.filter(l => OFFER.test(l)).join('\n'));
 });
+
+test('the reading lesson (the six mornings: 7 of 13 SELECTION lines): an MTF arm\'s trade prompt asks for the SELECTION line right before the result line, after the PLAN; arm D\'s prompt is unchanged, its PLAN text as before', () => {
+  const { prompts, RESULT_LINE } = require('../../scripts/lib/autotrader');
+  const cfg = require('../../scripts/lib/autotrader').validateConfig({ harness: 'claude', symbols: ['MNQ'], timeframe: 3 });
+  const at = new Date('2026-10-07T14:00:02Z');
+  const bar = { t: '2026-10-07T13:57:00.000Z', c: 21540 };
+  for (const arm of ['A', 'B', 'AB']) {
+    const p = prompts({ ...cfg, mtfMode: mode(arm) }, at, '/r').trade([{ symbol: 'MNQ', bar, scan: [] }]);
+    assert.ok(p.endsWith(RESULT_LINE), arm);
+    assert.match(p, /Write the trader-process skill's PLAN \(1 HTF to 9 Manage\), then, with an MTF candidate line printed, your SELECTION line on its own line \(`SELECTION: ENTER - <side> <model> <trigger time>: <reason>`, or WAIT or PASS in its place: the one that counts\), then the result line\./, arm);
+  }
+  const d = prompts(cfg, at, '/r').trade([{ symbol: 'MNQ', bar, scan: [] }]);
+  assert.match(d, / Write the trader-process skill's PLAN \(1 HTF to 9 Manage\) before the result line\./);
+  assert.doesNotMatch(d, /SELECTION/, 'arm D: no SELECTION instruction');
+  const dm = prompts({ ...cfg, mtfMode: ME.modeOf({ arm: 'D', exitMode: 'trail', minStage: 'established' }, {}, REPLAY) }, at, '/r').trade([{ symbol: 'MNQ', bar, scan: [] }]);
+  assert.equal(dm, d, 'arm D: the prompt as without a mode');
+});
+
+test('the reading audit (E1): in an MTF arm the Trend rule line drops its refusal clause (no X against it) and the Bias line names no refused side; arm D\'s lines as before', () => {
+  const lineOf = (text, re) => text.split('\n').find(l => re.test(l)) || '';
+  const d = B.renderBriefing(build(null), { now: NOW });
+  const dRule = lineOf(d, /^- Trend rule: /);
+  assert.match(dRule, /; no (long|short) against it\.$/, dRule);
+  assert.match(lineOf(d, /^- Bias: /), /; (long|short) refused\)\.$/, 'arm D: the Bias line names the refused side');
+  assert.match(lineOf(d, /^- Alignment/), /^- Alignment: /, 'arm D: the Alignment line as before');
+  for (const arm of ['A', 'B', 'AB']) {
+    const t = B.renderBriefing(build(mode(arm)), { now: NOW });
+    const rule = lineOf(t, /^- Trend rule: /);
+    assert.equal(rule, dRule.replace(/; no (long|short) against it\.$/, '.'), arm);
+    assert.doesNotMatch(lineOf(t, /^- Bias/), /refused| only /, arm);
+    assert.match(lineOf(t, /^- Bias/), /^- Bias \(context here\): /, arm);
+    assert.match(lineOf(t, /^- Alignment/), /^- Alignment \(context here\): /, arm);
+    // The 3m detail's trendRule field too: no refusal clause anywhere in an MTF arm's briefing.
+    assert.equal(lineOf(t, /^ {2}trendRule: /), lineOf(d, /^ {2}trendRule: /).replace(/; no (long|short) against it\.$/, '.'), arm);
+    assert.doesNotMatch(t, /no (long|short) against it/, arm);
+  }
+  assert.match(lineOf(d, /^ {2}trendRule: /), /; no (long|short) against it\.$/, 'arm D: the detail keeps it');
+  assert.equal(require('../../scripts/lib/trading/mtf-entry').mtfBiasText('Bias: long only (4h up, 1h up; short refused)'), 'Bias (context here): long (4h up, 1h up)');
+  // Both sides, both helpers (a mutant that handles one side only survived without these).
+  const MEx = require('../../scripts/lib/trading/mtf-entry');
+  assert.equal(MEx.mtfBiasText('Bias: short only (4h down, 1h down; long refused)'), 'Bias (context here): short (4h down, 1h down)');
+  assert.equal(MEx.mtfTrendRuleText('Trend rule: SHORT allowed (prevailing 4h down); no long against it.'), 'Trend rule: SHORT allowed (prevailing 4h down).');
+  assert.equal(MEx.mtfTrendRuleText('Trend rule: LONG allowed (prevailing 4h up); no short against it'), 'Trend rule: LONG allowed (prevailing 4h up)');
+  assert.equal(MEx.mtfBiasText('Bias: no side yet (15m down, declared short: no)'), 'Bias (context here): no side yet (15m down, declared short: no)', 'nothing to drop: labelled context');
+  // The cycle prompt's bar line (the record for the gate) carries the same fence in an MTF arm, none in arm D.
+  const { prompts, validateConfig } = require('../../scripts/lib/autotrader');
+  const cfg = validateConfig({ harness: 'claude', symbols: ['MNQ'], timeframe: 3 });
+  const bar = { t: '2026-10-07T13:57:00.000Z', c: 21540, trend: 'Trend rule: LONG allowed (prevailing 4h up); no short against it.' };
+  const at = new Date('2026-10-07T14:00:02Z');
+  assert.match(prompts(cfg, at, '/r').trade([{ symbol: 'MNQ', bar, scan: [] }]), /MNQ Trend rule: LONG allowed \(prevailing 4h up\); no short against it \(recorded for the order gate, which enforces it\)\./);
+  assert.match(prompts({ ...cfg, mtfMode: mode('B') }, at, '/r').trade([{ symbol: 'MNQ', bar, scan: [] }]), /MNQ Trend rule: LONG allowed \(prevailing 4h up\) \(recorded; a fact in this arm: the gate does not apply `\[mtf-trend\]` to a verified MTF candidate\)\./);
+});
+
+test('the conflict audit (A1, with E2-E4): an MTF arm\'s prompt ends with the precedence paragraph, right before the result line and after this cycle\'s reads; arm D has none, its reads before its result line as before', () => {
+  const { prompts, RESULT_LINE, MTF_PRECEDENCE, withCycleData } = require('../../scripts/lib/autotrader');
+  const cfg = require('../../scripts/lib/autotrader').validateConfig({ harness: 'claude', symbols: ['MNQ'], timeframe: 3 });
+  const at = new Date('2026-10-07T14:00:02Z');
+  const bar = { t: '2026-10-07T13:57:00.000Z', c: 21540 };
+  assert.equal(MTF_PRECEDENCE, ' An MTF candidate printed: `mtf-entry` decides it; its side, class, pullback and selection rules override other skills\'. Window, account, size and management rules still apply. Side: the 1h structure\'s. Arm D (default) rules are facts here, never refusals: the 4h; the Trend rule, Bias and Alignment lines; the class and class table; the take rule; never counter; the Pullback setup and 15m turn; the 3m trigger; late or far past value; a level ahead; a valid setup is the trade; the count; a STATE-read pass. No entry: `candidate void` printed, or a reply this cycle refuses it (never predict one). Else ENTER, WAIT (3m trigger only; on 1m it is a PASS) or PASS, with your reason, on the SELECTION line.');
+  const READS = '\n=== end of this cycle\'s reads ===\n';
+  for (const arm of ['A', 'B', 'AB']) {
+    const p = prompts({ ...cfg, mtfMode: mode(arm) }, at, '/r').trade([{ symbol: 'MNQ', bar, scan: [] }]);
+    assert.ok(p.endsWith(`${MTF_PRECEDENCE}${RESULT_LINE}`), arm);
+    assert.equal(p.split(MTF_PRECEDENCE).length, 2, `${arm}: once`);
+    const w = withCycleData(p, READS);
+    assert.ok(w.endsWith(`${READS}${MTF_PRECEDENCE}${RESULT_LINE}`), `${arm}: after the reads`);
+  }
+  const d = prompts(cfg, at, '/r').trade([{ symbol: 'MNQ', bar, scan: [] }]);
+  assert.ok(!d.includes(MTF_PRECEDENCE) && !d.includes('decides it.'), 'arm D: no paragraph');
+  assert.ok(withCycleData(d, READS).endsWith(`${READS}${RESULT_LINE}`), 'arm D: the reads, then the result line');
+});
+
+test('the lessons review (F1): in an MTF arm every Trend rule and Bias form mtf.js ruleLine and bias-line.js biasLine print loses its refusal, "no entry" and "only" clauses; a new form fails here until it is listed', () => {
+  const M = require('../../scripts/lib/trading/mtf-entry');
+  const RULE = [
+    ['Trend rule: building (4h warming up); no entry yet.', 'Trend rule: building (4h warming up).'],
+    ['Trend rule: no side (4h up, 1h down); no entry.', 'Trend rule: no side (4h up, 1h down).'],
+    ['Trend rule: no trend on 4h, 1h, or 15m; in a prop attempt no side (the entry rule), else both sides open.', 'Trend rule: no trend on 4h, 1h, or 15m.'],
+    ['Trend rule: SHORT allowed (prevailing 15m down; the 4h and 1h ranging: in a prop attempt only with the trend declared); no long against it.', 'Trend rule: SHORT allowed (prevailing 15m down; the 4h and 1h ranging).'],
+    ['Trend rule: LONG allowed (prevailing 4h up); no short against it.', 'Trend rule: LONG allowed (prevailing 4h up).'],
+  ];
+  const BIAS = [
+    ['Bias: no side (the 1h trend not in the briefing) → no entry', 'Bias (context here): no side (the 1h trend not in the briefing)'],
+    ['Bias: long only (4h up, 1h up; short refused)', 'Bias (context here): long (4h up, 1h up)'],
+    ['Bias: short only (4h down, 1h down; long refused)', 'Bias (context here): short (4h down, 1h down)'],
+    ['Bias: no side (4h up, 1h down) → no entry', 'Bias (context here): no side (4h up, 1h down)'],
+    ['Bias: neutral → 15m up + declared long → long only', 'Bias (context here): neutral → 15m up + declared long → long'],
+    ['Bias: no side yet (15m down, declared short: no)', 'Bias (context here): no side yet (15m down, declared short: no)'],
+  ];
+  for (const [a, b] of RULE) assert.equal(M.mtfTrendRuleText(a), b, a);
+  for (const [a, b] of BIAS) assert.equal(M.mtfBiasText(a), b, a);
+  const REFUSAL = /no entry|against it|refused|\bonly\b|no side \(the entry rule\)/;
+  for (const [a] of [...RULE, ...BIAS]) assert.doesNotMatch(M.mtfTrendRuleText(M.mtfBiasText(a)), REFUSAL, a);
+  // Every form ruleLine really prints (the fix review): each 4h/1h/15m bias in up, range and down, and a 4h not read yet.
+  const T = require('../../scripts/lib/trading/mtf');
+  const seen = new Set();
+  for (const h4 of [1, 0, -1, undefined]) for (const h1 of [1, 0, -1]) for (const m15 of [1, 0, -1]) {
+    const line = T.ruleLine(T.ruleSummary({ 240: h4, 60: h1, 15: m15 }));
+    seen.add(line);
+    assert.doesNotMatch(M.mtfTrendRuleText(line), REFUSAL, line);
+  }
+  assert.ok([...seen].some(l => REFUSAL.test(l)), 'arm D\'s lines carry their refusals (the helper is not called there)');
+  // The no-side form exactly (its stutter dropped): 4h up, 1h down.
+  assert.equal(M.mtfTrendRuleText(T.ruleLine(T.ruleSummary({ 240: 1, 60: -1, 15: 1 }))), 'Trend rule: no side (longs against the 1h down trend; shorts against the 4h up trend).');
+  // The forms' sources: a new template in ruleLine or biasLine changes these counts and must be listed above.
+  const src = f => require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'scripts', 'lib', 'trading', f), 'utf8');
+  const rule = src('mtf.js'); const ruleFn = rule.slice(rule.indexOf('function ruleLine('), rule.indexOf('\n}\n', rule.indexOf('function ruleLine(')));
+  assert.equal((ruleFn.match(/return [`']Trend rule: /g) || []).length, 4, 'ruleLine\'s forms');
+  const bias = src('bias-line.js'); const biasFn = bias.slice(bias.indexOf('function biasLine('), bias.indexOf('\n}\n', bias.indexOf('function biasLine(')));
+  assert.equal((biasFn.match(/`Bias: /g) || []).length, 6, 'biasLine\'s forms (the off-lane form included: an MTF arm runs the 3m lane)');
+});

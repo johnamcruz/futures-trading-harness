@@ -49,7 +49,7 @@ test('grade: a right report passes every field; numbers within their rounding; w
   assert.equal(Object.values(RC.grade(loose, exp).fields).every(x => x.ok), true);
 });
 
-test('a waiting clause with "or" in it is not a hedge; EARLY with no candidate is none (the probe says so); TURN says old turn for a CHoCH older than the previous session', () => {
+test('a waiting clause with "or" in it is not a hedge; EARLY with no candidate is none (the probe says so); TURN says older for a CHoCH older than the previous session (the line\'s word), recent otherwise', () => {
   const est = F.record({ stage: 'ESTABLISHED' });
   est.levels[0].entry = null;
   const w = RC.expected(est, mode, { price: 21540.25 });
@@ -60,8 +60,8 @@ test('a waiting clause with "or" in it is not a hedge; EARLY with no candidate i
   assert.match(RC.probe(), /EARLY: <yes or no for the chosen candidate; none without one>/);
   const old = F.record({ extra: {} });
   old.levels[0].parent.turn = { way: 'up', choch: { kind: 'CHoCH', at: '2026-10-01T14:00:00.000Z', et: '10-01 10:00' }, bos: { at: '2026-10-01T15:00:00.000Z', et: '10-01 11:00' }, since: null, bosCount: 1 };
-  assert.equal(RC.expected(old, mode, { price: 21540.25, at: '2026-10-07T14:00:00.000Z' }).TURN, 'old turn');
-  assert.equal(RC.expected(old, mode, { price: 21540.25, at: '2026-10-02T14:00:00.000Z' }).TURN, 'fresh');
+  assert.equal(RC.expected(old, mode, { price: 21540.25, at: '2026-10-07T14:00:00.000Z' }).TURN, 'older');
+  assert.equal(RC.expected(old, mode, { price: 21540.25, at: '2026-10-02T14:00:00.000Z' }).TURN, 'recent');
 });
 
 test('grade (adversarial): a waiting model read as ready, a void read as live, the 3m line read as deciding, a missing field, a wrong last line, a hedge: each fails its field only', () => {
@@ -110,7 +110,7 @@ test('summarize: per-field share over answers and the bar (>= 95% per field: eac
 test('the expected fields come from the code that prints the lines (candidatesOf), never the text: a record and its lines agree', () => {
   const lines = ME.candidateLines(rec, mode, { price: 21540.25, sizing: rec.sizing });
   assert.ok(lines[0].includes(`structural stop ${exp.STOP}`));
-  for (const part of [`drift ${exp.DRIFT_R}R`, `depth 45% (${exp.DEPTH})`, '(new this bar);']) assert.ok(lines[0].includes(part), part);
+  for (const part of [Number(exp.DRIFT_R) < 0 ? `${-Number(exp.DRIFT_R)}R back toward the stop` : `ran ${exp.DRIFT_R}R past the trigger`, `depth 45% (${exp.DEPTH})`, '(new this bar);']) assert.ok(lines[0].includes(part), part);
   assert.ok(lines[0].includes(`$${exp.PER_CONTRACT} a contract all in`));
   assert.ok(lines[0].includes(`${exp.READY} at stage ${exp.STAGE}`));
 });

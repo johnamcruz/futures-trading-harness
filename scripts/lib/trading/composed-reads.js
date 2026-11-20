@@ -1001,7 +1001,7 @@ function checkReads({ reads, side, briefing, skills = null, tick = 0.25, entryRu
   const setup = citedSetup({ checked, side, m3, cited, problems });
   // an MTF entry cites no setup (its plan is the candidate's, never a cited setup's market plan).
   const mtfCited = mtfEntry && checked.some(r => r.kind === 'fired' && r.step === 'setup');
-  if (mtfCited) problems.push('[mtf-cited] an MTF entry cites no setup: state the "mtf ready" read without a "<strategy> fired" read (or the setup without the MTF read); no entry');
+  if (mtfCited) problems.push('[mtf-cited] you cited a setup beside an MTF entry: an MTF entry cites no setup (the candidate line is the setup). Remove the "<strategy> fired" read and compose again with the MTF reads only; no entry');
   const missingSteps = REQUIRED_STEPS.filter(s => !checked.some(r => r.step === s));
   if (missingSteps.length) problems.push(`steps not stated: ${missingSteps.join(', ')} (every step needs a read, D7)`);
   // The reaction points the trade's way: the setup needs a true read whose direction is the side (reads without a

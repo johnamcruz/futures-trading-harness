@@ -18,8 +18,8 @@ const ROOT = path.join(__dirname, '..', '..');
 const ITEMS = require('../fixtures/quiz/mtf-entry-items.json');
 const qs = ITEMS.questions;
 
-test('the mtf-entry items: about 28 (the facts the selection reads and the selection rules), each valid, asked with mtf-entry looked up, each anchor in its prompt, each answer anchored on present skill text', () => {
-  assert.ok(qs.length >= 26 && qs.length <= 34, String(qs.length));
+test('the mtf-entry items: about 48 (the facts the selection reads, the selection rules and the reading lessons), each valid, asked with mtf-entry looked up, each anchor in its prompt, each answer anchored on present skill text', () => {
+  assert.ok(qs.length >= 48 && qs.length <= 50, String(qs.length));
   assert.deepEqual(qs.map(q => q.id), qs.map((_, i) => `me${i + 1}`));
   const gated = Q.loadQuiz().value;
   const ids = new Set();
@@ -39,8 +39,14 @@ test('the mtf-entry items: about 28 (the facts the selection reads and the selec
   // The owner's decision (2026-11-18): the three entries and the structure; no fib zone, golden zone, draw, premium or
   // discount anywhere; the structural depth class (the spec's) stays; the rank is a fact, never a preference.
   assert.ok(!qs.some(q => /golden zone|0\.382|0\.618|room to the next|premium|discount|break against/i.test(q.text + q.answer + q.rule + q.choices.join(' '))), 'no removed fact in an item');
-  for (const re of [/its age/, /in the trigger's R/, /over 0\.5R the candidate is void/, /depth alone is not an entry signal/, /The rank is a fact, not a preference/]) assert.ok(qs.some(q => re.test(q.anchor)), String(re));
-  for (const re of [/never against it/, /A stage word alone is not an order/, /not ready, not an entry/, /A void one says so plainly/, /15m line decides the pullback/i, /WAIT keeps an active candidate/, /PASS rejects this opportunity/, /a void candidate stays void/, /eligibility, not an obligation/, /The last such line counts/]) assert.ok(qs.some(q => re.test(q.anchor)), String(re));
+  for (const re of [/its age/, /in the trigger's R/, /over 0\.5R past it, the candidate is void/, /depth alone is not an entry signal/, /The rank is a fact, not a preference/]) assert.ok(qs.some(q => re.test(q.anchor)), String(re));
+  for (const re of [/Never enter against the 1h structure/, /A stage word alone is not an order/, /not ready, not an entry/, /A void one says so plainly/, /15m line decides the pullback/i, /WAIT keeps it for the next bar/, /PASS rejects this opportunity/, /a void candidate stays void/, /eligibility, not an obligation/, /The last such line counts/]) assert.ok(qs.some(q => re.test(q.anchor)), String(re));
+  // The reading lessons (the six-morning replays and the pick evaluation, 2026-11-19): one item each, on the lesson's text.
+  // The reading audit (2026-11-19, E2-E5): the 1h structure's side, the (early) candidate, the candidate's own stage, the class.
+  for (const re of [/For a candidate the side is the 1h structure's/, /the 15m-turn rule and the 3m-trigger rule do not apply/, /not the primary line's or a context line's/, /Never cite the class as a rule/]) assert.ok(qs.some(q => re.test(q.anchor)), String(re));
+  // The audit's unreliable-pattern errors (STALE, DRIFT, NOT_READY), each with an item.
+  for (const re of [/A trigger over 60 minutes old, or from an earlier session, is void too/, /Once any close since the trigger ran over 0\.5R past it, the candidate is void for good/, /it is eligible to select/]) assert.ok(qs.some(q => re.test(q.anchor)), String(re));
+  for (const re of [/the SELECTION line is the one that counts/, /the candidate line is the setup/, /compose again with the MTF reads only/, /Back toward the stop: still valid/, /A 1m candidate is timed by its 1m trigger/, /it fired inside the bar that just closed/, /does not refuse a verified MTF candidate/, /The class is a fact to weigh, never a refusal/]) assert.ok(qs.some(q => re.test(q.anchor)), String(re));
 });
 
 test('the gated quiz is unchanged in size: 113 items, none of the mtf-entry items in it', () => {
@@ -73,6 +79,19 @@ test('the items cannot drift: every MTF line an item prints is the REAL briefing
     });
   }
   const drift = [];
+  // A replay's lines (the arm-B 1m candidate the quiz fixtures cannot rebuild): exactly as recorded.
+  const REPLAY = require('../fixtures/quiz/mtf-entry-replay-lines.json').lines;
+  // The recorded lines are re-printed in today's line words (A7, A8): a wording change in the code that is not carried
+  // into the fixture fails here (the 1m lines cannot be rebuilt from the quiz fixtures' 3m bars).
+  for (const r of REPLAY) for (const l of r.lines) {
+    assert.doesNotMatch(l, /drift -?[\d.]+R past the trigger|fresh turn|\(not fresh\)|early read; /, l.slice(0, 80));
+    if (l.startsWith('- MTF candidate ')) assert.match(l, /; (ran [\d.]+R past the trigger|[\d.]+R back toward the stop); /, l.slice(0, 80));
+    if (l.startsWith('- MTF structure below')) assert.match(l, /^- MTF structure below \(\w+ timing read, early and noisy; the \w+ line decides the pullback\)/, l.slice(0, 80));
+  }
+  for (const q of qs) {
+    const rp = /^Briefing lines \(replay, arm B, (\S+ \S+) ET\)/.exec(q.text);
+    if (rp) { const rec = REPLAY.find(x => x.at === rp[1]); for (const l of q.text.split('\n').filter(x => x.startsWith('- MTF'))) if (!rec || !rec.lines.includes(l)) drift.push(`${q.id}: ${l.slice(0, 80)}`); }
+  }
   for (const q of qs) {
     const one = /^Briefing lines \(real, (\S+ \S+) ET\)/.exec(q.text);
     if (one) for (const l of q.text.split('\n').filter(x => x.startsWith('- MTF'))) if (!(at.get(one[1]) || []).includes(l)) drift.push(`${q.id}: ${l.slice(0, 80)}`);

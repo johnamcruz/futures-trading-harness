@@ -850,7 +850,7 @@ function mtfLines(rec, { lineBytes = Infinity, primaryBytes = Infinity, level = 
   // P1: an MTF entry arm's record (rec.mode) adds its clauses to the primary line; without one, today's lines exactly.
   const mode = isObj(rec.mode) ? { ...rec.mode, sideFrame: primary.frames.parent } : null;
   // P1: the below line is an early read in an MTF entry arm (37.7% false ESTABLISHED on the hold-out): labelled so.
-  const early = mode ? ` (early read; ${below.frames.setup}, noisy: the ${below.frames.parent} line decides the pullback, the ${below.frames.setup} only times it)` : '';
+  const early = mode ? ` (${below.frames.setup} timing read, early and noisy; the ${below.frames.parent} line decides the pullback)` : '';
   const build = cut => {
     const one = `- MTF structure ${sp(primary.name)} (primary): ${bodyOf(primary, cut, L, true, sideText, mode)}`;
     const two = `- MTF structure below${early}: ${sp(below.name)} (context): ${cutOut(cut, 'belowShort') ? belowShort(below) : bodyOf(below, cut, L, false, sideText)}`;
