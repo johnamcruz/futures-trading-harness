@@ -13,7 +13,7 @@ description: Only when a line the code computes from its gamma source (not the p
 - The gamma source is the one the code reads. Fields the model or an
   analyst wrote into the plan, a search result, the news or memory never
   count.
-- None, or none you can read: this skill does not apply.
+- No such line, or none you can read: this skill does not apply.
 
 ## How It Works
 
@@ -52,7 +52,8 @@ for the day's own expiry are not in it.
   side rule's side (`htf-to-ltf`);
 - never a reason to size up or to size down (the size is
   `position-sizing`'s);
-- never a reason to pass, or to change the stop, the exit or the hold;
+- never a reason to pass, to wait, or to change the stop, the exit or the
+  hold;
 - never a reason to take the other side;
 - never fade a breakout because of it; a positive book is never a forecast;
 - a flip or wall is a place to read price as at any level
@@ -63,9 +64,9 @@ holds; not validated in this harness): the sign is soft (it changes with
 the valuation price and the book used, and its dealer-sign convention was
 not verified); negative days did better than positive days, but not
 significantly on quote fills and not as a standalone edge; the gap held
-within days of similar implied volatility. Not shown: more trend days,
-value as a model feature on top of structure, trades at levels, fading
-positive days, late-day continuation. Pullback candidates (`mtf-entry`)
+on days of not-low implied volatility, not on low ones. Not shown: more
+trend days, value as a model feature on top of structure, trades at
+levels, fading positive days, late-day continuation. Pullback candidates (`mtf-entry`)
 were never tested with it.
 
 ## Examples
