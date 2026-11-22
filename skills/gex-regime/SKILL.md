@@ -43,7 +43,7 @@ for the day's own expiry are not in it.
 - `negative` / `positive`: the sign; written `gamma negative (soft)` or
   `gamma positive (soft)`, never "trending day".
 - `unclear`: the line says |net| is small against gross: neither sign.
-- `unknown`: the line prints no word, or one you cannot read.
+- `unknown`: the line is there but prints no word, or a word you cannot read.
 
 **Whatever the word:**
 
@@ -55,7 +55,7 @@ for the day's own expiry are not in it.
 - never a reason to pass, to wait, or to change the stop, the exit or the
   hold;
 - never a reason to take the other side;
-- never fade a breakout because of it; a positive book is never a forecast;
+- never fade a breakout because of it; the book is never a forecast;
 - a flip or wall is a place to read price as at any level
   (`levels-and-reactions`, `candle-reading`), never a trigger.
 
