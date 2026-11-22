@@ -1,7 +1,7 @@
 'use strict';
 
 // The gex-regime skill: one job (recording the day's gamma regime as a neutral word, never a vote, an entry, a size or
-// a veto), inert until a code-printed line in the briefing or prompt carries its fields (no code prints them yet; a
+// a veto), inert until a line the code computes from the data server carries its fields (no code prints them yet; a
 // plan, a search or memory never opens it), honest about its evidence (research outside this harness, not validated
 // here), thin (it points to the skills that own each rule and restates none of them). Not embedded by the runner today:
 // on no role's list, no head-trader load list, no situational embed, no command; it is reachable as any unlisted skill
@@ -19,16 +19,16 @@ const read = rel => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 const flat = t => t.replace(/\s+/g, ' ');
 const SKILL = 'skills/gex-regime/SKILL.md';
 // The skills it relies on, each named by its folder: a rename breaks this test.
-const RELIES_ON = ['day-context', 'confluence-counting', 'htf-to-ltf', 'mtf-entry', 'levels-and-reactions', 'candle-reading', 'position-sizing', 'trend-vs-range'];
+const RELIES_ON = ['day-context', 'confluence-counting', 'htf-to-ltf', 'mtf-entry', 'levels-and-reactions', 'candle-reading', 'position-sizing', 'trend-vs-range', 'trade-plan'];
 
 // The no-data rule and the code-printed-only trigger, in When to Use and the opening of How It Works.
 const WHEN = [
-  'Only when a code-printed line in the briefing or the cycle prompt carries the day\'s gamma regime fields',
+  'Only when a line the code computes from the data server (not the plan it relays) carries the day\'s gamma regime fields',
   'otherwise this skill is ignored entirely.',
   'Fields the model or an analyst wrote into the plan, a search result, the news or memory never count.',
 ];
 const NO_DATA = [
-  'With no code-printed gamma field present or readable: say nothing about gamma or dealer positioning;',
+  'With no gamma field the code computed from the data server present or readable: say nothing about gamma or dealer positioning;',
   'never infer a sign from price;',
   'never guess a sign or a level from the news, the day\'s move, past days or your own knowledge of the market;',
   'never write a "positive gamma day" or "negative gamma day" read; never cite it as a reason to pass or enter.',
@@ -50,8 +50,9 @@ const RULES = [
   '`mtf-entry` pullback candidates were never tested with it',
   'breakout trades at 10:00-15:30',
   'as the field\'s as-of says',
+  'write it as `gamma <word>` in the plan, never in the `regime:` tag',
 ];
-const DESCRIPTION = /^Only when a code-printed briefing or prompt line carries the day's gamma regime fields; else ignore it entirely\./;
+const DESCRIPTION = /^Only when a line the code computes from the data server \(not the plan it relays\) carries the day's gamma regime fields; else ignore it entirely\./;
 // Forecast words, affirmative: the skill states present facts only ("never a forecast" is the one allowed use).
 const FORECAST = /\b(?:will|likely|expect(?:s|ed)?|probabl[ey]|tends? to|predict\w*|forecast\w*|extend\w*|pinn\w*)\b/i;
 const NEGATED = /never a forecast/g;
@@ -69,7 +70,14 @@ function problems(text) {
   for (const pin of NO_DATA) if (!how.slice(0, 700).includes(pin)) out.push(pin);
   for (const pin of RULES) if (!how.includes(pin)) out.push(pin);
   // No vote words and no consequence for price.
-  for (const bad of [/reads FOR/, /\bcounts? (?:at most )?one point\b/, /context that a move/i, /a move may/i]) if (bad.test(flat(body))) out.push(`banned: ${bad}`);
+  // No vote, no size, no fade and no consequence for price, anywhere in the body (the Examples included), outside the
+  // exact phrases that forbid them.
+  const all = flat(body);
+  for (const bad of [/\bcounts? (?:at most )?one point\b/, /context that a move/i, /a move may/i]) if (bad.test(all)) out.push(`banned: ${bad}`);
+  if (/\bFOR\b|\bAGAINST\b/.test(all.replace('(no FOR, no AGAINST)', ''))) out.push('a vote word');
+  if (/size up/i.test(all.replace('never a reason to size up', ''))) out.push('size up');
+  if (/\bfade\b/i.test(all.replace('never fade', ''))) out.push('fade');
+  if (/\bprice\s+(?:stalls|runs|will|moves|pins|reverses|breaks|holds|extends|trends|stops)\b|\bmeans price\b/i.test(all)) out.push('a consequence for price');
   const m = flat(body).replace(NEGATED, '').match(FORECAST);
   if (m) out.push(`forecast word: ${m[0]}`);
   // The examples show the code-printed line, never a plan the model wrote.
@@ -119,7 +127,15 @@ test('gex-regime: a planted vote, a planted forecast or a plan-written example i
     'Traders expect a trend on such days.',
     'It predicts a trend day.',
     'Positive gamma is likely to pin price.',
+    'price runs further; size up one contract',
+    'a positive book means price stalls',
+    'unclear: fade the edges',
   ]) assert.notDeepStrictEqual(problems(plant(s)), [], s);
+  // In the Recorded-only paragraph, and in the Examples.
+  assert.notDeepStrictEqual(problems(text.replace('**Recorded only.**', '**Recorded only.** negative counts FOR in context.')), [], 'FOR in Recorded only');
+  assert.notDeepStrictEqual(problems(text.replace('size unchanged.', 'context FOR; size up.')), [], 'context FOR; size up in an example');
+  assert.notDeepStrictEqual(problems(text.replace('-> `gamma unclear`: neutral.', '-> `gamma unclear`: fade the edges.')), [], 'fade in an example');
+  assert.notDeepStrictEqual(problems(text.replace(', never a trigger', '')), [], 'never a trigger deleted');
   assert.notDeepStrictEqual(problems(text.replace('Briefing gamma line: sign negative', 'Plan: gamma negative')), [], 'a plan-written example');
 });
 
@@ -162,5 +178,5 @@ test('gex-regime: not embedded today: no role, load list, runner embed, head cor
   for (const s of fs.readdirSync(path.join(ROOT, 'skills')).filter(n => n !== 'gex-regime' && fs.existsSync(path.join(ROOT, 'skills', n, 'SKILL.md')))) {
     assert.ok(!read(`skills/${s}/SKILL.md`).includes('gex-regime'), s);
   }
-  assert.match(read('workspace/AGENTS.md'), /^- `gex-regime` \(skills\/gex-regime\/SKILL\.md\): Only when a code-printed /m);
+  assert.match(read('workspace/AGENTS.md'), /^- `gex-regime` \(skills\/gex-regime\/SKILL\.md\): Only when a line the code computes from the data server /m);
 });

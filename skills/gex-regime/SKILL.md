@@ -1,29 +1,31 @@
 ---
 name: gex-regime
-description: Only when a code-printed briefing or prompt line carries the day's gamma regime fields; else ignore it entirely.
+description: Only when a line the code computes from the data server (not the plan it relays) carries the day's gamma regime fields; else ignore it entirely.
 ---
 
 # Gamma Regime
 
 ## When to Use
 
-- Only when a code-printed line in the briefing or the cycle prompt carries
-  the day's gamma regime fields (sign, |net| against gross, flip, call and
-  put walls, as-of); otherwise this skill is ignored entirely.
+- Only when a line the code computes from the data server (not the plan it
+  relays) carries the day's gamma regime fields (sign, |net| against gross,
+  flip, call and put walls, as-of) in the briefing or the cycle prompt;
+  otherwise this skill is ignored entirely.
 - Fields the model or an analyst wrote into the plan, a search result, the
   news or memory never count.
 - None, or none you can read: this skill does not apply.
 
 ## How It Works
 
-**No field, no gamma.** With no code-printed gamma field present or
-readable: say nothing about gamma or dealer positioning; never infer a sign
+**No field, no gamma.** With no gamma field the code computed from the
+data server present or readable: say nothing about gamma or dealer positioning; never infer a sign
 from price; never guess a sign or a level from the news, the day's move,
 past days or your own knowledge of the market; never write a "positive
 gamma day" or "negative gamma day" read; never cite it as a reason to pass
 or enter. Nothing is written for it.
 
-**Recorded only.** With the fields, write its one word in the plan; it is
+**Recorded only.** With the fields, write it as `gamma <word>` in the
+plan, never in the `regime:` tag (the bars' regime, `trade-plan`); it is
 neutral, never a vote and never a point (no FOR, no AGAINST): the count
 decides without it (`confluence-counting`). It never turns a read against
 into neutral. It is recorded only, until the owner decides to let it vote
@@ -37,7 +39,7 @@ own expiry are not in them.
 **The word**, a present fact about what the field says:
 
 - `negative` / `positive`: the book's sign at its as-of, |net| not small
-  against gross; write "negative gamma (soft)", never "trending day".
+  against gross; write `gamma negative (soft)`, never "trending day".
 - `unclear`: |net| small against gross: neither sign.
 - `unknown`: the field the word needs missing or unreadable.
 
@@ -70,17 +72,17 @@ were never tested with it; not validated in this harness):
 - Not shown: more trend days on negative days (33.8% vs 32.8%,
   2021-07..2023-12; an earlier note said 36% vs 29%); value as a model
   feature on top of structure; trades at the flip or walls (zone reactions
-  seen, the frozen trade test failed); fading breakouts on positive days;
-  late-day continuation.
+  seen, the frozen trade test failed); positive-day breakouts traded the
+  other way; late-day continuation.
 
 ## Examples
 
 ```text
-No code-printed gamma line -> nothing about gamma: no word, no vote.
+No gamma line computed from the data server -> nothing about gamma: no word, no vote.
 A gamma sign the plan's author found by search -> not a field: nothing about gamma.
 Briefing gamma line: sign negative, |net| 31% of gross, flip 21480.00, put wall 21350.00, as of the prior close
-  -> the plan records "negative gamma (soft)": neutral, no vote; a 15m breakout down,
+  -> the plan records `gamma negative (soft)`: neutral, no vote; a 15m breakout down,
      1h down, compose_check OK: the count decides without it; size unchanged.
-Briefing gamma line: sign positive, |net| 4% of gross -> "unclear": neutral.
+Briefing gamma line: sign positive, |net| 4% of gross -> `gamma unclear`: neutral.
 Price at the call wall 21600.00 -> read the candle there; never a trigger.
 ```
