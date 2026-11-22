@@ -29,6 +29,7 @@ const WORKFLOW = Object.freeze({
   'broker-bar-fields': 'a broker server\'s extra bar fields: a reference for strategy authors and the broker interface',
   'design-self-review': 'the training loop\'s proposer prompt, never shown to the trader',
   'end-of-day': 'the end-of-day cycle\'s own skill: its prompt names it',
+  'gex-regime': 'the runner will embed it only when a briefing carries the gamma regime fields, which no code prints yet; only skill_lookup reaches it',
   'gate-refusals-skills': 'what a [skills-at-entry] refusal means: read from the refusal itself',
   'kill-switch': 'what a [kill-switch] or account-lock refusal means: read from the refusal itself',
   'lean-cycle': 'the lean cycle mode: the cycle prompt names it when the runner config sets it',

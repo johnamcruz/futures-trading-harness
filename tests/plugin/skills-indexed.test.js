@@ -62,6 +62,9 @@ const ALLOWED = {
   'entry-outcome': 'trade-session step 6 points to it after an entry is placed; not on the load list',
   // PR C of prepare ahead (docs/PREPARE-AHEAD.md): read with skill_lookup by the prepare and the confirm runs, never on a load list (a list would embed it in the prompt of every cycle). It still gains one index line, in the Claude head trader's index-mode file and in workspace/AGENTS.md's catalog.
   'prepare-ahead': 'the prepare and confirm runs of prepare ahead look it up (skill_lookup, prepare-ahead-skill.test.js); on no role\'s or head trader\'s list, so with prepare ahead off only its index and catalog lines are added',
+  // Inert until a data path prints the day's gamma regime (none does yet): a list or a pointer in an every-cycle skill
+  // would add it to every cycle for a field no briefing carries.
+  'gex-regime': 'the runner will embed it only when a briefing carries the gamma regime fields, which no code prints yet; until then only its workspace/AGENTS.md index line (skill_lookup) reaches it',
   'gate-refusals-skills': 'the [skills-at-entry] refusal\'s row; the head trader finds it by its index line (workspace/AGENTS.md) when refused',
 };
 
