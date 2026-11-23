@@ -88,6 +88,13 @@ test('scoreGroup: below the score\'s minimum of independent attempts no Monte Ca
   assert.doesNotMatch(text, /Pass within|pass rate +\d/);
   assert.match(text, /no pass rate, dollars and R only/);
   assert.match(text, /2022-01-03 +m0 +1 +long +-1 +-40\.00/);
+  // Below the minimum every run is still checked before anything of it is printed: a held-back run, runs of two roles.
+  const validate = { ...morning('v', '2024-07-15', 60), run: runOf('v', ['2024-07-15'], { learning: true, role: 'practice-validate', look: { evaluation: 'v1', candidate: 'v1' } }) };
+  assert.throws(() => P.scoreGroup('G', [entries[0], validate], { account: ACCOUNT, policy: POLICY }), /logScore is required/);
+  const train = { ...morning('t', '2022-03-01', 60), run: runOf('t', ['2022-03-01'], { learning: true, role: 'practice-train' }) };
+  assert.throws(() => P.scoreGroup('G', [entries[0], train], { account: ACCOUNT, policy: POLICY }), /the runs span/);
+  const hidden = { ...entries[1], run: { ...entries[1].run, hideOutcomes: true } };
+  assert.throws(() => P.scoreGroup('G', [entries[0], hidden], { account: ACCOUNT, policy: POLICY }), /reasoning-fix look/);
 });
 
 test('scoreGroup: at the minimum the pooled stream is scored by the evaluator; two groups side by side', () => {
@@ -126,6 +133,21 @@ test('readGroupRun: a finished run home read as the report reads it (its stream 
     assert.deepStrictEqual([e.runId, e.stream.trades.length, e.report.trades, e.report.net, e.run.from], ['pick1', 1, 1, 7.26, '2023-03-06']);
   }
   assert.throws(() => P.readGroupRun(path.join(home, 'nowhere'), { root }), /no replay run in/);
+  // End to end: run homes read and pooled through the evaluator (a 1-session account, a minimum of 1), with live limits.
+  const homes = ['2023-03-07', '2023-03-08'].map((day, k) => {
+    const t = `${day}T14:00:00.000Z`;
+    return multiDayRun({
+      runId: `pick${k + 2}`, gate: { learning: false, role: null, look: null, hideOutcomes: false },
+      days: [{ day, times: [t], records: [record({ at: t })], rows: [[100.5, 100.75, 99.75, 100.25], [100.25, 104.5, 100, 104.25]],
+        fills: [{ id: 1, contractId: 'MNQ:2023-06', creationTimestamp: `${day}T14:01:00Z`, price: 100, size: 1, side: 0, profitAndLoss: null },
+          { id: 2, contractId: 'MNQ:2023-06', creationTimestamp: `${day}T14:05:00Z`, price: 104, size: 1, side: 1, profitAndLoss: 8, fees: 0.74 }] }],
+    }).home;
+  });
+  const one = { ...ACCOUNT, sessions: 1 };
+  const g = P.scoreGroup('E', [home, ...homes].map(h => P.readGroupRun(h, { root })), { account: one, policy: POLICY, limits: { capUsd: 300, orderMax: null }, contracts: 'micro', minimum: 1, paths: 20, reps: 50 });
+  assert.strictEqual(g.refused, null);
+  assert.deepStrictEqual([g.independent, g.result.score, g.result.runDays, g.result.trades, g.summary.net], [3, 'diagnostic (picked days)', 3, 3, 21.78]);
+  assert.deepStrictEqual(g.result.sizedWith, { limits: { capUsd: 300, orderMax: null }, contracts: 'micro' });
   // The account: every run must name the same one (or --account); none named: refused, no default.
   assert.deepStrictEqual(P.agreeAccount([{ name: 'a', why: 'x' }, { name: 'a', why: 'y' }]), 'a');
   assert.throws(() => P.agreeAccount([{ name: 'a' }, { name: 'b' }]), /the runs name different accounts \(a, b\): pass --account/);

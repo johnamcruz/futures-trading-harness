@@ -126,6 +126,9 @@ function scoreGroup(name, entries, { account, policy = null, limits = null, cont
   const S = account.sessions;
   const independent = Math.floor(stream.days.length / S);
   const out = { name, rows, summary, independent, minimum, sessions: S, refused: null, result: null };
+  // Every run checked before anything of it is printed (a held-back, sealed or hidden run, runs of two roles: refused),
+  // whether or not the Monte Carlo runs. The check logs nothing.
+  const pass = checkPooledWindow({ runs: entries.map(e => e.run), now });
   if (independent < minimum) {
     out.refused = `${independent} independent attempt(s) (${stream.days.length} day(s) / ${S} sessions) is below the minimum of ${minimum} the score uses (the promotion gate's minAttempts): no pass rate, dollars and R only`;
     return out;
@@ -139,7 +142,6 @@ function scoreGroup(name, entries, { account, policy = null, limits = null, cont
     out.refused = `${stream.overlaps.length} pair(s) of trades open at the same time (first in ${stream.overlaps[0].runId}): their combined drawdown would go unseen`;
     return out;
   }
-  const pass = checkPooledWindow({ runs: entries.map(e => e.run), now });
   const ctr = contracts || (policy && policy.contracts) || 'auto';
   const r = scoreStream(stream, { pass, account, rulebook: { sizing: policy.sizing, limits }, contracts: ctr, gate: gateLimits(env), seed, paths, reps });
   out.result = {
