@@ -18,7 +18,8 @@
  * refused for a pooled stream with an entry left out or two trades open at once, as a real score refuses one (a dropped
  * loss flatters), and for a run whose report and stream count different trades (the dollars would describe other trades).
  * Never pooled at all: a curated run or one whose days started from drawn account states (refuseDrawn), a setup-focused
- * practice run, a continuous-combine run or one whose attempt carries a close from outside its window (refuseCarried),
+ * practice run, a trend-set run stepping windows, a continuous-combine run or one whose attempt carries a balance from
+ * outside its window (refuseCarried),
  * a run naming an account that does not resolve (ownAccount), a run whose
  * stream holds a day outside its own window, and runs the evaluator's checkPooledWindow refuses.
  * Groups (arms) are scored each on their own, with the same seed and options, and printed side by side.
@@ -39,7 +40,7 @@ const { PROMOTION_GATE } = require('./promotion');
 const { checkPooledWindow, scoreStream } = require('./evaluator');
 const { readModelStream } = require('./model-stream');
 const { gateLimits } = require('./attempts');
-const { scoreText, resolveAccount } = require('./model-score');
+const { scoreText, resolveAccount, steppedWindows } = require('./model-score');
 const { requireSizing } = require('../trading/combine');
 
 const LABEL = 'diagnostic (picked days)';
@@ -71,20 +72,34 @@ function refuseDrawn(dir) {
     throw new Error(`run ${id} started its days from drawn account states: they are weighted back to the natural mix only in its own score, so it is never pooled`);
   }
   // A continuous-combine run (replay/combine-run.js: its log; stage 2, replay/stage.js stageTwoHome) carries one balance
-  // across its days. Its own attempt record alone is no such sign: a prop run's fresh attempt starts at its window's first
-  // moment (refuseCarried checks it carries nothing from outside the window).
+  // across its days. An attempt record of the run's own is not refused for being there: refuseCarried refuses one that
+  // started before or after the run's window, or holds a close (recorded or missed) outside it.
   if (fs.existsSync(path.join(dir, require('../replay/combine-run').LOG))) {
     throw new Error(`run ${id} is a continuous-combine run: one balance carried across its days (stage 2), never pooled with picked days`);
   }
+  // A training-loop trend-set run (replay/step-windows.js): stretches of its sessions picked by outcome, never whole days.
+  if (steppedWindows(dir)) throw new Error(`run ${id} steps windows of its sessions only (the training loop's trend set): never pooled with whole days`);
 }
 
-/** A run whose own attempt record holds a close from a day outside the run's own window: a carried balance, never pooled. */
+/**
+ * A run whose attempt records (every one in its home's combine folder: running, and ended ones, renamed
+ * <account>.ended-<time>.json) carry a balance from outside the run's own window [from, to): an attempt started on a day
+ * outside it, or a close recorded (days) or missed (missedCloses, missedClose) on one. Never pooled.
+ */
 function refuseCarried(home, run, id) {
-  const ps = require('../trading/prop-state');
-  for (const name of ps.runningAttempts(home)) {
-    const a = ps.readAttempt(home, name);
-    const out = (a && a.days ? a.days : []).find(d => d && !(d.day >= run.from && d.day < run.to));
-    if (out) throw new Error(`run ${id}'s attempt of ${name} carries a close of ${out.day}, outside its own window ${run.from}..${run.to} (a carried balance): never pooled`);
+  let files = [];
+  try { files = fs.readdirSync(path.join(home, 'combine')).filter(f => f.endsWith('.json')).sort(); } catch (_err) { return; }
+  const inside = day => day >= run.from && day < run.to;
+  for (const f of files) {
+    let a = null;
+    try { a = JSON.parse(fs.readFileSync(path.join(home, 'combine', f), 'utf8')); } catch (_err) { /* not a record */ }
+    if (!a || !Array.isArray(a.days)) continue;
+    const name = a.account || f;
+    const where = `outside its own window ${run.from}..${run.to} (a carried balance): never pooled`;
+    if (a.startDay && !inside(a.startDay)) throw new Error(`run ${id}'s attempt of ${name} started on ${a.startDay}, ${where}`);
+    const closes = [...a.days.map(d => d && d.day), ...(a.missedCloses || []), ...(a.missedClose ? [a.missedClose] : [])].filter(Boolean);
+    const out = closes.find(d => !inside(d));
+    if (out) throw new Error(`run ${id}'s attempt of ${name} carries a close of ${out}, ${where}`);
   }
 }
 

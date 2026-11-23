@@ -2270,10 +2270,13 @@ It refuses to pool:
   report reweights those);
 - a setup-focused practice run (its own report scores it as
   `diagnostic (setup-focused)`);
+- a training-loop trend-set run, which steps windows of its sessions, not
+  whole days;
 - a continuous-combine (stage-2) run, which carries one balance across its
-  days, or a run whose own attempt record holds a close from a day outside
-  the run's window (a carried balance). A prop run's own fresh attempt, started
-  at its window's first moment, pools;
+  days, or a run with an attempt record (running or ended) that started on a
+  day outside the run's window or holds a close, recorded or missed, from one
+  (a carried balance). A prop run's own fresh attempt, started at its window's
+  first moment, pools;
 - runs that name different accounts. `--account` only names the account for
   runs that name none;
 - a run that names an account that does not resolve: an attempt record of an

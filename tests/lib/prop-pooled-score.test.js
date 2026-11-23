@@ -201,7 +201,27 @@ test('readGroupRun: a finished run home read as the report reads it (its stream 
   assert.strictEqual(P.readGroupRun(home, { root }).runId, 'pick1');
   attempt([{ day: '2023-03-03', balance: 50200, pnl: 200 }, { day: '2023-03-06', balance: 50200, pnl: 0 }]);
   assert.throws(() => P.readGroupRun(home, { root }), /run pick1's attempt of unit_x carries a close of 2023-03-03, outside its own window 2023-03-06\.\.2023-03-07 \(a carried balance\)/);
+  // The window's edges: its `to` is exclusive (a close on it is outside), and a close after the window is refused too.
+  attempt([{ day: '2023-03-06', balance: 50000, pnl: 0 }, { day: '2023-03-07', balance: 50000, pnl: 0 }]);
+  assert.throws(() => P.readGroupRun(home, { root }), /carries a close of 2023-03-07, outside its own window/);
+  attempt([{ day: '2023-03-06', balance: 50000, pnl: 0 }, { day: '2023-03-09', balance: 50000, pnl: 0 }]);
+  assert.throws(() => P.readGroupRun(home, { root }), /carries a close of 2023-03-09, outside its own window/);
+  // A close the record missed counts as one of its days; an attempt started before the window carries one too.
+  fs.writeFileSync(path.join(home, 'combine', 'unit_x.json'), JSON.stringify({ account: 'unit_x', startDay: '2023-03-06', days: [], missedCloses: ['2023-03-02'] }));
+  assert.throws(() => P.readGroupRun(home, { root }), /carries a close of 2023-03-02, outside its own window/);
+  fs.writeFileSync(path.join(home, 'combine', 'unit_x.json'), JSON.stringify({ account: 'unit_x', startDay: '2023-03-03', days: [{ day: '2023-03-06', balance: 50000, pnl: 0 }] }));
+  assert.throws(() => P.readGroupRun(home, { root }), /run pick1's attempt of unit_x started on 2023-03-03, outside its own window 2023-03-06\.\.2023-03-07 \(a carried balance\)/);
+  // An ended (renamed) record of the run is read too.
+  fs.unlinkSync(path.join(home, 'combine', 'unit_x.json'));
+  fs.writeFileSync(path.join(home, 'combine', 'unit_x.ended-2023-03-06T21-00-00-000Z.json'), JSON.stringify({ account: 'unit_x', startDay: '2023-03-01', days: [{ day: '2023-03-01', balance: 50000, pnl: 0 }] }));
+  assert.throws(() => P.readGroupRun(home, { root }), /run pick1's attempt of unit_x started on 2023-03-01/);
   fs.rmSync(path.join(home, 'combine'), { recursive: true });
+  // A training-loop trend-set run steps windows of its sessions (outcome-selected stretches), never whole days.
+  const manifestFile = path.join(runDir, 'manifest.json');
+  const manifest = fs.readFileSync(manifestFile, 'utf8');
+  fs.writeFileSync(manifestFile, JSON.stringify({ ...JSON.parse(manifest), stepWindows: { kind: 'trend-set', windows: [] } }));
+  assert.throws(() => P.readGroupRun(home, { root }), /run pick1 steps windows of its sessions only/);
+  fs.writeFileSync(manifestFile, manifest);
   // A setup-focused practice run: its own score is `diagnostic (setup-focused)`, never whole days to pool with full-day runs.
   const t1 = '2023-03-13T14:00:00.000Z';
   const focused = multiDayRun({
