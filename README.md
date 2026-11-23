@@ -92,6 +92,105 @@ Whether the reading earns is what the replays measure.
 Every skill change goes through tests written first and an independent
 adversarial review before it merges.
 
+## The strategy
+
+The harness ships one active strategy stack, written as documents in
+[strategies/](strategies/README.md):
+
+| Strategy | What it is |
+|---|---|
+| `trade_lifecycle` | The model's own trade: it composes bias, location, setup, entry, stop and target from its skills as one record, and code checks every read in it before the order can go ([docs/COMPOSED-ENTRY.md](docs/COMPOSED-ENTRY.md)). |
+| `momentum_continuation` | A rules strategy (a closed 3m momentum candle the prevailing trend's way, in the morning window). It never trades on its own: a composed record may cite it as a setup. |
+| `prop_portfolio` | The account layer: a policy strategy that sizes each composed trade within the account's budget (or skips it) and exits it by the account's rulebook. |
+
+What the trade looks like:
+
+- **Style:** trend following on index futures (Nasdaq, S&P, Dow, Russell, in
+  micro or mini form; the selected contract trades). Replay testing so far
+  has used Nasdaq data.
+- **When:** the focus is the New York morning session; the runner's clock
+  and the gate set the hours, and everything is flat before the session
+  closes.
+- **Side:** never against a trending 4h or 1h. A trade against it is a pass.
+- **Entry:** after a pullback ends, on a confirming 3m close (the cited
+  momentum setup enters on its own momentum candle).
+- **Stop:** where the trend idea is wrong, beyond the reaction's swing.
+- **Exit:** the stop and the target are set when the trade goes on. Once the
+  target is reached, the stop locks at a level the rulebook sets below the target (room for an
+  ordinary pullback, so only part of the target is locked) and trails
+  behind the latest confirmed 15m swing, so a trend that keeps running is
+  held.
+- **Selective:** a valid setup is a pass when its reward to risk is under 2:1,
+  when the reads don't all check true, or when the account's state says to
+  wait.
+
+The model reasons and proposes. Code checks every read, sizes the trade and
+refuses anything outside the rules ([Safety](#safety)).
+
+## The account: a prop-firm combine
+
+The goal is a combine pass: reach the profit target before the loss limits
+are touched. An account is a document in [accounts/](accounts/) (the firm's
+rules as numbers) and its rulebook beside it (the numbers the policy trades
+with, and which rules code enforces and which the skills teach). The shipped
+100K profile has:
+
+- a profit target and a trailing max loss: the floor trails the highest
+  end-of-day balance and locks at the starting balance, and a blow is equity
+  at or below the floor at any moment;
+- a daily loss limit that stops the day;
+- a consistency rule: the best day may be at most a set share of the total
+  profit;
+- a 30-session window the evaluation uses (not a firm rule).
+
+Verify the numbers against the firm's current rules before trading.
+
+Inside those limits:
+
+- **Risk per trade:** the composed trade's cap is $300 all in (in its
+  strategy document). The size is the most contracts that cap fits; the
+  rulebook's cushion rules only lower it, and near the loss floor they shrink
+  it so a stop at its price does not reach the floor.
+- **Floor and stretch:** when the cap fits fewer contracts than the minimum
+  size, the rulebook allows exactly the minimum, up to a set dollar amount
+  all in, while the attempt is healthy.
+- **Stops on the day:** a soft daily stop and a losing-streak stop end new
+  entries for the day. Exits are never blocked.
+- **One position at a time**, shared across the instruments.
+
+Where the numbers live: the firm's limits in the account, sizing, exit and
+the soft stops in its rulebook, the per-trade cap and minimum reward to risk
+in the strategy documents, and the gate's entry limits in `config/runner.json`.
+The runner, the gate and the simulator all read them from there.
+
+## Context the model may read: gamma
+
+The `gex-regime` skill records the day's options gamma word from a line the
+code computes, as context only. The
+book is never a forecast: the word is never a reason to enter, pass, size,
+stop or exit, and it casts no vote in the count. A harness version that
+prints a code-computed gamma line from your own gamma data is proposed in a
+separate pull request. Until then the skill is inert.
+
+## Where it stands
+
+Honestly:
+
+- **Not proven.** Entry rules tested on their own showed about break-even or
+  worse expectancy in model-free tests on historical data. The bet is that the model's
+  reading, with the exit that holds trends, earns where a mechanical rule
+  doesn't. That is measured in replays and not assumed.
+- **Replay only.** No live account is involved. Live trading needs the
+  consistent-replay-pass requirement and the runbook in
+  [docs/LIVE-DRY-RUN.md](docs/LIVE-DRY-RUN.md), and the owner's decision.
+- **Small samples.** A few trades can swing a replay's R. A result counts
+  when it holds on held-out days the model and its skills were not tuned on.
+- **The numbers that count** are in dollars against the account's rules:
+  zero blown accounts first, then the pass rate over 30 sessions.
+
+The plain-language tour is [docs/HOW-IT-TRADES.md](docs/HOW-IT-TRADES.md),
+with the evidence behind the reads.
+
 ## How it works
 
 ```text
