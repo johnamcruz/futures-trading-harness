@@ -189,6 +189,23 @@ test('readGroupRun: a finished run home read as the report reads it (its stream 
   fs.writeFileSync(path.join(home, 'experience', 'curated-pinned.json'), JSON.stringify({ kind: 'curated-pin', windows: [], hash: 'x' }));
   assert.throws(() => P.readGroupRun(home, { root }), /run pick1 is a curated run .*doesn't match its hash/);
   fs.rmSync(path.join(home, 'experience'), { recursive: true });
+  // A setup-focused practice run: its own score is `diagnostic (setup-focused)`, never whole days to pool with full-day runs.
+  const t1 = '2023-03-13T14:00:00.000Z';
+  const focused = multiDayRun({
+    runId: 'focus1', gate: { learning: false, role: null, look: null, hideOutcomes: false, practice: { mode: 'setup-focus' } },
+    days: [{ day: '2023-03-13', times: [t1], records: [record({ at: t1 })], rows: [[100.5, 100.75, 99.75, 100.25]], fills: [] }],
+  });
+  assert.throws(() => P.readGroupRun(focused.home, { root }), /run focus1 is a setup-focused practice run/);
+  // Each run's own account: an attempt of an account that is no valid profile, or a runner account that names a profile
+  // only in another case (or an invalid one), never resolves to "none" (else --account or the fallback would take over).
+  const accounts = [{ name: 'unit_a', valid: true }, { name: 'unit_bad', valid: false }];
+  assert.strictEqual(P.ownAccount({ runId: 'r', attempts: ['unit_a'], runnerAccount: '1', accounts }).name, 'unit_a');
+  assert.strictEqual(P.ownAccount({ runId: 'r', attempts: [], runnerAccount: 'unit_a', accounts }).name, 'unit_a');
+  assert.strictEqual(P.ownAccount({ runId: 'r', attempts: [], runnerAccount: '1', accounts }).name, null, 'a broker account id: no profile named');
+  assert.throws(() => P.ownAccount({ runId: 'r', attempts: [], runnerAccount: 'UNIT_A', accounts }), /run r's runner config names account "UNIT_A", which does not resolve \(the profile is unit_a\)/);
+  assert.throws(() => P.ownAccount({ runId: 'r', attempts: [], runnerAccount: 'unit_bad', accounts }), /run r's runner config names account "unit_bad", which does not resolve \(an invalid profile\)/);
+  assert.throws(() => P.ownAccount({ runId: 'r', attempts: ['unit_gone'], runnerAccount: null, accounts }), /run r holds an attempt of account "unit_gone", which does not resolve \(no such profile\)/);
+  assert.throws(() => P.ownAccount({ runId: 'r', attempts: ['unit_bad'], runnerAccount: null, accounts }), /run r holds an attempt of account "unit_bad", which does not resolve \(an invalid profile\)/);
 });
 
 test('the CLI\'s main: the account the runs name (--account only fills a missing one), one sizing for every run', () => {
@@ -225,6 +242,9 @@ test('the CLI\'s main: the account the runs name (--account only fills a missing
   // Runs sized differently (one traded the micro, one the mini): refused, the arms aren't sized alike.
   const e = mk('2023-03-10', 5, { symbols: ['NQ'], account: traded });
   assert.throws(() => CLI.main(['--group', `G=${a}`, '--group', `N=${e}`], { env }), /the runs were sized differently/);
+  // A run's runner account in another case: refused, naming the run, never filled by --account.
+  const f = mk('2023-03-13', 6, { symbols: ['MNQ'], account: traded.toUpperCase() });
+  assert.throws(() => CLI.main([a, f, '--account', traded], { env }), new RegExp(`run cli6's runner config names account "${traded.toUpperCase()}", which does not resolve`));
 });
 
 test('the CLI (scripts/pooled-score.js): groups, homes and flags', () => {

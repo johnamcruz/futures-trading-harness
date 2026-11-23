@@ -2268,8 +2268,14 @@ It refuses to pool:
 - runs of two learning roles, or of one learning role and unscheduled runs;
 - a curated run, or one whose days started from drawn account states (its own
   report reweights those);
+- a setup-focused practice run (its own report scores it as
+  `diagnostic (setup-focused)`);
 - runs that name different accounts. `--account` only names the account for
   runs that name none;
+- a run that names an account that does not resolve: an attempt record of an
+  account that is no valid profile, or a runner `account` that names a profile
+  only in another case, or an invalid profile. Any other runner `account` is
+  the broker's account id, not a profile;
 - runs sized differently.
 
 An entry left out, trades open at the same time, or a run whose report and

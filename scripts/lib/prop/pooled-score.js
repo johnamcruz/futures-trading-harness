@@ -17,11 +17,13 @@
  * Carlo runs and no pass rate is printed: dollars and R only, with the count and the minimum stated. The Monte Carlo is
  * refused for a pooled stream with an entry left out or two trades open at once, as a real score refuses one (a dropped
  * loss flatters), and for a run whose report and stream count different trades (the dollars would describe other trades).
- * Never pooled at all: a curated run or one whose days started from drawn account states (refuseDrawn), a run whose
+ * Never pooled at all: a curated run or one whose days started from drawn account states (refuseDrawn), a setup-focused
+ * practice run, a run naming an account that does not resolve (ownAccount), a run whose
  * stream holds a day outside its own window, and runs the evaluator's checkPooledWindow refuses.
  * Groups (arms) are scored each on their own, with the same seed and options, and printed side by side.
  *
  *   readGroupRun(home, { root, barsFiles })   { runId, home, dir, stream, run, report: { trades, net } } (read only)
+ *   ownAccount({ runId, attempts, runnerAccount, accounts })   a run's own account pick; one that doesn't resolve: refused
  *   agreeAccount(picks, { override, fallback })   the one account the runs name (--account only for runs naming none)
  *   poolStreams(entries)                      the runs' streams as one model stream, days in date order
  *   runRow(entry), groupSummary(rows)         a run's row; a group's totals
@@ -36,7 +38,7 @@ const { PROMOTION_GATE } = require('./promotion');
 const { checkPooledWindow, scoreStream } = require('./evaluator');
 const { readModelStream } = require('./model-stream');
 const { gateLimits } = require('./attempts');
-const { scoreText } = require('./model-score');
+const { scoreText, resolveAccount } = require('./model-score');
 const { requireSizing } = require('../trading/combine');
 
 const LABEL = 'diagnostic (picked days)';
@@ -74,10 +76,32 @@ function readGroupRun(given, { root = null, barsFiles = {} } = {}) {
   const dir = runDirOf(given);
   refuseDrawn(dir);
   const { stream, run } = readModelStream(dir, { root, barsFiles });
+  // A setup-focused practice run is scored `diagnostic (setup-focused)` on its own (model-score.js): not whole days to pool.
+  if (run.practice) throw new Error(`run ${run.runId || path.basename(dir)} is a setup-focused practice run: it steps setup moments, not whole days, so it is never pooled (its own report scores it as diagnostic (setup-focused))`);
   const { readRun } = require('../replay/store');
   const { summarize } = require('../replay/report');
   const total = summarize(readRun(dir).days).total;
   return { runId: run.runId || path.basename(dir), home: path.resolve(dir, '..', '..'), dir, stream, run, report: { trades: total.trades, net: cents(total.net) } };
+}
+
+/**
+ * A run's own account (model-score.js resolveAccount over its attempt records and runner config, no policy fallback),
+ * refused when what it names does not resolve: an attempt of an account that is no valid profile, or a runner account
+ * that names a profile only in another case or an invalid one. Any other runner account is the broker's account id
+ * (the runner's `account`), no profile: the run names none.
+ */
+function ownAccount({ runId, attempts = [], runnerAccount = null, accounts = [] }) {
+  const valid = new Set(accounts.filter(a => a.valid !== false).map(a => a.name));
+  const invalid = new Set(accounts.filter(a => a.valid === false).map(a => a.name));
+  const why = n => (invalid.has(n) ? 'an invalid profile' : 'no such profile');
+  const lost = attempts.find(n => !valid.has(n));
+  if (lost) throw new Error(`run ${runId} holds an attempt of account "${lost}", which does not resolve (${why(lost)})`);
+  if (runnerAccount !== null && runnerAccount !== undefined && !valid.has(String(runnerAccount))) {
+    const r = String(runnerAccount);
+    const cased = [...valid].find(n => n.toLowerCase() === r.toLowerCase());
+    if (cased || invalid.has(r)) throw new Error(`run ${runId}'s runner config names account "${r}", which does not resolve (${cased ? `the profile is ${cased}` : 'an invalid profile'})`);
+  }
+  return resolveAccount({ attempts, runnerAccount, strategies: [], accounts });
 }
 
 /**
@@ -220,4 +244,4 @@ function pooledText(groups, { account, sizingFrom, sessions }) {
   return `${out.join('\n')}\n`;
 }
 
-module.exports = { LABEL, readGroupRun, agreeAccount, poolStreams, runRow, groupSummary, scoreGroup, pooledText };
+module.exports = { LABEL, readGroupRun, ownAccount, agreeAccount, poolStreams, runRow, groupSummary, scoreGroup, pooledText };

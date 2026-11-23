@@ -58,8 +58,9 @@ function main(argv, { env = process.env } = {}) {
   const { strategies } = loadStrategies(ROOT, env);
   const accounts = loadAccounts(ROOT, env).accounts;
   const runnerOf = e => { try { return JSON.parse(fs.readFileSync(path.join(e.dir, 'autotrader.json'), 'utf8')) || {}; } catch (_err) { return {}; } };
-  // Each run's own account (its attempt, its runner config); --account only names it for runs that name none.
-  const own = all.map(e => resolveAccount({ attempts: runningAttempts(e.home), runnerAccount: runnerOf(e).account, strategies: [], accounts }));
+  // Each run's own account (its attempt, its runner config; one that doesn't resolve: refused); --account only names it
+  // for runs that name none.
+  const own = all.map(e => P.ownAccount({ runId: e.runId, attempts: runningAttempts(e.home), runnerAccount: runnerOf(e).account, accounts }));
   const name = P.agreeAccount(own, { override: o.account, fallback: resolveAccount({ strategies, accounts }) });
   const account = accountNamed(ROOT, name, env);
   const policy = policyFor(strategies, account.name);
