@@ -29,7 +29,9 @@ it out from the line's numbers (no cut-off for "small" was measured). The
 sign is as the code line defines it.
 
 **Recorded only.** Write the word on its own `gamma <word>` line in the
-plan, never in the STATE line or the `regime:` tag (`trade-plan`). It is
+plan, never in the STATE line or the `regime:` tag (`trade-plan`). The plan's line
+holds only what "The words" gives: no as-of, no note, no reason after it. Write it
+once, from the code line's word. It is
 neutral, never a vote and never a point (no FOR, no AGAINST): the count
 decides without it (`confluence-counting`). It never turns a read against
 into neutral. It is recorded only, until the owner decides to let it vote
