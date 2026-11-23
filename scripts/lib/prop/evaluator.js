@@ -36,8 +36,9 @@
  * before its first cycle) is what lets anyone read its outcomes, so every score of a practice-validate, test or final
  * run is logged beside that look (learning/looks.js recordScore), which must be there. Practice-train is free. A
  * reasoning-fix look's outcomes are hidden: no score. A curated run's score is `diagnostic (reweighted)` (its days are
- * resampled at each list's natural rate, prop/natural-rate.js) and a setup-focused run's `diagnostic (setup-focused)`:
- * both practice only, and refused by the promotion gate (`diagnostic`); a full-day run's score is `real`. Days to pass
+ * resampled at each list's natural rate, prop/natural-rate.js), a setup-focused run's `diagnostic (setup-focused)` and
+ * many runs' hand-picked days pooled into one stream (checkPooledWindow, prop/pooled-score.js) `diagnostic (picked days)`:
+ * all practice only, and refused by the promotion gate (`diagnostic`); a full-day run's score is `real`. Days to pass
  * are reported as the median and the 90th percentile (the nearest rank above: never faster than the attempts were).
  */
 
@@ -96,7 +97,8 @@ function checkWindow({ from, to, look = null, ledger = null, logLook = null, now
   return pass;
 }
 
-const DIAGNOSTIC = Object.freeze(['reweighted', 'setup-focused']);
+// 'picked days': many replay runs of hand-picked days pooled into one stream (prop/pooled-score.js, checkPooledWindow).
+const DIAGNOSTIC = Object.freeze(['reweighted', 'setup-focused', 'picked days']);
 
 /**
  * Check a model replay run before its trades are scored (module header). run: { runId, from, to (session dates, `to`
@@ -138,6 +140,31 @@ function checkModelWindow({ run, diagnostic = null, candidateRulebook = false, l
   const checked = Object.freeze({ unit, look: entry, from, to, model: true, diagnostic, synthetic: diagnostic === 'reweighted', candidateRulebook: Boolean(candidateRulebook) });
   const pass = Object.freeze({ ...checked });
   issued.set(pass, checked);
+  return pass;
+}
+
+/**
+ * Check many replay runs before their trades are pooled into one stream (prop/pooled-score.js): each run is checked as
+ * checkModelWindow checks it, as a `picked days` diagnostic and with no score logged (a pooled score never writes into a
+ * run's ledger, so a run whose score must be logged beside its look, practice-validate, is refused, and a sealed run
+ * refuses any diagnostic). The runs must lie in one learning role (or none). Returns one single-use pass for
+ * scoreStream over the pooled span [first run's from, last run's to): the days between the runs are never read.
+ */
+function checkPooledWindow({ runs, now = new Date() }) {
+  if (!Array.isArray(runs) || !runs.length) throw new Error('runs: at least one run to pool');
+  const checked = runs.map(run => {
+    const p = checkModelWindow({ run, diagnostic: 'picked days', now });
+    const c = issued.get(p);
+    issued.delete(p);
+    return c;
+  });
+  const roles = [...new Set(checked.map(c => c.unit.role))];
+  if (roles.length !== 1) throw new Error(`the runs span ${roles.join(' + ')}: a pooled score reads the runs of one window`);
+  const from = checked.map(c => c.from).sort()[0];
+  const to = checked.map(c => c.to).sort().pop();
+  const pooled = Object.freeze({ unit: checked[0].unit, look: null, from, to, model: true, diagnostic: 'picked days', synthetic: false, candidateRulebook: false });
+  const pass = Object.freeze({ ...pooled });
+  issued.set(pass, pooled);
   return pass;
 }
 
@@ -696,4 +723,4 @@ function pairedScore(daysA, daysB, { account, rulebook, size, contracts, maxDail
   };
 }
 
-module.exports = { LOOK_PURPOSES, DIAGNOSTIC, SIZED, sessionStart, checkWindow, checkModelWindow, scoreStream, scorePaired, scoreArms, ownShare, ownExit };
+module.exports = { LOOK_PURPOSES, DIAGNOSTIC, SIZED, sessionStart, checkWindow, checkModelWindow, checkPooledWindow, scoreStream, scorePaired, scoreArms, ownShare, ownExit };

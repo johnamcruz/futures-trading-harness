@@ -2247,6 +2247,21 @@ The Monte Carlo of a curated run (drawn states) is diagnostic only: the
 curated moments are reweighted, not a calendar of whole days. A continuous
 combine run's is a real score of its whole days.
 
+**Pooled picked days** (`node scripts/pooled-score.js`,
+`prop/pooled-score.js`). Use it for many replay runs of days someone picked,
+such as one-morning runs. It prints each run's date, trades, sides, gross R
+and dollars (the report's, net of fees). It then pools the trades of all the
+runs into one stream in date order and runs that stream through the same
+30-day Monte Carlo (`prop/evaluator.js` `checkPooledWindow`, `scoreStream`).
+The result is labelled `diagnostic (picked days)`, which is never a promotion
+score. When the pooled days hold fewer independent attempts (days over the
+account's sessions) than the promotion gate's `minAttempts`, the Monte Carlo
+does not run and no pass rate is printed, only dollars and R. Give two groups
+(`--group G=<homes...> --group N=<homes...>`) to see the arms side by side.
+It refuses a day that appears in two runs of one group, an entry left out,
+trades open at the same time, and a run whose score would have to be logged
+beside its look. It reads the runs only and writes nothing.
+
 ## 6. The training loop's keep rule
 
 With `modelScore` in the loop config (`scripts/train-loop.js`), the loop
