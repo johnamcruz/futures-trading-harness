@@ -116,9 +116,10 @@ What the trade looks like:
   momentum setup enters on its own momentum candle).
 - **Stop:** where the trend idea is wrong, beyond the reaction's swing.
 - **Exit:** the stop and the target are set when the trade goes on. Once the
-  target is reached, the stop locks at the target's R less 1.5R (+0.5R on a
-  2R target) and trails behind the latest confirmed 15m swing, so a trend
-  that keeps running is held.
+  target is reached, the stop locks at a level the rulebook sets below the target (room for an
+  ordinary pullback, so only part of the target is locked) and trails
+  behind the latest confirmed 15m swing, so a trend that keeps running is
+  held.
 - **Selective:** a valid setup is a pass when its reward to risk is under 2:1,
   when the reads don't all check true, or when the account's state says to
   wait.
