@@ -23,7 +23,7 @@ function scopeOf(diff, base) {
   try {
     const files = String(diff(base)).split('\n').map(s => s.trim()).filter(Boolean);
     return { docsOnly: docsOnly(files), files };
-  } catch (e) {
+  } catch (_e) {
     return { docsOnly: false, files: [] };
   }
 }
