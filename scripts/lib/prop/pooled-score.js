@@ -14,12 +14,15 @@
  * The pooled score is `diagnostic (picked days)`, never a promotion score: picked days are not a calendar of the market.
  * Below the score's minimum of independent attempts (the promotion gate's minAttempts, prop/promotion.js, read here,
  * never changed), counted as the score counts them (floor of the pooled days over the account's sessions), no Monte
- * Carlo runs and no pass rate is printed: dollars and R only, with the count and the minimum stated. A pooled stream
- * with an entry left out or two trades open at once is refused, as a real score refuses one (a dropped loss flatters).
+ * Carlo runs and no pass rate is printed: dollars and R only, with the count and the minimum stated. The Monte Carlo is
+ * refused for a pooled stream with an entry left out or two trades open at once, as a real score refuses one (a dropped
+ * loss flatters), and for a run whose report and stream count different trades (the dollars would describe other trades).
+ * Never pooled at all: a curated run or one whose days started from drawn account states (refuseDrawn), a run whose
+ * stream holds a day outside its own window, and runs the evaluator's checkPooledWindow refuses.
  * Groups (arms) are scored each on their own, with the same seed and options, and printed side by side.
  *
  *   readGroupRun(home, { root, barsFiles })   { runId, home, dir, stream, run, report: { trades, net } } (read only)
- *   agreeAccount(picks)                       the one account name every run's resolveAccount pick names
+ *   agreeAccount(picks, { override, fallback })   the one account the runs name (--account only for runs naming none)
  *   poolStreams(entries)                      the runs' streams as one model stream, days in date order
  *   runRow(entry), groupSummary(rows)         a run's row; a group's totals
  *   scoreGroup(name, entries, { account, policy, limits, contracts, seed, paths, reps, minimum })   a group's score
@@ -52,9 +55,24 @@ function runDirOf(given) {
   throw new Error(`no replay run in ${given}${subs.length ? ` (${subs.length} runs: give one's folder)` : ''}`);
 }
 
+/**
+ * A run the single-run score never takes as whole days (model-score.js: a curated run is reweighted to its lists' natural
+ * rates or not scored, a run from drawn account states weighted back): its days aren't the market's, so never pooled.
+ */
+function refuseDrawn(dir) {
+  const id = path.basename(dir);
+  let pin;
+  try { pin = require('../learning/curated-lists').loadPinnedCurated(path.resolve(dir, '..', '..')); } catch (err) { pin = { broken: err.message }; }
+  if (pin) throw new Error(`run ${id} is a curated run${pin.broken ? ` (${pin.broken})` : ''}: its moments are picked outcome-balanced, so it is never pooled (its own report scores it at natural rates)`);
+  if (require('./account-states').readStatesLog(dir).some(x => x && x.kind === 'start')) {
+    throw new Error(`run ${id} started its days from drawn account states: they are weighted back to the natural mix only in its own score, so it is never pooled`);
+  }
+}
+
 /** A finished run read as its report reads it: the model stream (its trades, sides, gross R) and the report's dollars. */
 function readGroupRun(given, { root = null, barsFiles = {} } = {}) {
   const dir = runDirOf(given);
+  refuseDrawn(dir);
   const { stream, run } = readModelStream(dir, { root, barsFiles });
   const { readRun } = require('../replay/store');
   const { summarize } = require('../replay/report');
@@ -62,13 +80,22 @@ function readGroupRun(given, { root = null, barsFiles = {} } = {}) {
   return { runId: run.runId || path.basename(dir), home: path.resolve(dir, '..', '..'), dir, stream, run, report: { trades: total.trades, net: cents(total.net) } };
 }
 
-/** The one account every run names (model-score.js resolveAccount picks); runs naming none or several: refused. */
-function agreeAccount(picks) {
-  const none = picks.find(p => !p.name);
-  if (none) throw new Error(none.why || 'no account: pass --account (no default account)');
-  const names = [...new Set(picks.map(p => p.name))];
-  if (names.length !== 1) throw new Error(`the runs name different accounts (${names.join(', ')}): pass --account`);
-  return names[0];
+/**
+ * The one account the runs name (picks: each run's own, model-score.js resolveAccount over its attempt and runner config,
+ * name null when it names none). Runs naming two accounts never pool. override (--account) only names the account of runs
+ * that name none: one the runs name otherwise is refused. None named and no override: the fallback's (the policy
+ * strategies' account), else refused with its reason.
+ */
+function agreeAccount(picks, { override = null, fallback = null } = {}) {
+  const names = [...new Set(picks.filter(p => p && p.name).map(p => p.name))].sort();
+  if (names.length > 1) throw new Error(`the runs name different accounts (${names.join(', ')}): pool runs of one account`);
+  if (override) {
+    if (names.length && names[0] !== override) throw new Error(`--account ${override}, but the runs name ${names[0]}: --account only names the account of runs that name none`);
+    return override;
+  }
+  if (names.length) return names[0];
+  if (fallback && fallback.name) return fallback.name;
+  throw new Error((fallback && fallback.why) || 'no account: pass --account (no default account)');
 }
 
 /** The runs' streams as one model stream, its days in date order; a session day in two runs is refused. */
@@ -77,6 +104,8 @@ function poolStreams(entries) {
   const owner = new Map();
   for (const e of entries) {
     for (const d of e.stream.days) {
+      // As single-run scoring holds a run's days to its own window (evaluator.js daysFor).
+      if (!(d.day >= e.run.from && d.day < e.run.to)) throw new Error(`run ${e.runId}'s stream holds ${d.day}, outside its own window ${e.run.from}..${e.run.to}`);
       if (owner.has(d.day)) throw new Error(`session day ${d.day} is in runs ${owner.get(d.day)} and ${e.runId}: a pooled stream holds each day once`);
       owner.set(d.day, e.runId);
     }
@@ -131,6 +160,11 @@ function scoreGroup(name, entries, { account, policy = null, limits = null, cont
   const pass = checkPooledWindow({ runs: entries.map(e => e.run), now });
   if (independent < minimum) {
     out.refused = `${independent} independent attempt(s) (${stream.days.length} day(s) / ${S} sessions) is below the minimum of ${minimum} the score uses (the promotion gate's minAttempts): no pass rate, dollars and R only`;
+    return out;
+  }
+  const miscount = entries.find(e => e.report.trades !== e.stream.trades.length);
+  if (miscount) {
+    out.refused = `run ${miscount.runId}: the report counts ${miscount.report.trades} trade(s), the stream ${miscount.stream.trades.length}: the dollars and the Monte Carlo would describe different trades`;
     return out;
   }
   if (stream.excluded.length) {

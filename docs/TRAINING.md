@@ -2258,11 +2258,23 @@ score. When the pooled days hold fewer independent attempts (days over the
 account's sessions) than the promotion gate's `minAttempts`, the Monte Carlo
 does not run and no pass rate is printed, only dollars and R. Give two groups
 (`--group G=<homes...> --group N=<homes...>`) to see the arms side by side.
-It refuses a day that appears in two runs of one group, a run whose outcomes
-are hidden, runs of two learning roles, and a run whose score would have to be
-logged beside its look. An entry left out or trades open at the same time are
-flagged on the run's row and stop the Monte Carlo. It reads the runs only and
-writes nothing.
+It refuses to pool:
+
+- a day that appears in two runs of one group;
+- a run whose stream holds a day outside its own window (each pooled day must
+  lie in its run's window, never in a month between the runs);
+- a run whose outcomes are hidden, or whose score would have to be logged
+  beside its look, or a sealed run;
+- runs of two learning roles, or of one learning role and unscheduled runs;
+- a curated run, or one whose days started from drawn account states (its own
+  report reweights those);
+- runs that name different accounts. `--account` only names the account for
+  runs that name none;
+- runs sized differently.
+
+An entry left out, trades open at the same time, or a run whose report and
+stream count different trades are flagged on the run's row and stop the Monte
+Carlo. It reads the runs only and writes nothing.
 
 ## 6. The training loop's keep rule
 

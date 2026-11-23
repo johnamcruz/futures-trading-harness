@@ -44,7 +44,11 @@ test('checkPooledWindow: each run checked as picked days; one pass over the pool
   const validate = runOf('v', ['2024-07-15'], { learning: true, role: 'practice-validate', look: { evaluation: 'v1', candidate: 'v1' } });
   assert.throws(() => checkPooledWindow({ runs: [validate] }), /logScore is required/);
   const sealed = runOf('s', ['2025-03-03'], { learning: true, role: 'test', look: { evaluation: 'e1', candidate: 'c1' } });
-  assert.throws(() => checkPooledWindow({ runs: [sealed] }), /logScore is required|sealed/);
+  assert.throws(() => checkPooledWindow({ runs: [sealed] }), /test is sealed and judged on every bar, as live: a picked days score is practice's, never test's/);
+  // The pooled pass holds each run's own window: a day between the runs (a month the runs never read) is refused.
+  const gap = modelStreamOf(['2022-01-10', '2022-02-01', '2022-03-01'], () => []);
+  assert.throws(() => scoreStream(gap, { pass: checkPooledWindow({ runs: [a, b] }), account: ACCOUNT, paths: 1, reps: 1, rulebook: { sizing: TEST_SIZING } }), /day 2022-02-01 lies outside every pooled run's own window/);
+  assert.deepStrictEqual(checkPooledWindow({ runs: [a, b] }).windows, [{ from: '2022-03-01', to: '2022-03-02' }, { from: '2022-01-10', to: '2022-01-11' }]);
   // The single-run check takes the label too.
   assert.strictEqual(checkModelWindow({ run: a, diagnostic: 'picked days' }).diagnostic, 'picked days');
 });
@@ -61,6 +65,9 @@ test('poolStreams: the runs\' days in date order, every trade kept; a day in two
   assert.deepStrictEqual(P.poolStreams([early, bad]).excluded, [{ id: 'q', why: 'not closed', runId: 'x' }]);
   assert.throws(() => P.poolStreams([early, morning('again', '2022-01-10', 60)]), /2022-01-10 is in runs early and again/);
   assert.throws(() => P.poolStreams([]), /no runs/);
+  // A run whose stream holds a day outside its own window (as single-run scoring refuses): refused.
+  const stray = { ...early, stream: modelStreamOf(['2022-01-10', '2022-01-11'], () => []) };
+  assert.throws(() => P.poolStreams([stray]), /run early's stream holds 2022-01-11, outside its own window 2022-01-10\.\.2022-01-11/);
 });
 
 test('runRow and groupSummary: each run\'s date, trades, sides, gross R and the report\'s dollars; the group\'s totals', () => {
@@ -71,6 +78,7 @@ test('runRow and groupSummary: each run\'s date, trades, sides, gross R and the 
   // The report's count and the stream's disagree, or an entry was left out: said on the row.
   assert.deepStrictEqual(P.runRow({ ...e, report: { trades: 3, net: 0 } }).flags, ['the report counts 3 trade(s), the stream 2']);
   assert.match(P.runRow({ ...e, stream: { ...e.stream, excluded: [{ why: 'x' }] } }).flags.join(), /1 entr\(y\/ies\) left out/);
+  assert.match(P.runRow({ ...e, stream: { ...e.stream, overlaps: [{ a: 'l', b: 's', at: 'x' }] } }).flags.join(), /1 pair\(s\) open at once/);
   const multi = P.runRow({ ...e, stream: modelStreamOf(['2022-01-10', '2022-01-11'], () => []), report: { trades: 0, net: 0 } });
   assert.deepStrictEqual([multi.date, multi.days, multi.trades, multi.grossR], ['2022-01-10..2022-01-11', 2, 0, 0]);
   const sum = P.groupSummary([row, P.runRow(morning('r2', '2022-01-11', -40, -21.48))]);
@@ -116,6 +124,14 @@ test('scoreGroup: at the minimum the pooled stream is scored by the evaluator; t
   const holed = days.map((d, k) => morning(`h${k}`, d, 60));
   holed[0] = { ...holed[0], stream: { ...holed[0].stream, excluded: [{ root: 'MNQ', bar: 'x', why: 'not closed' }] } };
   assert.match(P.scoreGroup('H', holed, { account: acct, policy: POLICY, paths: 10, reps: 10 }).refused, /1 entr\(y\/ies\) without a settled outcome .*: a pooled score never leaves one out/);
+  // Two trades open at once: settled alone, their combined drawdown unseen: refused.
+  const both = days.map((d, k) => morning(`o${k}`, d, 60));
+  both[3] = { ...both[3], stream: { ...both[3].stream, overlaps: [{ a: 'o3-t', b: 'o3-u', at: `${days[3]}T14:05:00.000Z` }] } };
+  assert.match(P.scoreGroup('O', both, { account: acct, policy: POLICY, paths: 10, reps: 10 }).refused, /^1 pair\(s\) of trades open at the same time \(first in o3\): their combined drawdown would go unseen$/);
+  // The report and the stream count different trades: the dollars and the pass rate would describe different trades.
+  const counted = days.map((d, k) => morning(`c${k}`, d, 60));
+  counted[5] = { ...counted[5], report: { trades: 2, net: 60 } };
+  assert.match(P.scoreGroup('C', counted, { account: acct, policy: POLICY, paths: 10, reps: 10 }).refused, /^run c5: the report counts 2 trade\(s\), the stream 1: the dollars and the Monte Carlo would describe different trades$/);
   assert.throws(() => P.scoreGroup('G', [], { account: acct, policy: POLICY }), /group G: no runs/);
 });
 
@@ -149,9 +165,66 @@ test('readGroupRun: a finished run home read as the report reads it (its stream 
   assert.deepStrictEqual([g.independent, g.result.score, g.result.runDays, g.result.trades, g.summary.net], [3, 'diagnostic (picked days)', 3, 3, 21.78]);
   assert.deepStrictEqual(g.result.sizedWith, { limits: { capUsd: 300, orderMax: null }, contracts: 'micro' });
   // The account: every run must name the same one (or --account); none named: refused, no default.
-  assert.deepStrictEqual(P.agreeAccount([{ name: 'a', why: 'x' }, { name: 'a', why: 'y' }]), 'a');
-  assert.throws(() => P.agreeAccount([{ name: 'a' }, { name: 'b' }]), /the runs name different accounts \(a, b\): pass --account/);
-  assert.throws(() => P.agreeAccount([{ name: null, why: 'no account: pass --account (no default account)' }]), /no account: pass --account/);
+  // The account: the one the runs name; --account only names one the runs leave unnamed; none: the fallback's, else refused.
+  assert.strictEqual(P.agreeAccount([{ name: 'a' }, { name: 'a' }, { name: null }]), 'a');
+  assert.throws(() => P.agreeAccount([{ name: 'a' }, { name: 'b' }]), /the runs name different accounts \(a, b\): pool runs of one account/);
+  assert.throws(() => P.agreeAccount([{ name: 'a' }, { name: 'b' }], { override: 'a' }), /different accounts/);
+  assert.throws(() => P.agreeAccount([{ name: 'a' }], { override: 'b' }), /--account b, but the runs name a: --account only names the account of runs that name none/);
+  assert.strictEqual(P.agreeAccount([{ name: 'a' }], { override: 'a' }), 'a');
+  assert.strictEqual(P.agreeAccount([{ name: null }], { override: 'b', fallback: { name: 'c' } }), 'b');
+  assert.strictEqual(P.agreeAccount([{ name: null }], { fallback: { name: 'c' } }), 'c');
+  assert.throws(() => P.agreeAccount([{ name: null }], { fallback: { name: null, why: 'no account: pass --account (no default account)' } }), /no account: pass --account/);
+  // A curated run (a pinned list: its moments are outcome-balanced) or one whose days started from drawn account states:
+  // the single-run score reweights or refuses them, so a pooled score refuses them, naming the run.
+  const fs = require('fs');
+  const runDir = path.join(home, 'replay', 'pick1');
+  fs.writeFileSync(path.join(runDir, 'account-states.jsonl'), `${JSON.stringify({ kind: 'start', day: '2023-03-06', draw: 1, bucket: 'b', weight: 1 })}\n`);
+  assert.throws(() => P.readGroupRun(home, { root }), /run pick1 started its days from drawn account states/);
+  fs.unlinkSync(path.join(runDir, 'account-states.jsonl'));
+  const C = require('../../scripts/lib/learning/curated-lists');
+  const real = C.loadPinnedCurated;
+  C.loadPinnedCurated = () => ({ fingerprint: 'f', list: 'mix', windows: [] });
+  try { assert.throws(() => P.readGroupRun(home, { root }), /run pick1 is a curated run/); } finally { C.loadPinnedCurated = real; }
+  fs.mkdirSync(path.join(home, 'experience'), { recursive: true });
+  fs.writeFileSync(path.join(home, 'experience', 'curated-pinned.json'), JSON.stringify({ kind: 'curated-pin', windows: [], hash: 'x' }));
+  assert.throws(() => P.readGroupRun(home, { root }), /run pick1 is a curated run .*doesn't match its hash/);
+  fs.rmSync(path.join(home, 'experience'), { recursive: true });
+});
+
+test('the CLI\'s main: the account the runs name (--account only fills a missing one), one sizing for every run', () => {
+  const CLI = require('../../scripts/pooled-score');
+  const root = path.resolve(__dirname, '..', '..');
+  const env = {};
+  // The repository's own accounts and policy, by role, never by name: the one a policy trades, and another.
+  const { loadAccounts } = require('../../scripts/lib/trading/accounts');
+  const { loadStrategies } = require('../../scripts/lib/trading/strategies');
+  const traded = loadStrategies(root, env).strategies.find(s => s.signal === 'policy' && s.account && s.status !== 'disabled').account;
+  const other = loadAccounts(root, env).accounts.find(a => a.valid !== false && a.name !== traded).name;
+  const mk = (day, k, runner) => {
+    const t = `${day}T14:00:00.000Z`;
+    return multiDayRun({
+      runId: `cli${k}`, gate: { learning: false, role: null, look: null, hideOutcomes: false }, autotrader: { timeframe: 3, ...runner },
+      days: [{ day, times: [t], records: [record({ at: t })], rows: [[100.5, 100.75, 99.75, 100.25], [100.25, 104.5, 100, 104.25]],
+        fills: [{ id: 1, contractId: 'MNQ:2023-06', creationTimestamp: `${day}T14:01:00Z`, price: 100, size: 1, side: 0, profitAndLoss: null },
+          { id: 2, contractId: 'MNQ:2023-06', creationTimestamp: `${day}T14:05:00Z`, price: 104, size: 1, side: 1, profitAndLoss: 8, fees: 0.74 }] }],
+    }).home;
+  };
+  const a = mk('2023-03-06', 1, { symbols: ['MNQ'], account: traded });
+  const b = mk('2023-03-07', 2, { symbols: ['MNQ'], account: traded });
+  const text = CLI.main([a, b], { env });
+  assert.match(text, new RegExp(`account ${traded}, `));
+  assert.match(text, /Group all: 2 run\(s\), 2 day\(s\)/);
+  // Runs naming different accounts never pool, --account or not.
+  const c = mk('2023-03-08', 3, { symbols: ['MNQ'], account: other });
+  assert.throws(() => CLI.main([a, c], { env }), new RegExp(`the runs name different accounts \\((${traded}, ${other}|${other}, ${traded})\\): pool runs of one account`));
+  assert.throws(() => CLI.main([a, c, '--account', traded], { env }), /different accounts/);
+  assert.throws(() => CLI.main([a, b, '--account', other], { env }), new RegExp(`--account ${other}, but the runs name ${traded}`));
+  // Runs naming none: --account names it.
+  const d = mk('2023-03-09', 4, { symbols: ['MNQ'] });
+  assert.match(CLI.main([d, '--account', traded], { env }), new RegExp(`account ${traded}, `));
+  // Runs sized differently (one traded the micro, one the mini): refused, the arms aren't sized alike.
+  const e = mk('2023-03-10', 5, { symbols: ['NQ'], account: traded });
+  assert.throws(() => CLI.main(['--group', `G=${a}`, '--group', `N=${e}`], { env }), /the runs were sized differently/);
 });
 
 test('the CLI (scripts/pooled-score.js): groups, homes and flags', () => {

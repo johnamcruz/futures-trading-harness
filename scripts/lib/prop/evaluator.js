@@ -147,8 +147,9 @@ function checkModelWindow({ run, diagnostic = null, candidateRulebook = false, l
  * Check many replay runs before their trades are pooled into one stream (prop/pooled-score.js): each run is checked as
  * checkModelWindow checks it, as a `picked days` diagnostic and with no score logged (a pooled score never writes into a
  * run's ledger, so a run whose score must be logged beside its look, practice-validate, is refused, and a sealed run
- * refuses any diagnostic). The runs must lie in one learning role (or none). Returns one single-use pass for
- * scoreStream over the pooled span [first run's from, last run's to): the days between the runs are never read.
+ * refuses any diagnostic). The runs must lie in one learning role (or all be unscheduled). Returns one single-use pass
+ * for scoreStream over the pooled span [first run's from, last run's to) holding each run's own window (`windows`):
+ * daysFor refuses a day outside all of them, so no day between the runs is ever read.
  */
 function checkPooledWindow({ runs, now = new Date() }) {
   if (!Array.isArray(runs) || !runs.length) throw new Error('runs: at least one run to pool');
@@ -162,7 +163,9 @@ function checkPooledWindow({ runs, now = new Date() }) {
   if (roles.length !== 1) throw new Error(`the runs span ${roles.join(' + ')}: a pooled score reads the runs of one window`);
   const from = checked.map(c => c.from).sort()[0];
   const to = checked.map(c => c.to).sort().pop();
-  const pooled = Object.freeze({ unit: checked[0].unit, look: null, from, to, model: true, diagnostic: 'picked days', synthetic: false, candidateRulebook: false });
+  // Each run's own window, checked above: a pooled day must lie in one (daysFor), never in a month between the runs.
+  const windows = Object.freeze(checked.map(c => Object.freeze({ from: c.from, to: c.to })));
+  const pooled = Object.freeze({ unit: checked[0].unit, look: null, from, to, windows, model: true, diagnostic: 'picked days', synthetic: false, candidateRulebook: false });
   const pass = Object.freeze({ ...pooled });
   issued.set(pass, pooled);
   return pass;
@@ -220,6 +223,9 @@ function daysFor(stream, pass, rulebook, { keepOwnExits = false } = {}) {
   if (pass.model && Boolean(rulebook.candidate) !== Boolean(pass.candidateRulebook)) throw new Error('a candidate rulebook is scored only on a pass checked for one (checkModelWindow candidateRulebook), and the account\'s only on one that was not');
   // A reweighted stream's days are resampled, not session dates: no window to hold them to.
   const held = pass.synthetic ? stream.days : stream.days.filter(d => d.day >= pass.from && d.day < pass.to);
+  // A pooled pass (checkPooledWindow): every day inside one of the pooled runs' own windows, never between them.
+  const stray = pass.windows ? held.find(d => !pass.windows.some(w => d.day >= w.from && d.day < w.to)) : null;
+  if (stray) throw new Error(`the stream's day ${stray.day} lies outside every pooled run's own window`);
   // The policy's exit mode first (attempts.js exitAs): every trade re-exited from its recorded path; none, as recorded.
   const slip = Number.isFinite(stream.slippageTicks) ? stream.slippageTicks : 1;
   const days = rulebook.exit ? held.map(d => ({ ...d, trades: d.trades.map(t => (keepOwnExits && ownExit(t) ? t : at.exitAs(t, rulebook.exit, slip))) })) : held;

@@ -10,8 +10,8 @@
  *   node scripts/pooled-score.js <run home> [<run home> ...] [--account <name>] [--bars SYM=file ...]
  *   node scripts/pooled-score.js --group G=<home> [<home> ...] --group N=<home> [<home> ...] [--account <name>]
  *
- * A run home is the replay's FTH_HOME (its run in <home>/replay/<runId>); a run's folder works too. The account: --account,
- * else the one every run names (model-score.js resolveAccount); the sizing: the policy strategy that trades it.
+ * A run home is the replay's FTH_HOME (its run in <home>/replay/<runId>); a run's folder works too. The account: the one
+ * the runs name (runs naming two never pool); --account names it only for runs that name none; the sizing: the policy's.
  */
 
 const path = require('path');
@@ -58,7 +58,9 @@ function main(argv, { env = process.env } = {}) {
   const { strategies } = loadStrategies(ROOT, env);
   const accounts = loadAccounts(ROOT, env).accounts;
   const runnerOf = e => { try { return JSON.parse(fs.readFileSync(path.join(e.dir, 'autotrader.json'), 'utf8')) || {}; } catch (_err) { return {}; } };
-  const name = P.agreeAccount(all.map(e => resolveAccount({ override: o.account, attempts: runningAttempts(e.home), runnerAccount: runnerOf(e).account, strategies, accounts })));
+  // Each run's own account (its attempt, its runner config); --account only names it for runs that name none.
+  const own = all.map(e => resolveAccount({ attempts: runningAttempts(e.home), runnerAccount: runnerOf(e).account, strategies: [], accounts }));
+  const name = P.agreeAccount(own, { override: o.account, fallback: resolveAccount({ strategies, accounts }) });
   const account = accountNamed(ROOT, name, env);
   const policy = policyFor(strategies, account.name);
   // The live entry's limits and contract (model-score.js liveSizing), one for every run: else the arms aren't sized alike.
