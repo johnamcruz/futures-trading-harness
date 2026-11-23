@@ -363,4 +363,4 @@ function propScoreSection(runDir, { root, env = process.env, override = null, ra
   }
 }
 
-module.exports = { ratesFor, reweightRun, resolveAccount, liveSizing, policyFor, policyRulebook, scoreRun, pairRuns, parseFaults, scoreText, scoreMarkdown, scoreSummary, propScoreSection };
+module.exports = { ratesFor, reweightRun, resolveAccount, liveSizing, policyFor, policyRulebook, steppedWindows, scoreRun, pairRuns, parseFaults, scoreText, scoreMarkdown, scoreSummary, propScoreSection };

@@ -2247,6 +2247,59 @@ The Monte Carlo of a curated run (drawn states) is diagnostic only: the
 curated moments are reweighted, not a calendar of whole days. A continuous
 combine run's is a real score of its whole days.
 
+**Pooled picked days** (`node scripts/pooled-score.js`,
+`prop/pooled-score.js`). Use it for many replay runs of days someone picked,
+such as one-morning runs. It prints each run's date, trades, sides, gross R
+and dollars (the report's, net of fees). It then pools the trades of all the
+runs into one stream in date order and runs that stream through the same
+30-day Monte Carlo (`prop/evaluator.js` `checkPooledWindow`, `scoreStream`).
+The result is labelled `diagnostic (picked days)`, which is never a promotion
+score. When the pooled days hold fewer independent attempts (days over the
+account's sessions) than the promotion gate's `minAttempts`, the Monte Carlo
+does not run and no pass rate is printed, only dollars and R. Give two groups
+(`--group G=<homes...> --group N=<homes...>`) to see the arms side by side.
+It refuses to pool:
+
+- a day that appears in two runs of one group;
+- a run whose stream holds a day outside its own window (each pooled day must
+  lie in its run's window, never in a month between the runs);
+- a run whose outcomes are hidden, or whose score would have to be logged
+  beside its look, or a sealed run;
+- runs of two learning roles, or of one learning role and unscheduled runs;
+- a curated run, or one whose days started from drawn account states (its own
+  report reweights those);
+- a setup-focused practice run (its own report scores it as
+  `diagnostic (setup-focused)`);
+- a training-loop trend-set run, which steps windows of its sessions, not
+  whole days;
+- a continuous-combine (stage-2) run, which carries one balance across its
+  days;
+- a run with an attempt record (running or ended) that carries a balance: it
+  started after the run's window, or before it with an exchange session day
+  between its start and the window's first recorded day, or it holds a close,
+  recorded or missed, outside the window. A prop run's own fresh attempt pools
+  when it started on the session day of the run's configured start (the
+  manifest's `start`), even when that day is a weekend, holiday, data gap or
+  closed day;
+- a run whose `combine` folder can't be read (a plain file, or no permission),
+  or holds an entry that can't be read: a dangling link, something that is
+  neither a file nor a folder, or a file that is no attempt record (not JSON,
+  `days` or `missedCloses` not a list, a close not `{ day: YYYY-MM-DD }`, a
+  missed close not a date, or no start day). Every `*.json` entry is read,
+  whatever the case of its extension. A run with no `combine` folder has no
+  attempt records;
+- runs that name different accounts. `--account` only names the account for
+  runs that name none;
+- a run that names an account that does not resolve: an attempt record of an
+  account that is no valid profile, or a runner `account` that names a profile
+  only in another case, or an invalid profile. Any other runner `account` is
+  the broker's account id, not a profile;
+- runs sized differently.
+
+An entry left out, trades open at the same time, or a run whose report and
+stream count different trades are flagged on the run's row and stop the Monte
+Carlo. It reads the runs only and writes nothing.
+
 ## 6. The training loop's keep rule
 
 With `modelScore` in the loop config (`scripts/train-loop.js`), the loop
