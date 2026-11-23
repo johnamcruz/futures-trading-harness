@@ -2285,8 +2285,9 @@ It refuses to pool:
   or holds an entry that can't be read: a dangling link, something that is
   neither a file nor a folder, or a file that is no attempt record (not JSON,
   `days` or `missedCloses` not a list, a close not `{ day: YYYY-MM-DD }`, a
-  missed close not a date, or no start day). A run with no `combine` folder has
-  no attempt records;
+  missed close not a date, or no start day). Every `*.json` entry is read,
+  whatever the case of its extension. A run with no `combine` folder has no
+  attempt records;
 - runs that name different accounts. `--account` only names the account for
   runs that name none;
 - a run that names an account that does not resolve: an attempt record of an

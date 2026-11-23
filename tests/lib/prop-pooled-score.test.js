@@ -326,6 +326,13 @@ test('readGroupRun: the combine folder fails closed (unreadable entries, malform
   }
   write('unit_x.json', own({ missedClose: 7 }));
   assert.throws(() => P.readGroupRun(home, { root }), /is not a readable attempt record \(missedClose is not a session date\)/);
+  write('unit_x.json', own({ missedClose: '2023-03-06x' }));
+  assert.throws(() => P.readGroupRun(home, { root }), /is not a readable attempt record \(missedClose is not a session date\)/);
+  // The extension in any case: a case-insensitive filesystem opens unit_x.JSON as the account's record.
+  fs.unlinkSync(path.join(combineDir, 'unit_x.json'));
+  write('unit_x.JSON', own({ days: [{ day: '2023-03-01', balance: 50000, pnl: 0 }] }));
+  assert.throws(() => P.readGroupRun(home, { root }), /run cf1's attempt of unit_x carries a close of 2023-03-01/);
+  fs.unlinkSync(path.join(combineDir, 'unit_x.JSON'));
   write('unit_x.json', own({ missedCloses: [], missedClose: null }));
   ok();
   // The run's configured start (its manifest's) on a data-gap day: an attempt started there pools; a week earlier, refused;
@@ -338,6 +345,10 @@ test('readGroupRun: the combine folder fails closed (unreadable entries, malform
   assert.throws(() => P.readGroupRun(home, { root }), /started on 2023-02-24, outside its own window 2023-03-06\.\.2023-03-07 \(a session day, 2023-02-24, lies between\)/);
   write('unit_x.json', own({ startDay: '2023-03-03', days: [{ day: '2023-03-03', balance: 50000, pnl: 0 }] }));
   assert.throws(() => P.readGroupRun(home, { root }), /carries a close of 2023-03-03/);
+  // The configured start's session day is the trading day's (18:00 ET opens the next): Thursday 18:00 ET is Friday's.
+  fs.writeFileSync(mf, JSON.stringify({ ...JSON.parse(fs.readFileSync(mf, 'utf8')), start: '2023-03-02T23:00:00.000Z' }));
+  write('unit_x.json', own({ startDay: '2023-03-03' }));
+  ok();
   write('unit_x.json', own());
   // An unreadable combine folder: refused (not possible to test where the permission is ignored, e.g. as root).
   fs.chmodSync(combineDir, 0);

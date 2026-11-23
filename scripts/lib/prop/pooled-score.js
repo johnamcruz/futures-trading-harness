@@ -91,7 +91,8 @@ function refuseDrawn(dir) {
  * records, but a combine that can't be read (a plain file, no permission), an entry that can't be stat'ed (a dangling
  * link), and a file that can't be read as an attempt record (not JSON, not an object, days or missedCloses not a list, a
  * close not { day: YYYY-MM-DD }, a missed close not a YYYY-MM-DD, no startDay nor a startedAt to take its session day
- * from) are refused, never skipped. A folder named *.json is no record. Never pooled.
+ * from) are refused, never skipped. Every entry named *.json, its extension in any case (a case-insensitive filesystem opens
+ * <account>.JSON as the record), is read; a folder of that name is no record. Never pooled.
  */
 function refuseCarried(home, run, id, { startDay: configured = null } = {}) {
   const dir = path.join(home, 'combine');
@@ -101,7 +102,7 @@ function refuseCarried(home, run, id, { startDay: configured = null } = {}) {
     throw new Error(`run ${id}: its combine folder can't be read (${err.code || err.message}): never pooled`, { cause: err });
   }
   const files = [];
-  for (const f of names.filter(n => n.endsWith('.json')).sort()) {
+  for (const f of names.filter(n => /\.json$/i.test(n)).sort()) {
     let st;
     try { st = fs.statSync(path.join(dir, f)); } catch (err) { throw new Error(`run ${id}: combine/${f} can't be read (${err.code || err.message}): never pooled`, { cause: err }); }
     if (st.isFile()) files.push(f);
