@@ -4235,6 +4235,24 @@ test('order gate hook: in index mode (the default: no FTH_ROLE_SKILLS set) a rol
   assert.strictEqual(exit.code, 0, exit.stderr);
 });
 
+test('order gate hook: a briefing carrying the gamma line\'s word (m3.gamma) requires the head trader to have read gex-regime; no word, nothing more; an exit is never held', () => {
+  const { writeBriefing } = require('../../scripts/lib/trading/briefing');
+  const { env, dir } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }],
+    { FTH_AUTONOMOUS: '1', FTH_SYMBOLS: 'MNQ' });
+  const brief = data => writeBriefing(env.FTH_HOME, { symbol: 'MNQ', sections: { m3: { validUntil: new Date(Date.now() + 3600000).toISOString(), data: { candidates: [], ...data } } } });
+  const ev = (tool, input) => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool, state: { status: 'completed', input, output: 'VERDICT: APPROVE - size 1' } } });
+  const loaded = ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'setup-judgment', 'trade-plan'].map(name => ev('skill', { name }));
+  const transcript = path.join(dir, 'cycle-transcript.jsonl');
+  const run = (lines, order = orderPayload()) => { fs.writeFileSync(transcript, lines.join('\n')); return gate({ ...order, transcript_path: transcript }, env); };
+  brief({ gamma: true });
+  const refused = run(loaded);
+  assert.match(refused.stderr, /\[skills-loaded\][^\n]*not loaded in this session: gex-regime/);
+  assert.doesNotMatch(run([...loaded, ev('skill', { name: 'gex-regime' })]).stderr, /gex-regime/, 'read: not asked for');
+  assert.strictEqual(run(loaded, orderPayload({ ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' })).code, 0, 'an exit is never held');
+  brief({});
+  assert.doesNotMatch(run(loaded).stderr, /gex-regime/, 'no word: nothing more is required');
+});
+
 test('order gate hook, several lanes (FTH_CYCLE_LANE_BARS): a closed lane\'s candidate requires the lookups in the default mode; with them it goes; an exit is never held', () => {
   const { writeBriefing, writeFrameBriefing } = require('../../scripts/lib/trading/briefing');
   const { recordLookup } = require('../../scripts/lib/trading/skill-lookups');

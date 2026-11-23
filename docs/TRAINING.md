@@ -2599,7 +2599,7 @@ through `scripts/lib/tunables.js` (the schedule through
 | `config/training.json` | The stage-1 exit test, the experience index and risk record minimums, the keep rule, the paired decision rule, the probe screen, probe and loop ranges, A/B levels, proposal, compose, lesson and probe-edit limits, skill byte caps, the learning report, the field studies, the trend findings' example legs, the round report's false-start threshold | the exit test's bars, the sample floors and levels, the keep rule (its primary pinned), the decision rule, the screen, the loop's budget maxima, proposal limits, arms per evaluation, skill byte caps |
 | `config/replay.json` | Latency, the stage presets, curated lists and moments, setup moments, the account-state draw, driver retries, decision labels, the scorecard's give-back rule, the backtester's plain-run defaults | the stage presets (pinned) |
 | `config/runner.json` | The order gate's limits and timing, the trade lifecycle's size cap, the MTF entry arm (`mtfEntry`: `arm` A, B, AB or D today, `exitMode`, `minStage`, `models` (the entry models that may be candidates); an MTF arm runs only in a replay; trading/mtf-entry.js), the account snapshot, the replay clock, cycles, bars, prompt sizes, the live session, alerts, read caps and page sizes, the Monte Carlo's size | the gate's timing (pinned), its loss, entry, age and confluence limits, the bracket tolerances, the facts check, the size cap, the snapshot and clock tolerances, the kill switch's error count, bar staleness, the close settle time, the kill graces and the gate slack (pinned), the Monte Carlo maximum |
-| `config/analysis.json` | The reads' parameters: indicators, the snapshot, regime, CISD, CRT, volume profile, candles, the multi-timeframe read, day context, structure, momentum, fair value gaps, the briefing's frames, the rules evaluator's window, the MTF structure read (`mtfStructure`: its hierarchy and the five hierarchies' minutes (the fifth, `execution`, added for the MTF entry arms), the side mode, the depth classes, the warm-up in parent candles, the two lines' byte budgets; for the MTF entry arms the `execution` hierarchy, the lines' and the candidate line's budgets, `voidDriftR`, the drift past the trigger (the largest since it, in the trigger's R) that voids a ready one for good, and `maxAgeMin`, the trigger age that voids it) | `mtfStructure.sideMode` (pinned at `rule`, the entry rule's 4h+1h side; a hierarchy other than `intraday` loads but the briefing prints no lines) |
+| `config/analysis.json` | The reads' parameters: indicators, the snapshot, regime, CISD, CRT, volume profile, candles, the multi-timeframe read, day context, structure, momentum, fair value gaps, the briefing's frames, the rules evaluator's window, the gamma line's cutoff for the word `unclear` and its staleness bound in days (`gammaLine.unclearBelow`, `gammaLine.maxAsOfGapDays`), the MTF structure read (`mtfStructure`: its hierarchy and the five hierarchies' minutes (the fifth, `execution`, added for the MTF entry arms), the side mode, the depth classes, the warm-up in parent candles, the two lines' byte budgets; for the MTF entry arms the `execution` hierarchy, the lines' and the candidate line's budgets, `voidDriftR`, the drift past the trigger (the largest since it, in the trigger's R) that voids a ready one for good, and `maxAgeMin`, the trigger age that voids it) | `mtfStructure.sideMode` (pinned at `rule`, the entry rule's 4h+1h side; a hierarchy other than `intraday` loads but the briefing prints no lines) |
 
 What stays out of these files:
 
@@ -2761,7 +2761,7 @@ is explained in the pull request, as a golden is.
 
 ### The goal regression
 
-A regression for the strategy, on every pull request, with real market data
+A regression for the strategy, on every pull request that changes more than documents, with real market data
 and a mock model: does the change break the goal, in the owner's order (0
 blows; a 30-session combine pass rate of 40% or more; more of the trends' R
 caught)? It runs the harness's own code and compares with the committed
@@ -2896,13 +2896,15 @@ mini sized nothing) must fail it on main's wide-stop days. Sizes are exact every
 are written outside the repository.
 
 **In CI** (`.github/workflows/ci.yml`) the goal regression runs as parallel
-jobs on every pull request, so its wall time is about its slowest job's:
+jobs on every pull request that changes more than documents (a change to
+documents only skips them: `scripts/ci-scope.js`), so its wall time is about its slowest job's:
 `goal-part`, a matrix of tier 2's main days in shards (`FTH_GOAL_SHARD=k/n`:
 every n-th day of its days and the move days; enough shards that each plays
 one round of `tier2.parallel` days) and one job for each other
 `tests/goal/*.goal.js` file (tier 1's mutation checks, the breaks, the faults,
 the probes, the states, the floor days); then `goal-full`, the one check to
-mark required, which needs every part, fails unless all passed, and judges
+mark required, which needs every part, fails unless all passed (a change to
+documents only skips the parts, and it passes without them), and judges
 the shards' results as one run (`tests/goal/tier2-aggregate.js`: every shard
 once, every day once, the sums against main's baseline, every move day
 against its golden). `tests/plugin/process.test.js` keeps the matrix whole.

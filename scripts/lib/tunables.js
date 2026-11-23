@@ -302,6 +302,8 @@ const ANALYSIS = {
   // The read audit (learning/read-audit.js, an offline report): a pass's forward window in base bars and its standard
   // stop in ATR(20) multiples, the outcome column only (hindsight; never read by a decision, a read or a prompt).
   readAudit: { forwardBars: int(1), stopAtr: pos() },
+  // The gamma line (trading/gamma-line.js): |net| / gross below this prints the word `unclear`; a file whose asOf is more than maxAsOfGapDays days before the day prints no line. Display only: recorded context.
+  gammaLine: { unclearBelow: frac(), maxAsOfGapDays: int(1) },
 };
 
 /**
@@ -446,6 +448,7 @@ const BUILT_IN = deepFreeze({
     marketState: { behaviorBars: 10, edgeBars: 20, structBars: 20, followBars: 3, dispBars: 3, m15Bars: 4, equalAtr: 0.05, interior: 0.25, overlapHigh: 0.7, effLow: 0.3, rejectMin: 2, chopMinFacts: 3, pressBars: 6, lossStale: 10, rotStale: 20, rotCross: 3, odStart: 3, odBars: 20, odStale: 3, trendNetAtr: 1, earlyBars: 3, early15: 2, lineBytes: 280 },
     evaluator: { windowBars: 500 },
     readAudit: { forwardBars: 20, stopAtr: 1 },
+    gammaLine: { unclearBelow: 0.125, maxAsOfGapDays: 5 },
   },
 });
 

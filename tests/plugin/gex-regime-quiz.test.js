@@ -2,7 +2,7 @@
 
 // The gex-regime read checks: whether a model reads the skill right, run with the model by hand (never in CI), outside
 // the gated quiz (tests/fixtures/quiz/gex-regime-items.json; config/context-quiz.json unchanged), as the mtf-entry and
-// MTF structure items are. Every item is SYNTHETIC (no code prints a gamma line yet; every value made up, on the 0.25
+// MTF structure items are. Every item is SYNTHETIC (the code's line is gamma-line.js; every value made up, on the 0.25
 // tick), a valid closed-choice item asked against the head prompt plus gex-regime (lookup), its anchor the skill's own
 // text and present in that prompt, each listed rule of the skill asked by at least one item, every key pinned (KEYS),
 // every item's full text and every choice pinned too (KEYS, by sha256), the key letters spread (no letter holds more

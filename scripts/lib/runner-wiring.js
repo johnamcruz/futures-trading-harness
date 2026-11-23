@@ -48,6 +48,7 @@ const { loadAccounts } = require('./trading/accounts');
 const { dayKey, endOfDayAt, ROLE_RUNS, TIMED_LAUNCHES, deskConcurrencyProblem } = require('./autotrader');
 const { dayContextSeries, describeDay, describeOvernight } = require('./trading/day-context');
 const { premarketPlan, newsLine, unreviewedLine } = require('./trading/session-context');
+const { gammaFor, gammaLines } = require('./trading/gamma-line');
 const { readBlackouts } = require('./trading/check-order');
 const { readRecord, liveRecord, describeRecord, excursionNote } = require('./trading/track-record');
 const { loadStrategies, scan, retiredCopies, composedExit, citingPolicies } = require('./trading/strategies');
@@ -240,6 +241,14 @@ function barRecorder({ cfg, home, env, now, log, onBarClosed }) {
 }
 
 /**
+ * The briefing's gamma flag: true exactly when the code prints a gamma line for the symbol (the same gammaFor the prompt's
+ * line is made by; the word itself is never recorded), else null. Never an error to the briefing.
+ */
+function gammaFlag(env, symbol, at) {
+  try { return gammaFor({ dir: env.FTH_GAMMA_DIR, symbol, now: at }) ? true : null; } catch (_err) { return null; }
+}
+
+/**
  * The runner's bar-briefing step: each part kept from the last briefing until it expires (trading/briefing.js). A
  * build that fails removes the file, so an earlier bar's briefing is never read as this one's.
  */
@@ -319,7 +328,7 @@ function briefingRecorder(home, cfg, now, env = process.env, { frames = [], data
       const fineBars = f && f.contractId === (item.contractId || null) ? f.bars : null;
       // A roll between the lanes' contract lookups: the briefing says "no 1m bars configured"; the log says why.
       if (f && !fineBars) log(`${item.symbol}: the 1m bars are of another contract (${f.contractId}, the bar's ${item.contractId || 'none'}): no 5m facts from them this bar`, 'error');
-      return writeBriefing(home, buildBriefing({ symbol: item.symbol, contractId: item.contractId || null, bars: item.bars, minutes: cfg.timeframe, fineBars, prev: readBriefing(home, item.symbol), scan: results, scanError, blackouts, clock, roundSteps, now: now(), positionOpen }));
+      return writeBriefing(home, buildBriefing({ symbol: item.symbol, contractId: item.contractId || null, bars: item.bars, minutes: cfg.timeframe, fineBars, prev: readBriefing(home, item.symbol), scan: results, scanError, blackouts, clock, roundSteps, now: now(), positionOpen, gamma: gammaFlag(env, item.symbol, now()) }));
     } catch (err) {
       removeBriefing(home, item.symbol);
       // The timeframes built from it share its parts: none without it.
@@ -820,6 +829,8 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     premarketPlan: (symbol, entries, at) => premarketPlan(entries, symbol, at),
     unreviewed: (symbols, entries, positions, at, orders) => unreviewedLine(symbols, entries, positions, at, orders),
     news: at => newsLine(readBlackouts(loadConfig(env).blackoutsFile), at),
+    // The gamma line (trading/gamma-line.js): from the user's own gamma dir (FTH_GAMMA_DIR; unset: no line), at the cycle's date.
+    gamma: (at, symbols) => gammaLines({ dir: env.FTH_GAMMA_DIR, symbols, now: at }),
     journalEntries: journal,
     tradeHistory: t => excursionNote(readRecord(home, t.setup), t),
     // The bar briefing, each part kept from the last one until it expires or is invalidated (trading/briefing.js).

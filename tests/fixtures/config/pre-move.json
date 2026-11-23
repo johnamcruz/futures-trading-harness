@@ -2055,6 +2055,14 @@
   "readAudit.stopAtr": {
    "value": 1,
    "from": "new in feat/read-audit (the read audit, an offline report): a pass's forward move is in R of a standard stop of this many ATR(20) at the cycle bar; the outcome column only, never read by a decision; a definition, not a tuned value"
+  },
+  "gammaLine.unclearBelow": {
+   "value": 0.125,
+   "from": "new in feat/gamma-line (the gamma line, recorded-only context): |net| / gross below this prints the word unclear, neither sign; the owner's decided cutoff, display only, never read by a gate, a size or an exit"
+  },
+  "gammaLine.maxAsOfGapDays": {
+   "value": 5,
+   "from": "new in feat/gamma-line (the gamma line): a file whose asOf is more than this many days before the day prints no line (a long weekend and a holiday fit); the owner's decided bound, display only, never read by a gate, a size or an exit"
   }
  }
 }
