@@ -521,6 +521,44 @@ mode (`prepareAhead: "shadow"`, `scripts/lib/prepare-shadow.js`): the prepare
 and a shadow confirm run after the cycle, with the head trader's argv and a
 narrower `--allowedTools`, and decide nothing.
 
+### The gamma line (recorded-only context)
+
+The cycle prompt carries, next to the news line, one line the code computes from
+the user's own gamma source (`scripts/lib/trading/gamma-line.js`; the runner's
+injectable `gamma`, wired in `runner-wiring.js` as `news` is). The `gex-regime`
+skill reads that line and nothing else: with no line it does not apply. Nothing
+in the line votes, sizes, gates or exits, and no gate, risk, sizing, entry or exit
+code reads the source.
+
+The source is a directory, `FTH_GAMMA_DIR` (the user's local config, never
+committed, no default; unset or missing: no line, never an error to the cycle),
+of per-day files `<YYYY-MM-DD>.json`:
+
+```json
+{ "day": "2026-03-04", "asOf": "2026-03-03",
+  "instruments": { "NQ": { "net": -3100, "gross": 10000, "flip": 21650, "callWall": 21900, "putWall": 21200 } } }
+```
+
+The levels are in the instrument's own points, `net` and `gross` plain numbers,
+`asOf` the prior trading day. The key is the cycle symbol's mini root (`MNQ`
+reads `NQ`, `MES` reads `ES`). The word is the code's: `net < 0` and
+`|net| / gross >=` the cutoff prints `negative (soft)`, `net > 0` and the same
+`positive (soft)`, below it `unclear`; the cutoff is `gammaLine.unclearBelow` in
+`config/analysis.json`. Anything missing or off prints no line at all (never
+"unknown"): a file that is unreadable or malformed, a `day` that is not the
+cycle's New York date, an `asOf` that is not before it (the look-ahead guard), a
+field that is missing or not a finite number, a `gross` that is not above 0. The
+line: `Gamma (code, as of prior close 2026-03-03): negative (soft); net/gross
+0.31; flip 21650; call wall 21900; put wall 21200.` (levels on the contract's
+tick). With several symbols each line carries its symbol first.
+
+When a line is printed the briefing's `m3` carries only its word (`m3.gamma`, left
+out of the detail): the gate's situational table (`skills-loaded.js`, trigger
+`gamma`) then requires the head trader to have read `gex-regime`, and its prompt
+lists it as a lookup; with no line nothing changes. A replay reads the same
+variable through the driver unchanged, and the replay clock's date picks the file,
+so a replayed morning reads only that day's file.
+
 ## What each earlier fix becomes
 
 | Fix | Becomes |

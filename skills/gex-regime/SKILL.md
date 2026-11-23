@@ -76,9 +76,9 @@ were never tested with it.
 ```text
 No gamma line from the code -> nothing about gamma: no word, no vote.
 A gamma sign the plan's author found by search -> not a line from the code: nothing about gamma.
-The briefing's gamma line prints negative, as of the prior close -> the plan's own line
+The cycle prompt's gamma line prints negative, as of the prior close -> the plan's own line
   `gamma negative (soft)`: neutral, no vote; a 15m breakout down, 1h down, compose_check OK:
   the count decides without it; size, stop and exit unchanged.
-The briefing's gamma line prints unclear -> `gamma unclear`: neutral.
-Price at the line's call wall 21600.00 -> read the candle there; never a trigger.
+The cycle prompt's gamma line prints unclear -> `gamma unclear`: neutral.
+Price at the line's call wall 21900 -> read the candle there; never a trigger.
 ```

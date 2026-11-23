@@ -859,7 +859,7 @@ function htfTrendsOf(raw, minutes) {
  * The briefing for `symbol`'s closed bars on `minutes`-minute bars: each section from `prev` while it is
  * valid (same symbol and bar size, not expired), else recomputed with a new version.
  */
-function buildBriefing({ symbol, contractId = null, bars: raw, minutes, fineBars = null, prev = null, scan = [], scanError = null, blackouts = null, clock = null, roundSteps = null, now = new Date(), own = false, keyLevels = null, mtfMode = null, positionOpen = false }) {
+function buildBriefing({ symbol, contractId = null, bars: raw, minutes, fineBars = null, prev = null, scan = [], scanError = null, blackouts = null, clock = null, roundSteps = null, now = new Date(), own = false, keyLevels = null, mtfMode = null, positionOpen = false, gamma = null }) {
   const bars = normalizeBars(raw);
   if (bars.length < 3) throw new Error(`need closed bars, got ${bars.length}`);
   const last = bars[bars.length - 1];
@@ -890,6 +890,9 @@ function buildBriefing({ symbol, contractId = null, bars: raw, minutes, fineBars
     roundStep: roundStepFor(root, roundSteps), roundError: roundStepError(root, roundSteps), own, keyLevels });
   // The base timeframe's timing against the side the entry rule allows (ltf-timing.js, BG), from these closed bars: the
   // runner's briefing only (a frame's is another timeframe's read).
+  // The gamma line's word when the code printed one (gamma-line.js): only the flag the gate's situational trigger reads;
+  // no line, no key (SUMMARY_FIELDS: left out of the detail, the prompt carries the line).
+  if (!own && typeof gamma === 'string' && gamma) fresh.m3.data.gamma = { word: gamma };
   if (!own) {
     const m3 = fresh.m3.data;
     const h = fresh.h1.data || {};
@@ -1150,7 +1153,7 @@ const targets = list => list.reduce((out, x) => {
 
 // The m3 fields the summary says in full (one line each), left out of the detail whole.
 const CHAIN_FRAMES = (C => C.chainOf(C.SHIPPED))(require('./chain'));
-const SUMMARY_FIELDS = ['swingTargets', 'rangeTargets', 'fvgs', 'structure5m', 'compression', 'declared', 'timing', 'pullback', 'layers', 'mtfStructure'];
+const SUMMARY_FIELDS = ['swingTargets', 'rangeTargets', 'fvgs', 'structure5m', 'compression', 'declared', 'timing', 'pullback', 'layers', 'mtfStructure', 'gamma'];
 // What the summary's "This bar's close" line says in full, left out of the detail (only present when it happened).
 const SUMMARY_ONLY = { vwap: ['crossed'], today: ['openingRangeCrossed', 'soFar', 'rthVolatility'], location: ['closesBeyondValue', 'backInsideValue'] };
 /** A break without its displacement read (and its protected status's): the Break quality line's facts. */

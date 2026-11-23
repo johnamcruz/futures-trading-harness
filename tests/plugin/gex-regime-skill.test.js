@@ -1,11 +1,12 @@
 'use strict';
 
 // The gex-regime skill: one job (copying the day's gamma word from a line the code computes from its gamma source, and
-// recording it neutral: never a vote, an entry, a size, a stop, an exit or a veto), inert until such a line exists (no
-// code prints one yet; a plan, a search or memory never opens it), honest about its evidence (research outside this
+// recording it neutral: never a vote, an entry, a size, a stop, an exit or a veto), inert until such a line exists (the
+// code prints it only from the user's own gamma dir, trading/gamma-line.js; a plan, a search or memory never opens it), honest about its evidence (research outside this
 // harness, qualitative, not validated here), thin (it points to the skills that own each rule and restates none of
-// them). Not embedded by the runner today: on no role's list, no head-trader load list, no situational embed, no
-// command; reachable as any unlisted skill is: its catalog line (workspace/AGENTS.md, the Claude index-mode head
+// them). Not embedded by the runner: on no role's list, no head-trader load list, no situational embed, no
+// command; the gate's situational table requires it of the head trader only when the briefing carries the line, and the
+// head prompt lists it as a lookup (gamma-line.test.js); reachable as any unlisted skill is: its catalog line (workspace/AGENTS.md, the Claude index-mode head
 // prompt's index), the CLIs' own skill lists, and the Skill tool or skill_lookup.
 //
 // Everything the skill states is unit tested: every sentence of its body is pinned (BODY, in order), so deleting any
@@ -86,14 +87,14 @@ const BODY = [
   "no word, no vote.",
   "A gamma sign the plan's author found by search -> not a line from the code:",
   "nothing about gamma.",
-  "The briefing's gamma line prints negative, as of the prior close -> the plan's own line `gamma negative (soft)`:",
+  "The cycle prompt's gamma line prints negative, as of the prior close -> the plan's own line `gamma negative (soft)`:",
   "neutral, no vote;",
   "a 15m breakout down, 1h down, compose_check OK:",
   "the count decides without it;",
   "size, stop and exit unchanged.",
-  "The briefing's gamma line prints unclear -> `gamma unclear`:",
+  "The cycle prompt's gamma line prints unclear -> `gamma unclear`:",
   "neutral.",
-  "Price at the line's call wall 21600.00 -> read the candle there;",
+  "Price at the line's call wall 21900 -> read the candle there;",
   "never a trigger.",
   "```",
 ];
@@ -252,7 +253,7 @@ test('gex-regime: restates none of the owning skills\' rule sentences', () => {
   assert.ok(theirs.length > 3 && planted.has(theirs[3]) && !mine.has(theirs[3]), 'the check catches a restated sentence');
 });
 
-test('gex-regime: not embedded today: no role, load list, runner embed, head core, command or pointer', () => {
+test('gex-regime: not embedded: no role, load list, runner embed, head core, command or pointer', () => {
   for (const r of loadRoles(ROOT)) assert.ok(![...r.skills, ...r.index].includes('gex-regime'), r.name);
   const SL = require('../../scripts/lib/trading/skills-loaded');
   for (const k of ['REQUIRED_FOR_ENTRY', 'REQUIRED_AT_ENTRY', 'REQUIRED_FOR_COMPOSED']) assert.ok(!(SL[k] || []).includes('gex-regime'), k);
@@ -262,7 +263,9 @@ test('gex-regime: not embedded today: no role, load list, runner embed, head cor
   assert.ok(!SS.SKILLS.includes('gex-regime'), 'no situational embed');
   assert.ok(!require('../../scripts/lib/head-prompt').CORE.includes('gex-regime'), 'not in the head core');
   for (const f of fs.readdirSync(path.join(ROOT, 'commands'))) assert.ok(!read(`commands/${f}`).includes('gex-regime'), f);
-  // No other skill points to it until a code line prints the word (the pointer comes with that line).
+  // The head prompt lists it as a lookup for the cycle whose prompt carries the code's line (the situational table); no
+  // other skill points to it.
+  assert.deepStrictEqual(require('../../scripts/lib/head-prompt').headRequired().filter(x => x.skill === 'gex-regime').map(x => x.when.map(w => w.key)), [['gamma']]);
   for (const s of fs.readdirSync(path.join(ROOT, 'skills')).filter(n => n !== 'gex-regime' && fs.existsSync(path.join(ROOT, 'skills', n, 'SKILL.md')))) {
     assert.ok(!read(`skills/${s}/SKILL.md`).includes('gex-regime'), s);
   }

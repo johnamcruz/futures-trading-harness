@@ -142,6 +142,8 @@ function createRunner(deps) {
     unreviewed = () => null,
     // The news blackouts (trading/session-context.js): (now) -> one line.
     news = () => null,
+    // The gamma line (trading/gamma-line.js, recorded-only context): (now, symbols) -> one line or null (no source, no line).
+    gamma = () => null,
     // The record of the last reviewed trades: ({ entries }) -> "4W/6L, E -0.12R" or null.
     tradesSummary = () => null,
     // An open trade against its strategy's recorded excursions (track-record.js excursionNote): (trade) -> text or null.
@@ -2188,6 +2190,7 @@ function createRunner(deps) {
           for (const x of run.filter(y => y.entryBlocked)) unavailable.push(`${x.symbol} ${x.minutes}m: ${x.entryBlocked} (no ${x.symbol} entry on ${x.minutes}m bars this cycle; its other lanes and the other symbols as usual)`);
           for (const k of skipped.filter(x => x.unrecorded)) unavailable.push(`${k.symbol} ${k.policy}'s skip for ${k.by} could not be recorded for the gate (${k.unrecorded}): this cycle is manage-only, no entry`);
           const newsLine = attempt('the news blackouts', () => news(cycleNow), null);
+          const gammaText = attempt('the gamma line', () => gamma(cycleNow, [...new Set(items.map(x => x.symbol))]), null);
           const unreviewedText = entries ? attempt('the unreviewed entries', () => unreviewed(symbolsOf(items), journal, acct && !acct.error && Array.isArray(acct.positions) ? acct.positions : null, cycleNow, (acct && acct.orders) || []), null) : null;
           const lessonLines = entries ? attempt('your mistakes and lessons', () => lessons({ entries: journal }) || [], []) : [];
           const tradeLines = entries ? attempt('your reviewed trades', () => recentTrades({ entries: journal }) || [], []) : [];
@@ -2332,7 +2335,7 @@ function createRunner(deps) {
           // A cycle in no situation: its prompt as before.
           const promptOpts = {
             manageOnly, recovered: recover, state: acct, history: shownHistory,
-            lessons: lessonLines, trades: shownTrades, tradesSummary: summary, tradesFeedback: shownTrades !== tradeLines, tradesRecord, news: newsLine, unavailable,
+            lessons: lessonLines, trades: shownTrades, tradesSummary: summary, tradesFeedback: shownTrades !== tradeLines, tradesRecord, news: newsLine, gamma: gammaText, unavailable,
             cyclesLeft, entry: runsEntry, managedDesk, managedCycle,
             manageAlso, journalRead: entries !== null, cached: served, unreviewed: unreviewedText,
             ...(multi ? { lanes: lanesLine(closedLanes) } : {}),
@@ -2363,7 +2366,7 @@ function createRunner(deps) {
             attempts: (acct && acct.attempts) || [], mode: { paper: Boolean(cfg.paper), cycle: cfg.cycle || null },
             eodAt: (() => { const eod = endOfDayAt(cfg, cycleNow); return eod ? new Date(tradingDayStart(cycleNow).getTime() + sessionMinuteOf(eod, cycleNow) * 60000).toISOString() : null; })(),
             cyclesLeft,
-            news: newsLine, lessons: lessonLines, trades: shownTrades, tradesSummary: summary, ...(tradesRecord ? { tradesRecord } : {}), history: shownHistory.slice(-(multi ? shownHistory.length : 10)), historyLines: historyShown,
+            news: newsLine, ...(gammaText ? { gamma: gammaText } : {}), lessons: lessonLines, trades: shownTrades, tradesSummary: summary, ...(tradesRecord ? { tradesRecord } : {}), history: shownHistory.slice(-(multi ? shownHistory.length : 10)), historyLines: historyShown,
             manageOnly, recovered: recover, unavailable,
             // The roles served from the report cache (FTH_CYCLE_CACHED), and those the runner ran itself this cycle, with its
             // record of them (FTH_CYCLE_ROLES): the gate credits each from its own source.
