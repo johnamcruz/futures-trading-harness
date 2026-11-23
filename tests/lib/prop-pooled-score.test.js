@@ -360,7 +360,13 @@ test('readGroupRun: a combine entry that is neither a file nor a folder (a socke
   });
   fs.mkdirSync(path.join(home, 'combine'));
   const server = net.createServer();
-  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(path.join(home, 'combine', 's.json'), resolve); });
+  // Listened on a relative path from inside the folder: a socket's path is capped near 100 bytes, and a temp root is long.
+  const cwd = process.cwd();
+  process.chdir(path.join(home, 'combine'));
+  try {
+    await new Promise((resolve, reject) => { server.once('error', reject); server.listen('s.json', resolve); });
+  } finally { process.chdir(cwd); }
+  assert.ok(fs.statSync(path.join(home, 'combine', 's.json')).isSocket(), 'the socket is in the combine folder');
   try {
     assert.throws(() => P.readGroupRun(home, { root }), /run so1: combine\/s\.json is neither a file nor a folder: never pooled/);
   } finally { await new Promise(resolve => server.close(resolve)); }
