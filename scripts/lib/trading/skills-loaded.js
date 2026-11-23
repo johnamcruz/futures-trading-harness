@@ -71,6 +71,8 @@ const REQUIRED_AT_ENTRY = ['setup-judgment', 'trade-plan'];
  *   candidate.name=<strategy>      a candidate of that strategy
  *   candidate.blocked              a candidate blocked now (a no-entry window, a news blackout)
  *   news.inBlackout                a news blackout in force (m3.news.inBlackout)
+ *   gamma                          the code printed a gamma line (m3.gamma === true, from the briefing: gamma-line.js; a boolean,
+ *                                  never the word; the gate never reads the gamma source itself)
  *   composed                       the head trader composed a trade on the bar: a compose record for the bar (m3.composed,
  *                                  added by skill-lookups.js cycleFacts from the records; never in the briefing itself)
  *   composed.relation=<rel>        a composed read of a candle's relation to a level (rejected | broke | touched)
@@ -108,6 +110,11 @@ const SITUATIONAL = [
   { when: 'composed.relation=broke', skill: 'candle-reading', head: true, headOnly: true },
   // A composed sweep of a level (the owner: "Include sweeps"): the sweeping candle's reaction, the same read.
   { when: 'composed.kind=swept', skill: 'candle-reading', head: true, headOnly: true },
+  // The cycle prompt carries the code's gamma line (gamma-line.js): the skill that says to copy its word and use it for nothing
+  // else. Recorded-only context; no line, no requirement. The head trader's alone (no role's index lists it). `factsOnly`:
+  // required only when a readable briefing shows the line, never in the fallback for unreadable facts (headSituationalSkills);
+  // not listed in the head prompt either (head-prompt.js listed): the line itself carries the pointer (gamma-line.js POINTER).
+  { when: 'gamma', skill: 'gex-regime', head: true, headOnly: true, factsOnly: true },
 ];
 
 const TREND_RULES = ['reversal', 'against', 'allows'];
@@ -120,6 +127,7 @@ const TRIGGERS = {
   'candidate.name': { value: v => /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(v), test: (m3, v) => cands(m3).some(c => c.name === v), text: v => `a ${v} candidate fired` },
   'candidate.blocked': { value: false, test: m3 => cands(m3).some(c => Boolean(c.blocked)), text: () => 'a candidate is blocked now (a no-entry window or a news blackout)' },
   'news.inBlackout': { value: false, test: m3 => Boolean(m3 && m3.news && m3.news.inBlackout === true), text: () => 'a news blackout is in force' },
+  gamma: { value: false, test: m3 => Boolean(m3 && m3.gamma === true), text: () => 'the cycle prompt prints a gamma line' },
   composed: { value: false, test: m3 => composedOf(m3).length > 0, text: () => 'you composed a trade on the bar (a compose record)' },
   'composed.relation': { value: v => RELATIONS.includes(v), test: (m3, v) => composedOf(m3).some(c => Array.isArray(c.relations) && c.relations.includes(v)), text: v => `a composed read says a candle ${v} a level` },
   // A read kind (composed-reads.js STEP_KINDS: a test holds every one named here to it); its text for the head prompt.
@@ -139,9 +147,9 @@ function parseTrigger(text) {
 
 const fires = (trigger, m3) => TRIGGERS[trigger.key].test(m3 || {}, trigger.value);
 const describeTrigger = trigger => TRIGGERS[trigger.key].text(trigger.value);
-/** Every situational skill marked for the head trader: what an entry needs when the cycle's facts can't be read. */
+/** Every situational skill marked for the head trader (but a `factsOnly` one): what an entry needs when the cycle's facts can't be read. */
 // By default the ones the head prompt lists (a `taughtIn` entry is a composed entry's: the gate passes the whole table then).
-const headSituationalSkills = (table = SITUATIONAL.filter(e => !e.taughtIn)) => [...new Set(table.filter(e => e.head === true).map(e => e.skill))];
+const headSituationalSkills = (table = SITUATIONAL.filter(e => !e.taughtIn)) => [...new Set(table.filter(e => e.head === true && !e.factsOnly).map(e => e.skill))];
 /** The situational skills the head trader reads whose trigger fires on m3 (entries marked `head`; no facts: none). */
 const situationalSkills = (m3, table = SITUATIONAL) => [...new Set(table.filter(e => e.head === true && fires(parseTrigger(e.when), m3)).map(e => e.skill))];
 const MAX_BYTES = require('../tunables').runner().limits.skillsLoadedBytes; // config/runner.json
