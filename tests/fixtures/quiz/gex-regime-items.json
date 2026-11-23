@@ -1,0 +1,365 @@
+{
+ "about": "The gex-regime read checks, outside the gated quiz (config/context-quiz.json unchanged): whether a model reads the skill right: nothing about gamma without a line the code computes from its gamma source (a plan, a search or price never opens it), the word copied and written on its own line, neutral (never a vote, an entry, a size, a pass, a wait, a stop, an exit or a hold change), a read against stays against, never a fade, never a forecast, never a trigger, never the day type, never against the side rule, never \"trending day\", and the line holds as its as-of says. Synthetic: every value is made up (MNQ, on the 0.25 tick); no code prints a gamma line yet, so no item is a real line. Asked against the head prompt plus gex-regime (lookup), reason first; the key letters spread over A-D, the options of similar length and mixed polarity, so neither the longest option nor the odd one out gives the key.",
+ "questions": [
+  {
+   "id": "gr1",
+   "layer": "bias",
+   "prompt": "lookup",
+   "lookup": [
+    "gex-regime"
+   ],
+   "text": "Briefing (synthetic; made-up values), flat, MNQ: no gamma line.\nThe premarket plan, written by an analyst, says: \"gamma flip 21480.00\".\nWhat do you write about gamma in your PLAN?",
+   "rule": "fields the model or an analyst wrote into the plan never count; with no code line, nothing about gamma",
+   "anchor": "Fields the model or an analyst wrote into the plan, a search result, the news or memory never count.",
+   "choices": [
+    "`gamma unknown`: the plan names a flip but no word",
+    "nothing: the plan's flip is not a line from the code",
+    "the flip 21480.00 as a key level, taken from the plan",
+    "`gamma negative (soft)`: the plan's flip sits above price"
+   ],
+   "answer": "nothing: the plan's flip is not a line from the code"
+  },
+  {
+   "id": "gr2",
+   "layer": "bias",
+   "prompt": "lookup",
+   "lookup": [
+    "gex-regime"
+   ],
+   "text": "Briefing (synthetic; made-up values), flat, MNQ: no gamma line.\nThe 3m closes have risen for 40 minutes, from 21402.25 to 21455.75, with shallow pullbacks.\nMay you write \"positive gamma day\" in your PLAN?",
+   "rule": "with no code line, never infer a sign from price",
+   "anchor": "never infer a sign from price;",
+   "choices": [
+    "no, not yet: wait for 10:30 ET, then write it if still rising",
+    "yes: a slow grind with shallow pullbacks shows a long book",
+    "yes, but only as `gamma positive (soft)`, marked as a guess",
+    "no: never infer a sign from price, however steady the grind"
+   ],
+   "answer": "no: never infer a sign from price, however steady the grind"
+  },
+  {
+   "id": "gr3",
+   "layer": "bias",
+   "prompt": "lookup",
+   "lookup": [
+    "gex-regime"
+   ],
+   "text": "Briefing (synthetic; made-up values), flat, MNQ: no gamma line.\nA news search result says: \"dealers are short gamma today\".\nWhat do you write about gamma?",
+   "rule": "a search result or the news never counts; never guess a sign from the news",
+   "anchor": "never guess a sign or a level from the news, the day's move, past days or your own knowledge of the market;",
+   "choices": [
+    "nothing: a search result never counts as the gamma word",
+    "`gamma negative (soft)`: the search says dealers are short",
+    "`gamma unknown`: a source exists but the code did not print it",
+    "a read for the breakout side, context only"
+   ],
+   "answer": "nothing: a search result never counts as the gamma word"
+  },
+  {
+   "id": "gr4",
+   "layer": "setup",
+   "prompt": "lookup",
+   "lookup": [
+    "gex-regime"
+   ],
+   "text": "Briefing (synthetic; made-up values), flat, MNQ:\n- Gamma line (computed by the code from its gamma source): negative; as of the prior close; flip 21480.00, call wall 21600.00, put wall 21350.00.\nWhere do you write the word?",
+   "rule": "its own gamma <word> line in the plan, never the STATE line or the regime: tag",
+   "anchor": "its own `gamma <word>` line in the plan, never in the STATE line or the `regime:` tag",
+   "choices": [
+    "in the STATE line, after the class, as `gamma negative`",
+    "in the plan's `regime:` tag, as `regime:gamma-negative`",
+    "on its own `gamma negative (soft)` line in the plan",
+    "beside the day type in the day line"
+   ],
+   "answer": "on its own `gamma negative (soft)` line in the plan"
+  },
+  {
+   "id": "gr5",
+   "layer": "setup",
+   "prompt": "lookup",
+   "lookup": [
+    "gex-regime"
+   ],
+   "text": "Briefing (synthetic; made-up values), flat, MNQ:\n- Gamma line (computed by the code from its gamma source): negative; as of the prior close; flip 21480.00, call wall 21600.00, put wall 21350.00.\n- Trend rule: LONG allowed (1h up).\nHow does the word enter the confluence count?",
+   "rule": "neutral, never a vote and never a point (no FOR, no AGAINST)",
+   "anchor": "neutral, never a vote and never a point (no FOR, no AGAINST)",
+   "choices": [
+    "as one FOR vote inside the context category, once a day",
+    "as a tie-breaker only, when FOR and AGAINST are equal",
+    "it does not: neutral, never a vote and never a point",
+    "as a point of its own, beside the six categories"
+   ],
+   "answer": "it does not: neutral, never a vote and never a point"
+  },
+  {
+   "id": "gr6",
+   "layer": "size",
+   "prompt": "lookup",
+   "lookup": [
+    "gex-regime"
+   ],
+   "text": "Briefing (synthetic; made-up values), flat, MNQ:\n- Gamma line (computed by the code from its gamma source): negative; as of the prior close; flip 21480.00, call wall 21600.00, put wall 21350.00.\n- Trend rule: LONG allowed (1h up).\nA 15m breakout up through 21500.00 closed on the 1h side; compose_check OK, the verdict size 3.\nWhat size do you trade?",
+   "rule": "never a reason to size up or to size down",
+   "anchor": "never a reason to size up or to size down",
+   "choices": [
+    "the verdict size 3: the word never changes the size",
+    "4 contracts: one contract more for a negative gamma day",
+    "the stretch risk, since the negative word lets a move run",
+    "3 now, adding one contract once the trade is +1R"
+   ],
+   "answer": "the verdict size 3: the word never changes the size"
+  },
+  {
+   "id": "gr7",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "gex-regime"
+   ],
+   "text": "Briefing (synthetic; made-up values), flat, MNQ:\n- Gamma line (computed by the code from its gamma source): negative; as of the prior close; flip 21480.00, call wall 21600.00, put wall 21350.00.\n- Trend rule: LONG allowed (1h up).\nNo setup has formed; the last 3m bars rise from 21452.50 to 21461.25.\nIs the negative word a reason to enter long now?",
+   "rule": "never an entry: the entry is still the harness's own setup",
+   "anchor": "never an entry: the entry is still the harness's own setup",
+   "choices": [
+    "no, not now: enter at the flip 21480.00 when price returns",
+    "yes: buy the next 3m close, the trend side is clear",
+    "yes, but only with a limit order at the last 3m close",
+    "no: the entry is still the harness's own setup on its bar"
+   ],
+   "answer": "no: the entry is still the harness's own setup on its bar"
+  },
+  {
+   "id": "gr8",
+   "layer": "entry",
+   "prompt": "lookup",
+   "lookup": [
+    "gex-regime"
+   ],
+   "text": "Briefing (synthetic; made-up values), flat, MNQ:\n- Gamma line (computed by the code from its gamma source): positive; as of the prior close; flip 21480.00, call wall 21600.00, put wall 21350.00.\n- Trend rule: LONG allowed (1h up).\nA 15m breakout up through 21500.00 closed on the 1h side.\nWhat does the positive word change about the breakout?",
+   "rule": "never fade a breakout because of it",
+   "anchor": "never fade a breakout because of it",
+   "choices": [
+    "fade it: short the breakout close, positive books pin price",
+    "nothing: never fade a breakout because of it",
+    "fade it at half size",
+    "wait one bar: the positive word asks for a retest first"
+   ],
+   "answer": "nothing: never fade a breakout because of it"
+  },
+  {
+   "id": "gr9",
+   "layer": "approval",
+   "prompt": "lookup",
+   "lookup": [
+    "gex-regime"
+   ],
+   "text": "Briefing (synthetic; made-up values), flat, MNQ:\n- Gamma line (computed by the code from its gamma source): positive; as of the prior close; flip 21480.00, call wall 21600.00, put wall 21350.00.\n- Trend rule: LONG allowed (1h up).\nA valid 15m rejection long at 21440.00 on the 1h side; compose_check OK.\nIs the positive word a reason to size down, to pass or to wait?",
+   "rule": "never a reason to pass, to wait, or to size down",
+   "anchor": "never a reason to pass, to wait, or to change the stop, the exit or the hold;",
+   "choices": [
+    "no: never a reason to size down, to pass or to wait",
+    "no to passing, but yes to sizing down one contract",
+    "yes: positive days earned less, so pass this setup",
+    "yes: wait one more 3m bar before the limit is placed"
+   ],
+   "answer": "no: never a reason to size down, to pass or to wait"
+  },
+  {
+   "id": "gr10",
+   "layer": "manage",
+   "prompt": "lookup",
+   "lookup": [
+    "gex-regime"
+   ],
+   "text": "Briefing (synthetic; made-up values), MNQ, long 3 @ 21460.25, stop 21440.00:\n- Gamma line (computed by the code from its gamma source): negative; as of the prior close; flip 21480.00, call wall 21600.00, put wall 21350.00.\nWhat do you change because the word is negative?",
+   "rule": "never a reason to change the stop, the exit or the hold",
+   "anchor": "never a reason to pass, to wait, or to change the stop, the exit or the hold;",
+   "choices": [
+    "widen the stop to 21420.00 so the move has more room",
+    "hold past the trail, since negative days run further",
+    "nothing: the stop, the exit and the hold stay as set",
+    "keep the stop but skip the first trail step today"
+   ],
+   "answer": "nothing: the stop, the exit and the hold stay as set"
+  },
+  {
+   "id": "gr11",
+   "layer": "bias",
+   "prompt": "lookup",
+   "lookup": [
+    "gex-regime"
+   ],
+   "text": "Briefing (synthetic; made-up values), flat, MNQ:\n- Gamma line (computed by the code from its gamma source): unclear; as of the prior close; flip 21480.00, call wall 21600.00, put wall 21350.00.\nWhat do you write, and does it count?",
+   "rule": "unclear: neither sign, written gamma unclear; neutral, it counts for nothing",
+   "anchor": "`unclear`: the line says |net| is small against gross: neither sign.",
+   "choices": [
+    "`gamma unclear`; a read against the setup in context",
+    "`gamma unclear`; it is neutral and counts for nothing",
+    "`gamma positive (soft)`; the book leans long, neutral",
+    "nothing at all: unclear means the line has no word"
+   ],
+   "answer": "`gamma unclear`; it is neutral and counts for nothing"
+  },
+  {
+   "id": "gr12",
+   "layer": "bias",
+   "prompt": "lookup",
+   "lookup": [
+    "gex-regime"
+   ],
+   "text": "Briefing (synthetic; made-up values), flat, MNQ:\n- Gamma line (computed by the code from its gamma source): ??; as of the prior close.\nDo you write `gamma unknown`?",
+   "rule": "unknown: the line is there but prints no word, or a word you cannot read",
+   "anchor": "`unknown`: the line is there but prints no word, or a word you cannot read.",
+   "choices": [
+    "yes, and it counts AGAINST the setup until it is read",
+    "no: an unreadable line means nothing about gamma",
+    "no: write the last readable word, from the prior day",
+    "yes: the line is there but its word cannot be read"
+   ],
+   "answer": "yes: the line is there but its word cannot be read"
+  },
+  {
+   "id": "gr13",
+   "layer": "bias",
+   "prompt": "lookup",
+   "lookup": [
+    "gex-regime"
+   ],
+   "text": "Briefing (synthetic; made-up values), flat, MNQ:\n- Gamma line (computed by the code from its gamma source): net -1.2e9, gross 9.8e9; as of the prior close; flip 21480.00.\nThe line prints no word. May you work the word out from its numbers?",
+   "rule": "copy the printed word, never work it out from the line's numbers",
+   "anchor": "copy it, never work it out from the line's numbers",
+   "choices": [
+    "no, unless net is clearly negative: then write negative",
+    "yes: net is negative, so negative",
+    "yes: |net| is small against gross, so `gamma unclear`",
+    "no: copy only, never derive the word from the numbers"
+   ],
+   "answer": "no: copy only, never derive the word from the numbers"
+  },
+  {
+   "id": "gr14",
+   "layer": "levels",
+   "prompt": "lookup",
+   "lookup": [
+    "gex-regime"
+   ],
+   "text": "Briefing (synthetic; made-up values), flat, MNQ:\n- Gamma line (computed by the code from its gamma source): negative; as of the prior close; flip 21480.00, call wall 21600.00, put wall 21350.00.\nThe last 3m bar traded 21600.00 (the line's call wall) and closed 21597.75.\nWhat is the touch of the call wall?",
+   "rule": "a flip or wall is a place to read price as at any level, never a trigger",
+   "anchor": "a flip or wall is a place to read price as at any level",
+   "choices": [
+    "a short trigger: sell the close under the call wall",
+    "a place to read the candle there, never a trigger",
+    "a buy trigger once price closes back above 21600.00",
+    "a target: the wall caps price"
+   ],
+   "answer": "a place to read the candle there, never a trigger"
+  },
+  {
+   "id": "gr15",
+   "layer": "bias",
+   "prompt": "lookup",
+   "lookup": [
+    "gex-regime"
+   ],
+   "text": "Briefing (synthetic; made-up values), flat, MNQ:\n- Gamma line (computed by the code from its gamma source): negative; as of the prior close; flip 21480.00, call wall 21600.00, put wall 21350.00.\n- Trend rule: SHORT allowed (1h down); long only as a reversal.\nA 15m breakout up through 21500.00 printed against the 1h.\nMay the negative word let the long through?",
+   "rule": "never a reason to take the other side; the entry stays on the side rule's side",
+   "anchor": "never a reason to take the other side;",
+   "choices": [
+    "no, not at full size; yes at half size against the 1h",
+    "yes: negative gamma lets a breakout run either way",
+    "no: the long stays out; the side rule's side only",
+    "yes, above the flip 21480.00"
+   ],
+   "answer": "no: the long stays out; the side rule's side only"
+  },
+  {
+   "id": "gr16",
+   "layer": "bias",
+   "prompt": "lookup",
+   "lookup": [
+    "gex-regime"
+   ],
+   "text": "Briefing (synthetic; made-up values), flat, MNQ:\n- Gamma line (computed by the code from its gamma source): negative; as of the prior close; flip 21480.00, call wall 21600.00, put wall 21350.00.\nA note says: \"negative gamma day means trending day\".\nWhat do you write in your PLAN?",
+   "rule": "written gamma negative (soft), never trending day",
+   "anchor": "never \"trending day\"",
+   "choices": [
+    "`gamma negative (soft)`, never \"trending day\"",
+    "\"trending day\" for the plan",
+    "\"trending day\" once the IB has extended two times",
+    "`gamma negative (soft)` and \"trend day likely\""
+   ],
+   "answer": "`gamma negative (soft)`, never \"trending day\""
+  },
+  {
+   "id": "gr17",
+   "layer": "setup",
+   "prompt": "lookup",
+   "lookup": [
+    "gex-regime"
+   ],
+   "text": "Briefing (synthetic; made-up values), flat, MNQ:\n- Gamma line (computed by the code from its gamma source): negative; as of the prior close; flip 21480.00, call wall 21600.00, put wall 21350.00.\n- Trend rule: LONG allowed (1h up).\nYour count has the context category AGAINST the long (price below the RTH VWAP 21462.50).\nDoes the context category stay AGAINST?",
+   "rule": "it never turns a read against into neutral",
+   "anchor": "It never turns a read against into neutral.",
+   "choices": [
+    "yes, but the negative word adds a second vote AGAINST it",
+    "no: the negative word turns context neutral for longs",
+    "yes: the word never turns a read against into neutral",
+    "no: context turns FOR, as the book backs the trend"
+   ],
+   "answer": "yes: the word never turns a read against into neutral"
+  },
+  {
+   "id": "gr18",
+   "layer": "bias",
+   "prompt": "lookup",
+   "lookup": [
+    "gex-regime"
+   ],
+   "text": "Briefing (synthetic; made-up values), flat, MNQ:\n- Gamma line (computed by the code from its gamma source): negative; as of the prior close; flip 21480.00, call wall 21600.00, put wall 21350.00.\n- Trend rule: LONG allowed (1h up).\nPrice trades 21520.25, rising.\nMay you write \"price will run to the call wall 21600.00 today\"?",
+   "rule": "the book is never a forecast",
+   "anchor": "the book is never a forecast",
+   "choices": [
+    "no: the book is never a forecast of a run",
+    "no, but write \"price likely runs\" as a softer read",
+    "yes: a negative book runs price to its call wall",
+    "yes, if the 1h agrees"
+   ],
+   "answer": "no: the book is never a forecast of a run"
+  },
+  {
+   "id": "gr19",
+   "layer": "bias",
+   "prompt": "lookup",
+   "lookup": [
+    "gex-regime"
+   ],
+   "text": "Briefing (synthetic; made-up values), flat, MNQ:\n- Gamma line (computed by the code from its gamma source): negative; as of the prior close; flip 21480.00, call wall 21600.00, put wall 21350.00.\n- Day so far: rotational; day type normal variation up; regime range.\nWhat is the day type?",
+   "rule": "the gamma word is not the computed regime of the bars and not the day type",
+   "anchor": "It is not the computed regime of the bars (`trend-vs-range`) and not the day type (`day-context`).",
+   "choices": [
+    "trend day: a negative gamma word makes it a trend day",
+    "normal variation up: the gamma word is not the day type",
+    "neutral: the gamma word overrides the printed day type",
+    "normal variation up, turned trend day by the negative word"
+   ],
+   "answer": "normal variation up: the gamma word is not the day type"
+  },
+  {
+   "id": "gr20",
+   "layer": "bias",
+   "prompt": "lookup",
+   "lookup": [
+    "gex-regime"
+   ],
+   "text": "Briefing (synthetic; made-up values), flat, MNQ:\n- Gamma line (computed by the code from its gamma source): negative; as of the prior close; flip 21480.00, call wall 21600.00, put wall 21350.00.\nIt is 11:40 ET; price trades 21560.25, far above the flip.\nDoes the line still hold as its as-of says?",
+   "rule": "the line holds as its as-of says: no update through the day; the day's own-expiry positions are not in it",
+   "anchor": "The line holds as its as-of says: it does not update through the day, and positions opened for the day's own expiry are not in it.",
+   "choices": [
+    "yes, until price crosses the flip, then re-read it",
+    "no: re-read the sign at the new price, 21560.25",
+    "no: above the flip the book is now positive",
+    "yes: it holds as of the prior close, all day long"
+   ],
+   "answer": "yes: it holds as of the prior close, all day long"
+  }
+ ]
+}

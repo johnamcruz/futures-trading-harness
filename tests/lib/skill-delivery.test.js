@@ -100,7 +100,7 @@ const EXPECTED = {
     'prop-pacing-judgment', 'reason-check', 'setup-expectancy', 'strategy-authoring', 'strategy-gate-checks',
     'strategy-library', 'strategy-rules', 'strategy-scan', 'strategy-tools', 'tool-arguments', 'trade-journal',
     'trade-review', 'trading-agent-security', 'trend-momentum-indicators'],
-  d: ['broker-bar-fields', 'design-self-review', 'end-of-day', 'gate-refusals-skills', 'kill-switch', 'lean-cycle',
+  d: ['broker-bar-fields', 'design-self-review', 'end-of-day', 'gate-refusals-skills', 'gex-regime', 'kill-switch', 'lean-cycle',
     'live-session-records', 'order-plan', 'premarket', 'prepare-ahead', 'prop-evaluator', 'replay', 'replay-labels', 'replay-resume',
     'replay-scorecard', 'runner-lanes', 'runner-logs', 'strategy-backtest', 'timeframe-sources', 'training-loop',
     'training-verdict', 'user-commands'],

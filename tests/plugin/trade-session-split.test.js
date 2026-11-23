@@ -444,7 +444,9 @@ const OLD_AGENTS_MD = 24466;
 // (+202, the measured need of the worst path; the skill itself is looked up, never on the per-cycle load).
 // feat/p1-mtf-entries (the coordinator's decision 5, the one catalog line accepted): the `mtf-entry` skill's index line in
 // workspace/AGENTS.md (+188, the measured need: the line and its newline; the skill itself is embedded only in an MTF entry arm).
-const RAISED = 154 + 130 + 1625 + 336 + 382 + 939 + 843 + 1621 + 138 + 146 + 144 + 202 + 188;
+// feat/gex-regime: the `gex-regime` catalog line in workspace/AGENTS.md (181 bytes with its newline; +179 is the measured
+// minimum, the worst path had 2 bytes left); the skill is inert until a code line prints the gamma word, never loaded.
+const RAISED = 154 + 130 + 1625 + 336 + 382 + 939 + 843 + 1621 + 138 + 146 + 144 + 202 + 188 + 179;
 const EVERY_CYCLE = ['multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'trader-process', 'htf-to-ltf', 'autonomous-trading'];
 const PATHS = {
   'full cycle, no candidate': ['role-round', 'setup-judgment', 'day-context'],

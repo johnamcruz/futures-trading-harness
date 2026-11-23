@@ -199,6 +199,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - `gate-refusals-limits` (skills/gate-refusals-limits/SKILL.md): Use when the gate refuses an entry with [combine], [prop-account-attempt], [policy], [min-contracts], [strategy], [max-order-size] or [max-risk].
 - `gate-refusals-positions` (skills/gate-refusals-positions/SKILL.md): Use when the gate refuses managing a position (an exit by contract month, a trading-day change), or can't read one; close_position is never gated.
 - `gate-refusals-skills` (skills/gate-refusals-skills/SKILL.md): Use when the gate refuses an entry with [skills-at-entry].
+- `gex-regime` (skills/gex-regime/SKILL.md): Only when a line the code computes from its gamma source (not the plan it relays) prints the day's gamma word; else ignore it entirely.
 - `harness-root` (skills/harness-root/SKILL.md): Find the harness root (<root>) for absolute paths.
 - `htf-to-ltf` (skills/htf-to-ltf/SKILL.md): Use when timeframes disagree - alignment labels, the side rule (never counter), HTF levels.
 - `invalidation` (skills/invalidation/SKILL.md): Trader-process steps 7 and 9, and each cycle with a position open - what proves the idea wrong, the stop read, what makes management exit; never a veto.
