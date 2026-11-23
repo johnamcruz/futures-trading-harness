@@ -189,6 +189,19 @@ test('readGroupRun: a finished run home read as the report reads it (its stream 
   fs.writeFileSync(path.join(home, 'experience', 'curated-pinned.json'), JSON.stringify({ kind: 'curated-pin', windows: [], hash: 'x' }));
   assert.throws(() => P.readGroupRun(home, { root }), /run pick1 is a curated run .*doesn't match its hash/);
   fs.rmSync(path.join(home, 'experience'), { recursive: true });
+  // A continuous-combine run (its combine log: one balance carried across its days) is never pooled.
+  fs.writeFileSync(path.join(runDir, 'combine.jsonl'), `${JSON.stringify({ kind: 'start', day: '2023-03-06' })}\n`);
+  assert.throws(() => P.readGroupRun(home, { root }), /run pick1 is a continuous-combine run/);
+  fs.unlinkSync(path.join(runDir, 'combine.jsonl'));
+  // Its own attempt record (a prop run's fresh attempt at its window's first moment) pools; one that carries a close from
+  // a day outside the run's own window (a carried balance) is refused.
+  fs.mkdirSync(path.join(home, 'combine'), { recursive: true });
+  const attempt = days => fs.writeFileSync(path.join(home, 'combine', 'unit_x.json'), JSON.stringify({ account: 'unit_x', startedAt: '2023-03-06T00:00:00.000Z', startDay: '2023-03-06', days, snapshot: null }));
+  attempt([{ day: '2023-03-06', balance: 50000, pnl: 0 }]);
+  assert.strictEqual(P.readGroupRun(home, { root }).runId, 'pick1');
+  attempt([{ day: '2023-03-03', balance: 50200, pnl: 200 }, { day: '2023-03-06', balance: 50200, pnl: 0 }]);
+  assert.throws(() => P.readGroupRun(home, { root }), /run pick1's attempt of unit_x carries a close of 2023-03-03, outside its own window 2023-03-06\.\.2023-03-07 \(a carried balance\)/);
+  fs.rmSync(path.join(home, 'combine'), { recursive: true });
   // A setup-focused practice run: its own score is `diagnostic (setup-focused)`, never whole days to pool with full-day runs.
   const t1 = '2023-03-13T14:00:00.000Z';
   const focused = multiDayRun({

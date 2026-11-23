@@ -18,7 +18,8 @@
  * refused for a pooled stream with an entry left out or two trades open at once, as a real score refuses one (a dropped
  * loss flatters), and for a run whose report and stream count different trades (the dollars would describe other trades).
  * Never pooled at all: a curated run or one whose days started from drawn account states (refuseDrawn), a setup-focused
- * practice run, a run naming an account that does not resolve (ownAccount), a run whose
+ * practice run, a continuous-combine run or one whose attempt carries a close from outside its window (refuseCarried),
+ * a run naming an account that does not resolve (ownAccount), a run whose
  * stream holds a day outside its own window, and runs the evaluator's checkPooledWindow refuses.
  * Groups (arms) are scored each on their own, with the same seed and options, and printed side by side.
  *
@@ -69,6 +70,22 @@ function refuseDrawn(dir) {
   if (require('./account-states').readStatesLog(dir).some(x => x && x.kind === 'start')) {
     throw new Error(`run ${id} started its days from drawn account states: they are weighted back to the natural mix only in its own score, so it is never pooled`);
   }
+  // A continuous-combine run (replay/combine-run.js: its log; stage 2, replay/stage.js stageTwoHome) carries one balance
+  // across its days. Its own attempt record alone is no such sign: a prop run's fresh attempt starts at its window's first
+  // moment (refuseCarried checks it carries nothing from outside the window).
+  if (fs.existsSync(path.join(dir, require('../replay/combine-run').LOG))) {
+    throw new Error(`run ${id} is a continuous-combine run: one balance carried across its days (stage 2), never pooled with picked days`);
+  }
+}
+
+/** A run whose own attempt record holds a close from a day outside the run's own window: a carried balance, never pooled. */
+function refuseCarried(home, run, id) {
+  const ps = require('../trading/prop-state');
+  for (const name of ps.runningAttempts(home)) {
+    const a = ps.readAttempt(home, name);
+    const out = (a && a.days ? a.days : []).find(d => d && !(d.day >= run.from && d.day < run.to));
+    if (out) throw new Error(`run ${id}'s attempt of ${name} carries a close of ${out.day}, outside its own window ${run.from}..${run.to} (a carried balance): never pooled`);
+  }
 }
 
 /** A finished run read as its report reads it: the model stream (its trades, sides, gross R) and the report's dollars. */
@@ -78,6 +95,7 @@ function readGroupRun(given, { root = null, barsFiles = {} } = {}) {
   const { stream, run } = readModelStream(dir, { root, barsFiles });
   // A setup-focused practice run is scored `diagnostic (setup-focused)` on its own (model-score.js): not whole days to pool.
   if (run.practice) throw new Error(`run ${run.runId || path.basename(dir)} is a setup-focused practice run: it steps setup moments, not whole days, so it is never pooled (its own report scores it as diagnostic (setup-focused))`);
+  refuseCarried(path.resolve(dir, '..', '..'), run, run.runId || path.basename(dir));
   const { readRun } = require('../replay/store');
   const { summarize } = require('../replay/report');
   const total = summarize(readRun(dir).days).total;
