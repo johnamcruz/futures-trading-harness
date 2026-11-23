@@ -92,6 +92,95 @@ Whether the reading earns is what the replays measure.
 Every skill change goes through tests written first and an independent
 adversarial review before it merges.
 
+## The strategy
+
+The harness ships one active strategy stack, written as documents in
+[strategies/](strategies/README.md):
+
+| Strategy | What it is |
+|---|---|
+| `trade_lifecycle` | The model's own trade: it composes bias, location, setup, entry, stop and target from its skills as one record, and code checks every read in it before the order can go ([docs/COMPOSED-ENTRY.md](docs/COMPOSED-ENTRY.md)). |
+| `momentum_continuation` | A rules strategy (a closed 3m momentum candle the prevailing trend's way, in the morning window). It never trades on its own: a composed record may cite it as a setup. |
+| `prop_portfolio` | The account layer: a policy strategy that sizes each composed trade from the account's cushion (or skips it) and exits it by the account's rulebook. |
+
+What the trade looks like:
+
+- **Style:** trend following on index futures (Nasdaq, S&P, Dow, Russell, in
+  micro or mini form; the selected contract trades). Replay testing so far
+  has used Nasdaq data.
+- **When:** the New York morning session. The runner flattens everything
+  before the session closes.
+- **Side:** only with the 4h and 1h trend. A trade against it is a pass.
+- **Entry:** after a pullback ends, on a confirming 3m close.
+- **Stop:** where the trend idea is wrong, beyond the reaction's swing.
+- **Exit:** the stop and the target are set when the trade goes on. Once the
+  target is reached, the stop locks most of it and trails behind the latest
+  confirmed 15m swing, so a trend that keeps running is held.
+- **Selective:** a valid setup is a pass when its reward to risk is under 2:1,
+  when the reads don't all check true, or when the account's state says to
+  wait.
+
+The model reasons and proposes. Code checks every read, sizes the trade and
+refuses anything outside the rules ([Safety](#safety)).
+
+## The account: a prop-firm combine
+
+The goal is a combine pass: reach the profit target before the loss limits
+are touched. An account is a document in [accounts/](accounts/) (the firm's
+rules as numbers) and its rulebook beside it (the numbers the policy trades
+with, and which rules code enforces and which the skills teach). The shipped
+100K profile has:
+
+- a profit target and a trailing max loss, measured on the end-of-day
+  balance, which locks at the starting balance;
+- a daily loss limit that stops the day;
+- a consistency rule: the best day may be at most a set share of the total
+  profit;
+- a 30-session window the evaluation uses (not a firm rule).
+
+Verify the numbers against the firm's current rules before trading.
+
+Inside those limits the rulebook sets:
+
+- **Risk per trade:** at most $300, all in, and sized from the cushion. Near
+  the loss floor the size shrinks so one stop cannot end the attempt.
+- **Floor and stretch:** a minimum size, and a small stretch of the cap while
+  the attempt is healthy.
+- **Stops on the day:** a soft daily stop and a losing-streak stop end new
+  entries for the day. Exits are never blocked.
+- **One position at a time**, shared across the instruments.
+
+Numbers live only in the rulebook, so changing a limit is a one-file edit
+that the runner, the gate and the simulator all read.
+
+## Context the model may read: gamma
+
+The `gex-regime` skill records the day's options gamma word (negative,
+positive or unclear) from a line the code computes, as context only. The
+book is never a forecast: the word is never a reason to enter, pass, size,
+stop or exit, and it casts no vote in the count. A harness version that
+prints a code-computed gamma line from your own gamma data is proposed in a
+separate pull request. Until then the skill is inert.
+
+## Where it stands
+
+Honestly:
+
+- **Not proven.** Entry rules tested on their own showed about break-even or
+  worse expectancy on historical replays. The bet is that the model's
+  reading, with the exit that holds trends, earns where a mechanical rule
+  doesn't. That is measured in replays and not assumed.
+- **Replay only.** No live account is involved. Live trading needs the
+  consistent-replay-pass gate and the runbook in
+  [docs/LIVE-DRY-RUN.md](docs/LIVE-DRY-RUN.md), and the owner's decision.
+- **Small samples.** A few trades can swing a replay's R. A result counts
+  when it holds on held-out days the model and its skills were not tuned on.
+- **The numbers that count** are in dollars against the account's rules:
+  zero blown accounts first, then the pass rate over 30 sessions.
+
+The plain-language tour is [docs/HOW-IT-TRADES.md](docs/HOW-IT-TRADES.md),
+with the evidence behind the reads.
+
 ## How it works
 
 ```text
