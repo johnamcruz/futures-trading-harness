@@ -3046,6 +3046,42 @@ test('an unreadable lanes list (FTH_CYCLE_LANE_BARS): every situational skill ma
   }
 });
 
+test('the gamma line (feat/gamma-line): a briefing that carries its flag requires the head trader to have read gex-regime; no word, no requirement; unreadable facts add nothing; exits never held', () => {
+  const B = require('../../scripts/lib/trading/briefing');
+  const G2 = require('../fixtures/golden-bars');
+  const home = trendHome();
+  const bars = G2.load(G2.SERIES[0]).slice(1200, 1300);
+  const at = new Date(Date.parse(bars[bars.length - 1].t) + 180000);
+  const file = path.join(require('../helpers').tmpDir(), 'session.jsonl');
+  const write = lines => fs.writeFileSync(file, lines.join('\n'));
+  // The real path: the briefing built with the word, recorded, read back, its m3 the gate's facts.
+  B.writeBriefing(home, B.buildBriefing({ symbol: 'MNQ', bars, minutes: 3, now: at, gamma: true }));
+  assert.deepStrictEqual(B.readBriefing(home, 'MNQ').sections.m3.data.gamma, true);
+  const base = { ...config, ...loadConfig({ FTH_HOME: home }), killSwitchFile: config.killSwitchFile, mtfMaxAgeMin: 1e9, signalMaxAgeBars: 1e9, signalMaxAgeCeilingMin: 1e9, home, autonomous: true, cycle: null, cycleLaneBars: {} };
+  const skills = (c, input = entryOrder(), now = at) => evaluateOrder({ input, entries: [plan()], now, config: c, transcriptPath: file }).violations.filter(v => v.check === 'skills-loaded').map(v => v.message);
+  write(ocSkills);
+  assert.ok(skills(base).some(m => /gex-regime/.test(m)), 'the line is printed, no lookup: refused, naming it');
+  write([...ocSkills, ocEvent('skill', { name: 'gex-regime' })]);
+  assert.ok(!skills(base).some(m => /gex-regime/.test(m)), 'read: no refusal for it');
+  write([...ocSkills, ocEvent('harness_skill_lookup', { skill: 'gex-regime' }).replace('VERDICT: APPROVE - size 1', '<skill name=\\"gex-regime\\">...')]);
+  assert.ok(!skills(base).some(m => /gex-regime/.test(m)), 'looked up: no refusal for it');
+  write(ocSkills);
+  // An exit is never held.
+  assert.deepStrictEqual(evaluateOrder({ input: entryOrder({ side: 'sell', rationale: '[exit] flatten', stopLossBracket: undefined }), entries: [plan()], now: at, config: base, transcriptPath: file }).violations.filter(v => v.check === 'skills-loaded'), []);
+  // No word on the bar: the verdict is the one it was; and the same with the lanes unreadable (no fallback requirement).
+  B.writeBriefing(home, B.buildBriefing({ symbol: 'MNQ', bars, minutes: 3, now: at }));
+  const none = skills(base);
+  assert.ok(!none.some(m => /gex-regime/.test(m)), none.join(' '));
+  assert.ok(!skills({ ...base, cycleLaneBars: loadConfig({ FTH_CYCLE_LANE_BARS: 'not json' }).cycleLaneBars }).some(m => /gex-regime/.test(m)), 'unreadable lanes: not required');
+  // The same order, the same transcript: only the word's presence differs, and only by that one skill.
+  B.writeBriefing(home, B.buildBriefing({ symbol: 'MNQ', bars, minutes: 3, now: at, gamma: true }));
+  assert.deepStrictEqual(none, [], 'no word: no skills-loaded refusal at all');
+  const only = skills(base);
+  assert.ok(only.length === 1 && /not loaded in this session: gex-regime\. Load each/.test(only[0]), `a word: only that skill is added: ${only.join(' ')}`);
+  // An interactive session: never required.
+  assert.ok(!skills({ ...base, autonomous: false }).some(m => /gex-regime/.test(m)));
+});
+
 // --- opencode's head trader in index mode: its embedded skills count as loaded only on the runner's attestation
 // (head-prompt.js), checked against the run's config file; anything off falls back to the transcript. ---
 
