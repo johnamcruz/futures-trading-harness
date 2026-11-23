@@ -2273,10 +2273,14 @@ It refuses to pool:
 - a training-loop trend-set run, which steps windows of its sessions, not
   whole days;
 - a continuous-combine (stage-2) run, which carries one balance across its
-  days, or a run with an attempt record (running or ended) that started on a
-  day outside the run's window or holds a close, recorded or missed, from one
-  (a carried balance). A prop run's own fresh attempt, started at its window's
-  first moment, pools;
+  days;
+- a run with an attempt record (running or ended) that carries a balance: it
+  started after the run's window, or before it with an exchange session day
+  between its start and the window's first day, or it holds a close, recorded
+  or missed, outside the window. A prop run's own fresh attempt, started at its
+  window's first moment (even on the weekend or holiday just before), pools;
+- a run with a file in its `combine` folder that can't be read as an attempt
+  record (not JSON, `days` or `missedCloses` not a list, or no start day);
 - runs that name different accounts. `--account` only names the account for
   runs that name none;
 - a run that names an account that does not resolve: an attempt record of an

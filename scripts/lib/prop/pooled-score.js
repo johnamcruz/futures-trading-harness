@@ -83,24 +83,48 @@ function refuseDrawn(dir) {
 
 /**
  * A run whose attempt records (every one in its home's combine folder: running, and ended ones, renamed
- * <account>.ended-<time>.json) carry a balance from outside the run's own window [from, to): an attempt started on a day
- * outside it, or a close recorded (days) or missed (missedCloses, missedClose) on one. Never pooled.
+ * <account>.ended-<time>.json) carry a balance from outside the run's own window [from, to): an attempt started after
+ * the window, or before it with a session day (prop/splits.js hasSession) between its start and the window's first day (a
+ * start on the weekend or holiday just before carries nothing: the driver starts a prop run's attempt at the window's
+ * first moment), or a close recorded (days) or missed (missedCloses, missedClose) outside it. A file that can't be read as
+ * an attempt record (not JSON, not an object, days or missedCloses not a list, no startDay nor a startedAt to take its
+ * session day from) is refused, never skipped. Never pooled.
  */
 function refuseCarried(home, run, id) {
   let files;
-  try { files = fs.readdirSync(path.join(home, 'combine')).filter(f => f.endsWith('.json')).sort(); } catch (_err) { return; }
+  const dir = path.join(home, 'combine');
+  try { files = fs.readdirSync(dir).filter(f => f.endsWith('.json') && fs.statSync(path.join(dir, f)).isFile()).sort(); } catch (_err) { return; }
   const inside = day => day >= run.from && day < run.to;
   for (const f of files) {
-    let a = null;
-    try { a = JSON.parse(fs.readFileSync(path.join(home, 'combine', f), 'utf8')); } catch (_err) { /* not a record */ }
-    if (!a || !Array.isArray(a.days)) continue;
+    const unreadable = why => new Error(`run ${id}: combine/${f} is not a readable attempt record (${why}): never pooled`);
+    let a;
+    try { a = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')); } catch (_err) { throw unreadable('not JSON'); }
+    if (!a || typeof a !== 'object' || Array.isArray(a)) throw unreadable('not an object');
+    if (!Array.isArray(a.days)) throw unreadable('days is not a list');
+    if (a.missedCloses !== undefined && a.missedCloses !== null && !Array.isArray(a.missedCloses)) throw unreadable('missedCloses is not a list');
+    const startMs = Date.parse(a.startedAt);
+    const startDay = a.startDay || (Number.isFinite(startMs) ? require('../trading/clock').tradingDayKey(new Date(startMs)) : null);
+    if (!startDay) throw unreadable('no startDay or startedAt');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(startDay))) throw unreadable(`startDay ${JSON.stringify(startDay)} is not a session date`);
     const name = a.account || f;
-    const where = `outside its own window ${run.from}..${run.to} (a carried balance): never pooled`;
-    if (a.startDay && !inside(a.startDay)) throw new Error(`run ${id}'s attempt of ${name} started on ${a.startDay}, ${where}`);
+    const where = `outside its own window ${run.from}..${run.to}`;
+    if (startDay >= run.to) throw new Error(`run ${id}'s attempt of ${name} started on ${startDay}, ${where} (a carried balance): never pooled`);
+    const between = startDay < run.from ? sessionBetween(startDay, run.from) : null;
+    if (between) throw new Error(`run ${id}'s attempt of ${name} started on ${startDay}, ${where} (a session day, ${between}, lies between): a carried balance, never pooled`);
     const closes = [...a.days.map(d => d && d.day), ...(a.missedCloses || []), ...(a.missedClose ? [a.missedClose] : [])].filter(Boolean);
     const out = closes.find(d => !inside(d));
-    if (out) throw new Error(`run ${id}'s attempt of ${name} carries a close of ${out}, ${where}`);
+    if (out) throw new Error(`run ${id}'s attempt of ${name} carries a close of ${out}, ${where} (a carried balance): never pooled`);
   }
+}
+
+/** The first session day (prop/splits.js hasSession) in [from, to), session dates YYYY-MM-DD, or null. */
+function sessionBetween(from, to) {
+  const { hasSession } = require('./splits');
+  for (const d = new Date(`${from}T00:00:00Z`); d.toISOString().slice(0, 10) < to; d.setUTCDate(d.getUTCDate() + 1)) {
+    const day = d.toISOString().slice(0, 10);
+    if (hasSession(day)) return day;
+  }
+  return null;
 }
 
 /** A finished run read as its report reads it: the model stream (its trades, sides, gross R) and the report's dollars. */

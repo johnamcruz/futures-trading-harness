@@ -210,9 +210,43 @@ test('readGroupRun: a finished run home read as the report reads it (its stream 
   fs.writeFileSync(path.join(home, 'combine', 'unit_x.json'), JSON.stringify({ account: 'unit_x', startDay: '2023-03-06', days: [], missedCloses: ['2023-03-02'] }));
   assert.throws(() => P.readGroupRun(home, { root }), /carries a close of 2023-03-02, outside its own window/);
   fs.writeFileSync(path.join(home, 'combine', 'unit_x.json'), JSON.stringify({ account: 'unit_x', startDay: '2023-03-03', days: [{ day: '2023-03-06', balance: 50000, pnl: 0 }] }));
-  assert.throws(() => P.readGroupRun(home, { root }), /run pick1's attempt of unit_x started on 2023-03-03, outside its own window 2023-03-06\.\.2023-03-07 \(a carried balance\)/);
-  // An ended (renamed) record of the run is read too.
+  assert.throws(() => P.readGroupRun(home, { root }), /run pick1's attempt of unit_x started on 2023-03-03, outside its own window 2023-03-06\.\.2023-03-07 \(a session day, 2023-03-03, lies between\): a carried balance/);
+  // A start before the window with no session between it and the window carries nothing: a weekend start (Saturday
+  // 2023-03-04 for Monday's run) pools; a start with a session day between (Friday 2023-03-03) is refused above.
+  const started = (startDay, extra = {}) => fs.writeFileSync(path.join(home, 'combine', 'unit_x.json'), JSON.stringify({ account: 'unit_x', startDay, days: [{ day: '2023-03-06', balance: 50000, pnl: 0 }], ...extra }));
+  started('2023-03-04');
+  assert.strictEqual(P.readGroupRun(home, { root }).runId, 'pick1', 'a weekend start pools');
+  started('2023-03-05');
+  assert.strictEqual(P.readGroupRun(home, { root }).runId, 'pick1');
+  // A start after the window is refused.
+  started('2023-03-08');
+  assert.throws(() => P.readGroupRun(home, { root }), /started on 2023-03-08, outside its own window/);
+  // The singular missed close counts as a close too.
+  started('2023-03-06', { missedClose: '2023-03-02' });
+  assert.throws(() => P.readGroupRun(home, { root }), /carries a close of 2023-03-02, outside its own window/);
+  // Fails closed: a record that can't be read as an attempt is refused, naming the run and the file, never skipped.
+  const bad = text => fs.writeFileSync(path.join(home, 'combine', 'unit_x.json'), text);
+  bad('{not json');
+  assert.throws(() => P.readGroupRun(home, { root }), /run pick1: combine\/unit_x\.json is not a readable attempt record \(not JSON\)/);
+  bad(JSON.stringify({ account: 'unit_x', startDay: '2023-03-06', days: {} }));
+  assert.throws(() => P.readGroupRun(home, { root }), /run pick1: combine\/unit_x\.json is not a readable attempt record \(days is not a list\)/);
+  bad(JSON.stringify({ account: 'unit_x', startDay: '2023-03-06', days: [], missedCloses: '2023-03-02' }));
+  assert.throws(() => P.readGroupRun(home, { root }), /run pick1: combine\/unit_x\.json is not a readable attempt record \(missedCloses is not a list\)/);
+  bad(JSON.stringify({ account: 'unit_x', days: [] }));
+  assert.throws(() => P.readGroupRun(home, { root }), /run pick1: combine\/unit_x\.json is not a readable attempt record \(no startDay or startedAt\)/);
+  bad(JSON.stringify({ account: 'unit_x', startedAt: '2023-03-03T15:00:00.000Z', days: [] }));
+  assert.throws(() => P.readGroupRun(home, { root }), /started on 2023-03-03, outside its own window/, 'no startDay: startedAt\'s session day');
+  bad(JSON.stringify({ account: 'unit_x', startedAt: '2023-03-06T15:00:00.000Z', days: [] }));
+  assert.strictEqual(P.readGroupRun(home, { root }).runId, 'pick1');
+  bad(JSON.stringify({ account: 'unit_x', startDay: 'monday', days: [] }));
+  assert.throws(() => P.readGroupRun(home, { root }), /not a readable attempt record \(startDay "monday" is not a session date\)/);
+  bad('null');
+  assert.throws(() => P.readGroupRun(home, { root }), /not a readable attempt record \(not an object\)/);
   fs.unlinkSync(path.join(home, 'combine', 'unit_x.json'));
+  fs.mkdirSync(path.join(home, 'combine', 'odd.json'));
+  assert.strictEqual(P.readGroupRun(home, { root }).runId, 'pick1', 'a folder named *.json is no record');
+  fs.rmSync(path.join(home, 'combine', 'odd.json'), { recursive: true });
+  // An ended (renamed) record of the run is read too.
   fs.writeFileSync(path.join(home, 'combine', 'unit_x.ended-2023-03-06T21-00-00-000Z.json'), JSON.stringify({ account: 'unit_x', startDay: '2023-03-01', days: [{ day: '2023-03-01', balance: 50000, pnl: 0 }] }));
   assert.throws(() => P.readGroupRun(home, { root }), /run pick1's attempt of unit_x started on 2023-03-01/);
   fs.rmSync(path.join(home, 'combine'), { recursive: true });
@@ -229,6 +263,20 @@ test('readGroupRun: a finished run home read as the report reads it (its stream 
     days: [{ day: '2023-03-13', times: [t1], records: [record({ at: t1 })], rows: [[100.5, 100.75, 99.75, 100.25]], fills: [] }],
   });
   assert.throws(() => P.readGroupRun(focused.home, { root }), /run focus1 is a setup-focused practice run/);
+  // A holiday start: the run's first session is Tuesday 2023-02-21, Monday 2023-02-20 an exchange holiday.
+  const t2 = '2023-02-21T14:00:00.000Z';
+  const afterHoliday = multiDayRun({
+    runId: 'hol1', gate: { learning: false, role: null, look: null, hideOutcomes: false },
+    days: [{ day: '2023-02-21', times: [t2], records: [record({ at: t2 })], rows: [[100.5, 100.75, 99.75, 100.25]], fills: [] }],
+  });
+  fs.mkdirSync(path.join(afterHoliday.home, 'combine'), { recursive: true });
+  const holidayStart = startDay => fs.writeFileSync(path.join(afterHoliday.home, 'combine', 'unit_x.json'), JSON.stringify({ account: 'unit_x', startDay, days: [] }));
+  for (const d of ['2023-02-20', '2023-02-18']) {
+    holidayStart(d);
+    assert.strictEqual(P.readGroupRun(afterHoliday.home, { root }).runId, 'hol1', `a start on ${d} (no session before the window) pools`);
+  }
+  holidayStart('2023-02-17');
+  assert.throws(() => P.readGroupRun(afterHoliday.home, { root }), /run hol1's attempt of unit_x started on 2023-02-17, outside its own window 2023-02-21\.\.2023-02-22 \(a session day, 2023-02-17, lies between\)/);
   // Each run's own account: an attempt of an account that is no valid profile, or a runner account that names a profile
   // only in another case (or an invalid one), never resolves to "none" (else --account or the fallback would take over).
   const accounts = [{ name: 'unit_a', valid: true }, { name: 'unit_bad', valid: false }];
