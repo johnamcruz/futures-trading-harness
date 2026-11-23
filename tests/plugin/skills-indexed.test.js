@@ -66,7 +66,7 @@ const ALLOWED = {
   // would add it to every cycle for a field no briefing carries. Like any unlisted skill it is still reachable: its
   // catalog line (workspace/AGENTS.md; the Claude index-mode head prompt's index each cycle), the CLIs' own skill lists
   // (Claude Code, Qwen Code), and the Skill tool or skill_lookup.
-  'gex-regime': 'not embedded by the runner; the head trader looks it up when the cycle prompt prints the code\'s gamma line (the situational table: gate and head prompt), else it does not apply; on no list; reachable by its catalog line (AGENTS.md, the Claude index-mode head index), the CLIs\' skill lists, the Skill tool or skill_lookup',
+  'gex-regime': 'not embedded by the runner; the code\'s gamma line points to it ("Read gex-regime before an entry.") and the gate requires the lookup while the briefing carries the flag (the situational table), else it does not apply; on no list; reachable by its catalog line (AGENTS.md, the Claude index-mode head index), the CLIs\' skill lists, the Skill tool or skill_lookup',
   'gate-refusals-skills': 'the [skills-at-entry] refusal\'s row; the head trader finds it by its index line (workspace/AGENTS.md) when refused',
 };
 

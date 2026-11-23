@@ -31,8 +31,9 @@ const { MARKET_TZ } = require('./clock');
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const WORDS = { negative: 'negative (soft)', positive: 'positive (soft)', unclear: 'unclear' };
-// The pointer the line carries itself (the skill is read from it, for every harness the gate cannot enforce it on).
-const POINTER = 'Read gex-regime before using it.';
+// The pointer the line carries itself, as the gate requires it (a gex-regime lookup before any entry while the flag is set);
+// for a harness the gate cannot enforce it on, this sentence is the instruction.
+const POINTER = 'Read gex-regime before an entry.';
 const num = x => typeof x === 'number' && Number.isFinite(x);
 const level = x => num(x) && x > 0;
 const isDate = s => typeof s === 'string' && DATE.test(s) && new Date(`${s}T00:00:00Z`).toISOString().slice(0, 10) === s;

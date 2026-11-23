@@ -5,7 +5,7 @@
 // the word (and its cutoff, a tunable), every case that prints NO line, the exact line text (it ends with the pointer to
 // the skill), the contract root and the tick, the cycle date (the replay clock's in a replay), the staleness bound, the
 // situational skill the gate requires only when the briefing carries the flag (a boolean, never the word), the flag and
-// the line coming from one read, and that no gate, risk, sizing, entry or exit code reads the source or the flag.
+// the flag and the line agreeing (two reads of one file), and that no gate, risk, sizing, entry or exit code reads the source or the flag.
 // Each wiring test below was proved against a mutant of the code it covers (the fix round's report lists them).
 
 const test = require('node:test');
@@ -37,7 +37,7 @@ const HAS = /Gamma \(code/;
 test('gamma line: the exact line, as the gex-regime skill reads it (levels to the tick, net/gross to 2 decimals, the pointer last)', () => {
   const r = lineOf(doc());
   assert.strictEqual(r.word, 'negative');
-  assert.strictEqual(r.line, 'Gamma (code, as of prior close 2026-03-03): negative (soft); net/gross 0.31; flip 21650; call wall 21900; put wall 21200. Read gex-regime before using it.');
+  assert.strictEqual(r.line, 'Gamma (code, as of prior close 2026-03-03): negative (soft); net/gross 0.31; flip 21650; call wall 21900; put wall 21200. Read gex-regime before an entry.');
   assert.ok(!r.line.includes('\n'));
   assert.ok(r.line.endsWith(G.POINTER));
 });
@@ -112,7 +112,7 @@ test('gamma line: flip is optional (the line says "flip none"); every other leve
     const inst = { ...INST, flip };
     if (flip === undefined) delete inst.flip;
     const r = lineOf(doc({ instruments: { NQ: inst } }));
-    assert.strictEqual(r.line, 'Gamma (code, as of prior close 2026-03-03): negative (soft); net/gross 0.31; flip none; call wall 21900; put wall 21200. Read gex-regime before using it.');
+    assert.strictEqual(r.line, 'Gamma (code, as of prior close 2026-03-03): negative (soft); net/gross 0.31; flip none; call wall 21900; put wall 21200. Read gex-regime before an entry.');
   }
   const noCall = { ...INST }; delete noCall.callWall;
   assert.strictEqual(lineOf(doc({ instruments: { NQ: noCall } })), null);
@@ -137,7 +137,7 @@ test('gamma line: the cycle symbol\'s mini root (MNQ -> NQ, MES -> ES, a contrac
   const dir = dirWith(doc());
   assert.strictEqual(G.gammaLines({ dir, symbols: ['MNQ'], now: NOW }), G.gammaFor({ dir, symbol: 'MNQ', now: NOW }).line, 'one symbol: the bare line');
   const both = G.gammaLines({ dir, symbols: ['MNQ', 'MES'], now: NOW });
-  assert.match(both, /^MNQ: Gamma \(code[^\n]*put wall 21200\. Read gex-regime before using it\. MES: Gamma \(code[^\n]*put wall 5900\. Read gex-regime before using it\.$/);
+  assert.match(both, /^MNQ: Gamma \(code[^\n]*put wall 21200\. Read gex-regime before an entry\. MES: Gamma \(code[^\n]*put wall 5900\. Read gex-regime before an entry\.$/);
   assert.match(G.gammaLines({ dir, symbols: ['MNQ', 'MYM'], now: NOW }), /^MNQ: Gamma/, 'a symbol with no source adds nothing');
   assert.strictEqual(G.gammaLines({ dir, symbols: ['MYM'], now: NOW }), null);
 });
@@ -314,6 +314,20 @@ test('gamma line: a replayed morning reads only that day\'s file (the replay clo
   assert.ok(!HAS.test(next.seen[0].prompt), 'another replayed day: no file, no line');
 });
 
+// What the scan checks (and nothing more): where the gamma SOURCE is named, where the flag is read as a property
+// (`.gamma`, `['gamma']`), and where `gamma` is destructured. Reading it any other way (an alias, a dynamic key) is not
+// caught: the allowed files below are the whole of what may touch the flag.
+const FLAG_READERS = ['scripts/lib/trading/briefing.js', 'scripts/lib/trading/skills-loaded.js']; // the writer and the trigger
+const OPTION_PLUMBING = ['scripts/lib/autotrader.js', 'scripts/lib/runner.js', 'scripts/lib/trading/briefing.js']; // `gamma = default` options
+const PROP = /\.gamma\b|\[\s*['"]gamma['"]\s*\]/;
+const DESTRUCT = /\{[^{}]*\bgamma\b[^{}]*\}\s*(?:=(?!=)|\)\s*(?:=>|\{))/;
+const DESTRUCT_NO_DEFAULT = /\{[^{}]*\bgamma\b(?!\s*=[^=>])[^{}]*\}\s*(?:=(?!=)|\)\s*(?:=>|\{))/;
+const flagViolations = (file, text) => [
+  ...(PROP.test(text) && !FLAG_READERS.includes(file) ? ['a .gamma read'] : []),
+  ...(DESTRUCT.test(text) && !OPTION_PLUMBING.includes(file) ? ['a gamma destructuring'] : []),
+  ...(DESTRUCT_NO_DEFAULT.test(text) ? ['a gamma destructuring without a default (a read)'] : []),
+];
+
 test('gamma line: no gate, risk, sizing, entry or exit code reads the gamma source or its flag (exact files; hooks included)', () => {
   const walk = d => (fs.existsSync(d) ? fs.readdirSync(d, { withFileTypes: true }).flatMap(e => (e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)])) : []);
   const files = [...walk(path.join(ROOT, 'scripts')), ...walk(path.join(ROOT, 'hooks'))].filter(f => f.endsWith('.js'));
@@ -321,10 +335,27 @@ test('gamma line: no gate, risk, sizing, entry or exit code reads the gamma sour
   const text = f => fs.readFileSync(f, 'utf8');
   // The source: only the wiring and the module.
   assert.deepStrictEqual(files.filter(f => /FTH_GAMMA_DIR|require\([^)]*gamma-line/.test(text(f))).map(rel).sort(), ['scripts/lib/runner-wiring.js', 'scripts/lib/trading/gamma-line.js']);
-  // The flag (any `.gamma` read): only the trigger, the briefing that sets it, and the runner's prompt path.
-  const ALLOWED = ['scripts/lib/autotrader.js', 'scripts/lib/runner-wiring.js', 'scripts/lib/runner.js', 'scripts/lib/trading/briefing.js', 'scripts/lib/trading/gamma-line.js', 'scripts/lib/trading/skills-loaded.js'];
-  const readers = files.filter(f => /\.gamma\b|\[['"]gamma['"]\]/.test(text(f))).map(rel).sort();
-  assert.deepStrictEqual(readers.filter(f => !ALLOWED.includes(f)), [], 'a reader outside the allowed files');
-  // Positive control: the scan sees a planted reader.
-  assert.ok(/\.gamma\b/.test('if (m3.gamma) size = 0'));
+  // The flag: no file outside the allowed ones reads or destructures it, and none destructures it without a default.
+  const bad = files.map(f => [rel(f), flagViolations(rel(f), text(f))]).filter(([, v]) => v.length);
+  assert.deepStrictEqual(bad, []);
+  // The writer and the trigger are really there (the allowed lists are not slack).
+  for (const f of FLAG_READERS) assert.ok(PROP.test(text(path.join(ROOT, f))), `${f} reads it`);
+});
+
+test('gamma line: the scan fails on a planted reader in the gate, the runner and the risk code (each pattern, each kind)', () => {
+  const plants = {
+    'a property read in the gate': ['scripts/lib/trading/order-gate.js', 'if (m3.gamma) size = 0;'],
+    'a property read in verdict.js': ['scripts/lib/prop/verdict.js', 'const g = x.gamma;'],
+    'an optional-chained read': ['scripts/lib/runner.js', 'const g = x?.gamma;'],
+    'a bracket read': ['scripts/lib/runner.js', "const g = x['gamma'];"],
+    'a read off a literal': ['scripts/lib/prop/verdict.js', 'const g = ({}).gamma;'],
+    'a shorthand destructuring in runner.js': ['scripts/lib/runner.js', 'const { gamma } = state;'],
+    'a destructuring with a default in the gate': ['scripts/lib/trading/order-gate.js', 'const { gamma = 0 } = m3;'],
+    'a renamed destructuring in runner.js': ['scripts/lib/runner.js', 'const { gamma: g } = state;'],
+    'a destructured parameter in verdict.js': ['scripts/lib/prop/verdict.js', 'const f = ({ size, gamma }) => size;'],
+  };
+  for (const [why, [file, code]] of Object.entries(plants)) assert.ok(flagViolations(file, `const a = 1;\n${code}\n`).length > 0, why);
+  // The legitimate plumbing is not flagged: an option with a default and an object key.
+  assert.deepStrictEqual(flagViolations('scripts/lib/runner.js', 'function f({ news = null, gamma = () => null }) { return { gamma: x }; }'), []);
+  assert.deepStrictEqual(flagViolations('scripts/lib/runner-wiring.js', "const o = { gamma: (at, s) => gammaLines({ dir: env.FTH_GAMMA_DIR, symbols: s, now: at }) };"), []);
 });

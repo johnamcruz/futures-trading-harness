@@ -528,8 +528,11 @@ the user's own gamma source (`scripts/lib/trading/gamma-line.js`; the runner's
 injectable `gamma`, wired in `runner-wiring.js` as `news` is). The `gex-regime`
 skill reads that line and nothing else: with no line it does not apply. Nothing
 in the line votes, sizes, gates or exits, and no gate, risk, sizing, entry or exit
-code reads the source or the flag below (a test scans `scripts/` for any other
-reader).
+code reads the source or the flag below (a test scans `scripts/` and `hooks/`: the
+source only in `runner-wiring.js` and `gamma-line.js`; a `.gamma` property read,
+or a `gamma` destructuring, only in the briefing that sets the flag and the
+trigger that reads it, plus the option plumbing of the runner, the prompt and the
+briefing builder).
 
 The source is a directory, `FTH_GAMMA_DIR` (the user's local config, never
 committed, no default; unset or missing: no line, never an error to the cycle),
@@ -555,7 +558,7 @@ field that is not a finite number, a `gross` that is not above 0, a `|net|` abov
 root with no contract spec. The line, on the contract's tick, ends with the
 pointer to the skill: `Gamma (code, as of prior close 2026-03-03): negative
 (soft); net/gross 0.31; flip 21650; call wall 21900; put wall 21200. Read
-gex-regime before using it.` With several symbols each line carries its symbol
+gex-regime before an entry.` With several symbols each line carries its symbol
 first.
 
 When a line is printed the briefing's `m3` carries a flag, `m3.gamma = true` (a
@@ -566,8 +569,10 @@ entry, in the harnesses whose gate enforces situational skills (index mode); in
 the others, which the gate cannot enforce it on, the line's own pointer is the
 instruction. With no line nothing changes, and unreadable cycle facts add no
 requirement. The head prompt does not list it (the pointer is on the line). The
-flag and the line come from the same `gammaFor` read of the same file at the
-cycle's clock. A replay reads the same variable through the driver unchanged, and
+flag and the line are two reads of the same file through the same `gammaFor`, at
+the cycle's clock: the flag at the briefing step (`gammaFlag`), the line at the
+prompt build; a test pins that they agree on every case it covers (a file changed
+between the two reads could make them differ). A replay reads the same variable through the driver unchanged, and
 the replay clock's date picks the file, so a replayed morning reads only that
 day's file.
 
