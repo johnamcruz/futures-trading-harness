@@ -87,7 +87,7 @@ function refuseDrawn(dir) {
  * outside it, or a close recorded (days) or missed (missedCloses, missedClose) on one. Never pooled.
  */
 function refuseCarried(home, run, id) {
-  let files = [];
+  let files;
   try { files = fs.readdirSync(path.join(home, 'combine')).filter(f => f.endsWith('.json')).sort(); } catch (_err) { return; }
   const inside = day => day >= run.from && day < run.to;
   for (const f of files) {
