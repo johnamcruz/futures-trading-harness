@@ -537,7 +537,9 @@ test('composed triggers: the head trader\'s compose records on the bar (cycleFac
   const { headPrompt } = require('../../scripts/lib/head-prompt');
   assert.match(headPrompt({ docs: [] }), /- a composed read says a candle rejected a level, or a composed read says a candle broke a level, or a composed read says a level was swept: `candle-reading`/);
   assert.doesNotMatch(headPrompt({ docs: [] }, SL.SITUATIONAL.filter(x => !x.headOnly)), /compose/);
-  for (const e of SL.SITUATIONAL.filter(x => x.headOnly)) assert.ok(e.head === true && !e.taughtIn && e.when.startsWith('composed'), `${e.skill}: a composed read, the head's alone`);
+  for (const e of SL.SITUATIONAL.filter(x => x.headOnly && x.when !== 'gamma')) assert.ok(e.head === true && !e.taughtIn && e.when.startsWith('composed'), `${e.skill}: a composed read, the head's alone`);
+  // The gamma line's (gamma-line.test.js): the head's alone, read only when the briefing shows it.
+  assert.deepStrictEqual(SL.SITUATIONAL.filter(x => x.when === 'gamma').map(x => [x.skill, x.head, x.headOnly, x.factsOnly]), [['gex-regime', true, true, true]]);
   const taught = fs.readFileSync(path.join(__dirname, '..', '..', 'skills', 'trade-lifecycle', 'SKILL.md'), 'utf8');
   for (const e of SL.SITUATIONAL.filter(x => x.taughtIn)) {
     assert.strictEqual(e.taughtIn, 'trade-lifecycle');

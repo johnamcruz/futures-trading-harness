@@ -153,6 +153,15 @@ test('the run home is seeded with the user\'s round-number steps, resolved: repl
   assert.strictEqual(line(text(replay)), line(text(live)));
 });
 
+test('replay env: the user\'s gamma dir (FTH_GAMMA_DIR) reaches the step unchanged, and the step\'s clock is the replayed time (a replayed morning reads that day\'s file only)', () => {
+  const w = userWorld({ brokerEnv: { clockFile: 'SIM_CLOCK', stateDir: 'SIM_STATE', runId: null, start: 'SIM_START', end: null } });
+  seedRunHome(w.run, { root: ROOT, userEnv: w.env });
+  const env = replayEnv({ ...w.env, FTH_GAMMA_DIR: '/user/gamma-dir' }, w.run, { at: iso('2026-10-07T13:33:02Z') });
+  assert.strictEqual(env.FTH_GAMMA_DIR, '/user/gamma-dir');
+  assert.strictEqual(env.FTH_REPLAY_NOW, '2026-10-07T13:33:02.000Z');
+  assert.strictEqual(replayEnv({ ...w.env }, w.run, { at: iso('2026-10-07T13:33:02Z') }).FTH_GAMMA_DIR, undefined, 'unset stays unset: no default dir');
+});
+
 test('replay env: the run home, the replay broker and clock; no path overrides; every live broker\'s variables disabled', () => {
   const w = userWorld({ brokerEnv: { clockFile: 'SIM_CLOCK', stateDir: 'SIM_STATE', runId: null, start: 'SIM_START', end: null } });
   seedRunHome(w.run, { root: ROOT, userEnv: w.env });

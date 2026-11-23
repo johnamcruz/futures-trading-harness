@@ -93,7 +93,8 @@ function headPlan(root, mode) {
 
 /** The situational skills the head trader must read when the bar shows them (SITUATIONAL entries marked head). */
 // An entry taught in a skill (`taughtIn`: trade-lifecycle) is named there and embedded below (CORE), not listed here.
-const listed = e => e.head === true && !e.taughtIn;
+// A `factsOnly` entry (the gamma line's) is named on its own line in the cycle prompt, not here.
+const listed = e => e.head === true && !e.taughtIn && !e.factsOnly;
 const headRequired = (table = SITUATIONAL) => [...new Set(table.filter(listed).map(e => e.skill))]
   .map(skill => ({ skill, when: table.filter(e => listed(e) && e.skill === skill).map(e => parseTrigger(e.when)) }));
 
