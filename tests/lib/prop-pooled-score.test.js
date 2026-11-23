@@ -289,6 +289,83 @@ test('readGroupRun: a finished run home read as the report reads it (its stream 
   assert.throws(() => P.ownAccount({ runId: 'r', attempts: ['unit_bad'], runnerAccount: null, accounts }), /run r holds an attempt of account "unit_bad", which does not resolve \(an invalid profile\)/);
 });
 
+test('readGroupRun: the combine folder fails closed (unreadable entries, malformed closes); a start on the configured first day pools', t => {
+  const fs = require('fs');
+  const root = path.resolve(__dirname, '..', '..');
+  const t0 = '2023-03-06T14:00:00.000Z';
+  const { home, dir } = multiDayRun({
+    runId: 'cf1', gate: { learning: false, role: null, look: null, hideOutcomes: false },
+    days: [{ day: '2023-03-06', times: [t0], records: [record({ at: t0 })], rows: [[100.5, 100.75, 99.75, 100.25]], fills: [] }],
+  });
+  const combineDir = path.join(home, 'combine');
+  const write = (f, rec) => fs.writeFileSync(path.join(combineDir, f), typeof rec === 'string' ? rec : JSON.stringify(rec));
+  const ok = () => assert.strictEqual(P.readGroupRun(home, { root }).runId, 'cf1');
+  const own = extra => ({ account: 'unit_x', startDay: '2023-03-06', days: [{ day: '2023-03-06', balance: 50000, pnl: 0 }], ...extra });
+  ok(); // no combine folder at all: no records
+  // A combine that is a plain file: refused, never read as "no records".
+  fs.writeFileSync(combineDir, 'x');
+  assert.throws(() => P.readGroupRun(home, { root }), /run cf1: its combine folder can't be read \(ENOTDIR\): never pooled/);
+  fs.unlinkSync(combineDir);
+  fs.mkdirSync(combineDir);
+  // A dangling link beside a carried-balance record: the link refused by name (never every record skipped).
+  write('unit_x.json', own({ days: [{ day: '2023-03-01', balance: 50000, pnl: 0 }] }));
+  fs.symlinkSync(path.join(combineDir, 'gone.json'), path.join(combineDir, 'zz.json'));
+  assert.throws(() => P.readGroupRun(home, { root }), /run cf1: combine\/zz\.json can't be read \(ENOENT\): never pooled/);
+  fs.unlinkSync(path.join(combineDir, 'zz.json'));
+  assert.throws(() => P.readGroupRun(home, { root }), /carries a close of 2023-03-01/);
+  write('unit_x.json', own());
+  ok();
+  // Malformed closes: a days entry that isn't { day: YYYY-MM-DD }, a missed close that isn't a session date.
+  for (const [days, why] of [[[null], 'days\\[0\\] is not a close'], [[5], 'days\\[0\\] is not a close'], [[{ balance: 1 }], 'days\\[0\\] is not a close']]) {
+    write('unit_x.json', own({ days }));
+    assert.throws(() => P.readGroupRun(home, { root }), new RegExp(`run cf1: combine/unit_x\\.json is not a readable attempt record \\(${why}`));
+  }
+  for (const missed of [[null], [5], [{ day: '2023-03-06' }]]) {
+    write('unit_x.json', own({ missedCloses: missed }));
+    assert.throws(() => P.readGroupRun(home, { root }), /is not a readable attempt record \(missedCloses\[0\] is not a session date\)/);
+  }
+  write('unit_x.json', own({ missedClose: 7 }));
+  assert.throws(() => P.readGroupRun(home, { root }), /is not a readable attempt record \(missedClose is not a session date\)/);
+  write('unit_x.json', own({ missedCloses: [], missedClose: null }));
+  ok();
+  // The run's configured start (its manifest's) on a data-gap day: an attempt started there pools; a week earlier, refused;
+  // a close before the window still refused.
+  const mf = path.join(dir, 'manifest.json');
+  fs.writeFileSync(mf, JSON.stringify({ ...JSON.parse(fs.readFileSync(mf, 'utf8')), start: '2023-03-03T00:00:00.000Z' }));
+  write('unit_x.json', own({ startDay: '2023-03-03' }));
+  ok();
+  write('unit_x.json', own({ startDay: '2023-02-24' }));
+  assert.throws(() => P.readGroupRun(home, { root }), /started on 2023-02-24, outside its own window 2023-03-06\.\.2023-03-07 \(a session day, 2023-02-24, lies between\)/);
+  write('unit_x.json', own({ startDay: '2023-03-03', days: [{ day: '2023-03-03', balance: 50000, pnl: 0 }] }));
+  assert.throws(() => P.readGroupRun(home, { root }), /carries a close of 2023-03-03/);
+  write('unit_x.json', own());
+  // An unreadable combine folder: refused (not possible to test where the permission is ignored, e.g. as root).
+  fs.chmodSync(combineDir, 0);
+  let blocked = true;
+  try { fs.readdirSync(combineDir); blocked = false; } catch (_err) { /* blocked, as expected */ }
+  try {
+    if (!blocked) t.diagnostic('the unreadable-folder case is skipped: permissions are not enforced here');
+    else assert.throws(() => P.readGroupRun(home, { root }), /run cf1: its combine folder can't be read \(EACCES\): never pooled/);
+  } finally { fs.chmodSync(combineDir, 0o755); }
+});
+
+test('readGroupRun: a combine entry that is neither a file nor a folder (a socket) is refused, never skipped', async () => {
+  const fs = require('fs');
+  const net = require('net');
+  const root = path.resolve(__dirname, '..', '..');
+  const t0 = '2023-03-06T14:00:00.000Z';
+  const { home } = multiDayRun({
+    runId: 'so1', gate: { learning: false, role: null, look: null, hideOutcomes: false },
+    days: [{ day: '2023-03-06', times: [t0], records: [record({ at: t0 })], rows: [[100.5, 100.75, 99.75, 100.25]], fills: [] }],
+  });
+  fs.mkdirSync(path.join(home, 'combine'));
+  const server = net.createServer();
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(path.join(home, 'combine', 's.json'), resolve); });
+  try {
+    assert.throws(() => P.readGroupRun(home, { root }), /run so1: combine\/s\.json is neither a file nor a folder: never pooled/);
+  } finally { await new Promise(resolve => server.close(resolve)); }
+});
+
 test('the CLI\'s main: the account the runs name (--account only fills a missing one), one sizing for every run', () => {
   const CLI = require('../../scripts/pooled-score');
   const root = path.resolve(__dirname, '..', '..');

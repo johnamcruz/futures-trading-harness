@@ -2276,11 +2276,17 @@ It refuses to pool:
   days;
 - a run with an attempt record (running or ended) that carries a balance: it
   started after the run's window, or before it with an exchange session day
-  between its start and the window's first day, or it holds a close, recorded
-  or missed, outside the window. A prop run's own fresh attempt, started at its
-  window's first moment (even on the weekend or holiday just before), pools;
-- a run with a file in its `combine` folder that can't be read as an attempt
-  record (not JSON, `days` or `missedCloses` not a list, or no start day);
+  between its start and the window's first recorded day, or it holds a close,
+  recorded or missed, outside the window. A prop run's own fresh attempt pools
+  when it started on the session day of the run's configured start (the
+  manifest's `start`), even when that day is a weekend, holiday, data gap or
+  closed day;
+- a run whose `combine` folder can't be read (a plain file, or no permission),
+  or holds an entry that can't be read: a dangling link, something that is
+  neither a file nor a folder, or a file that is no attempt record (not JSON,
+  `days` or `missedCloses` not a list, a close not `{ day: YYYY-MM-DD }`, a
+  missed close not a date, or no start day). A run with no `combine` folder has
+  no attempt records;
 - runs that name different accounts. `--account` only names the account for
   runs that name none;
 - a run that names an account that does not resolve: an attempt record of an

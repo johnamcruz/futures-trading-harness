@@ -84,17 +84,31 @@ function refuseDrawn(dir) {
 /**
  * A run whose attempt records (every one in its home's combine folder: running, and ended ones, renamed
  * <account>.ended-<time>.json) carry a balance from outside the run's own window [from, to): an attempt started after
- * the window, or before it with a session day (prop/splits.js hasSession) between its start and the window's first day (a
- * start on the weekend or holiday just before carries nothing: the driver starts a prop run's attempt at the window's
- * first moment), or a close recorded (days) or missed (missedCloses, missedClose) outside it. A file that can't be read as
- * an attempt record (not JSON, not an object, days or missedCloses not a list, no startDay nor a startedAt to take its
- * session day from) is refused, never skipped. Never pooled.
+ * the window, or before it with a session day (prop/splits.js hasSession) between its start and the window's first
+ * recorded day, unless it started on the session day of the run's configured start (`startDay`, the manifest's `start`:
+ * the driver starts a prop run's attempt there, so a weekend, holiday, data-gap or closed first day carries nothing), or a
+ * close recorded (days) or missed (missedCloses, missedClose) outside it. Fails closed: no combine folder at all is no
+ * records, but a combine that can't be read (a plain file, no permission), an entry that can't be stat'ed (a dangling
+ * link), and a file that can't be read as an attempt record (not JSON, not an object, days or missedCloses not a list, a
+ * close not { day: YYYY-MM-DD }, a missed close not a YYYY-MM-DD, no startDay nor a startedAt to take its session day
+ * from) are refused, never skipped. A folder named *.json is no record. Never pooled.
  */
-function refuseCarried(home, run, id) {
-  let files;
+function refuseCarried(home, run, id, { startDay: configured = null } = {}) {
   const dir = path.join(home, 'combine');
-  try { files = fs.readdirSync(dir).filter(f => f.endsWith('.json') && fs.statSync(path.join(dir, f)).isFile()).sort(); } catch (_err) { return; }
+  let names;
+  try { names = fs.readdirSync(dir); } catch (err) {
+    if (err.code === 'ENOENT') return;
+    throw new Error(`run ${id}: its combine folder can't be read (${err.code || err.message}): never pooled`, { cause: err });
+  }
+  const files = [];
+  for (const f of names.filter(n => n.endsWith('.json')).sort()) {
+    let st;
+    try { st = fs.statSync(path.join(dir, f)); } catch (err) { throw new Error(`run ${id}: combine/${f} can't be read (${err.code || err.message}): never pooled`, { cause: err }); }
+    if (st.isFile()) files.push(f);
+    else if (!st.isDirectory()) throw new Error(`run ${id}: combine/${f} is neither a file nor a folder: never pooled`);
+  }
   const inside = day => day >= run.from && day < run.to;
+  const ISO = /^\d{4}-\d{2}-\d{2}$/;
   for (const f of files) {
     const unreadable = why => new Error(`run ${id}: combine/${f} is not a readable attempt record (${why}): never pooled`);
     let a;
@@ -105,13 +119,19 @@ function refuseCarried(home, run, id) {
     const startMs = Date.parse(a.startedAt);
     const startDay = a.startDay || (Number.isFinite(startMs) ? require('../trading/clock').tradingDayKey(new Date(startMs)) : null);
     if (!startDay) throw unreadable('no startDay or startedAt');
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(startDay))) throw unreadable(`startDay ${JSON.stringify(startDay)} is not a session date`);
+    if (!ISO.test(String(startDay))) throw unreadable(`startDay ${JSON.stringify(startDay)} is not a session date`);
+    const badDay = a.days.findIndex(d => !d || typeof d !== 'object' || !ISO.test(String(d.day)));
+    if (badDay >= 0) throw unreadable(`days[${badDay}] is not a close ({ day: YYYY-MM-DD })`);
+    const missed = a.missedCloses || [];
+    const badMissed = missed.findIndex(d => typeof d !== 'string' || !ISO.test(d));
+    if (badMissed >= 0) throw unreadable(`missedCloses[${badMissed}] is not a session date`);
+    if (a.missedClose !== undefined && a.missedClose !== null && !(typeof a.missedClose === 'string' && ISO.test(a.missedClose))) throw unreadable('missedClose is not a session date');
     const name = a.account || f;
     const where = `outside its own window ${run.from}..${run.to}`;
     if (startDay >= run.to) throw new Error(`run ${id}'s attempt of ${name} started on ${startDay}, ${where} (a carried balance): never pooled`);
-    const between = startDay < run.from ? sessionBetween(startDay, run.from) : null;
+    const between = startDay < run.from && startDay !== configured ? sessionBetween(startDay, run.from) : null;
     if (between) throw new Error(`run ${id}'s attempt of ${name} started on ${startDay}, ${where} (a session day, ${between}, lies between): a carried balance, never pooled`);
-    const closes = [...a.days.map(d => d && d.day), ...(a.missedCloses || []), ...(a.missedClose ? [a.missedClose] : [])].filter(Boolean);
+    const closes = [...a.days.map(d => d.day), ...missed, ...(a.missedClose ? [a.missedClose] : [])];
     const out = closes.find(d => !inside(d));
     if (out) throw new Error(`run ${id}'s attempt of ${name} carries a close of ${out}, ${where} (a carried balance): never pooled`);
   }
@@ -134,7 +154,11 @@ function readGroupRun(given, { root = null, barsFiles = {} } = {}) {
   const { stream, run } = readModelStream(dir, { root, barsFiles });
   // A setup-focused practice run is scored `diagnostic (setup-focused)` on its own (model-score.js): not whole days to pool.
   if (run.practice) throw new Error(`run ${run.runId || path.basename(dir)} is a setup-focused practice run: it steps setup moments, not whole days, so it is never pooled (its own report scores it as diagnostic (setup-focused))`);
-  refuseCarried(path.resolve(dir, '..', '..'), run, run.runId || path.basename(dir));
+  // The run's configured start (its manifest's `start`), whose session day a prop run's own attempt starts on.
+  let startMs = NaN;
+  try { startMs = Date.parse(JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8')).start); } catch (_err) { /* none recorded */ }
+  const startDay = Number.isFinite(startMs) ? require('../trading/clock').tradingDayKey(new Date(startMs)) : null;
+  refuseCarried(path.resolve(dir, '..', '..'), run, run.runId || path.basename(dir), { startDay });
   const { readRun } = require('../replay/store');
   const { summarize } = require('../replay/report');
   const total = summarize(readRun(dir).days).total;
