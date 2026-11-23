@@ -2708,7 +2708,7 @@ is explained in the pull request, as a golden is.
 
 ### The goal regression
 
-A regression for the strategy, on every pull request, with real market data
+A regression for the strategy, on every pull request that changes more than documents, with real market data
 and a mock model: does the change break the goal, in the owner's order (0
 blows; a 30-session combine pass rate of 40% or more; more of the trends' R
 caught)? It runs the harness's own code and compares with the committed
@@ -2843,13 +2843,15 @@ mini sized nothing) must fail it on main's wide-stop days. Sizes are exact every
 are written outside the repository.
 
 **In CI** (`.github/workflows/ci.yml`) the goal regression runs as parallel
-jobs on every pull request, so its wall time is about its slowest job's:
+jobs on every pull request that changes more than documents (a change to
+documents only skips them: `scripts/ci-scope.js`), so its wall time is about its slowest job's:
 `goal-part`, a matrix of tier 2's main days in shards (`FTH_GOAL_SHARD=k/n`:
 every n-th day of its days and the move days; enough shards that each plays
 one round of `tier2.parallel` days) and one job for each other
 `tests/goal/*.goal.js` file (tier 1's mutation checks, the breaks, the faults,
 the probes, the states, the floor days); then `goal-full`, the one check to
-mark required, which needs every part, fails unless all passed, and judges
+mark required, which needs every part, fails unless all passed (a change to
+documents only skips the parts, and it passes without them), and judges
 the shards' results as one run (`tests/goal/tier2-aggregate.js`: every shard
 once, every day once, the sums against main's baseline, every move day
 against its golden). `tests/plugin/process.test.js` keeps the matrix whole.

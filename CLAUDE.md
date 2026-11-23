@@ -204,7 +204,9 @@ request, every time, whatever the size of the change:
    A change to documents only (Markdown under `docs/`, `README.md`,
    `CONTRIBUTING.md`, and nothing else) gets the regression and a review that
    the plan or content is sound and its claims about the code are true, not
-   the full adversarial round, unless it touches a document named below.
+   the full adversarial round, unless it touches a document named below. CI
+   skips only the goal regression's tier 2 for such a change (it reads no
+   document; `scripts/ci-scope.js`); the tests, lint and the rest still run.
    Skills, agents, commands, rules, strategies, and
    accounts are instructions agents act on: they get the full round. So do
    `CLAUDE.md`, `AGENTS.md`, `QWEN.md`, generated files, and every document
