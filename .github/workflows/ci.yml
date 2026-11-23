@@ -9,6 +9,22 @@ permissions:
   contents: read
 
 jobs:
+  # What the change touches (scripts/ci-scope.js): `docs_only` is true only when every changed path is a document
+  # (Markdown under docs/, README.md, CONTRIBUTING.md). Then the goal regression's tier 2 is skipped (it reads no
+  # document); the tests, lint, sync check, strategies and secrets still run on every change, because a document is
+  # an input to some of them. Any doubt is false: everything runs. A push to main has no pull request base, so it
+  # always runs everything.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      docs_only: ${{ steps.scope.outputs.docs_only }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: scope
+        run: node scripts/ci-scope.js --base "${{ github.event.pull_request.base.sha }}"
+
   test:
     runs-on: ubuntu-latest
     steps:
@@ -31,11 +47,13 @@ jobs:
 
   # The goal regression's tier 2 (docs/TRAINING.md, "The goal regression"): the live path with the mock policy, its
   # break self-tests, the broker-fault days, the negative probes, the state and floor days, the catch-the-move goldens
-  # and tier 1's mutation checks. Too long for every npm run verify, so its own jobs on every pull request, in parallel:
+  # and tier 1's mutation checks. Too long for every npm run verify, so its own jobs on every pull request that changes more than documents, in parallel:
   # tier 2's days in shards (each shard one round of goalRegression.tier2.parallel days), and a job for each other file
   # of tests/goal/*.goal.js (tests/plugin/process.test.js keeps the matrix whole). No npm ci: no dependency is used.
   goal-part:
     name: goal (${{ matrix.part }})
+    needs: changes
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -101,10 +119,10 @@ jobs:
           path: goal-shards/
           retention-days: 3
 
-  # The one required check (mark goal-full required in the branch protection with test): every part passed, then tier
+  # The one required check (mark goal-full required in the branch protection with test): every part passed (a change to documents only skips them: it passes), then tier
   # 2's shards judged as one run (tests/goal/tier2-aggregate.js: every shard once, every day, the sums against main).
   goal-full:
-    needs: goal-part
+    needs: [changes, goal-part]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -112,14 +130,19 @@ jobs:
       - name: every goal part passed
         env:
           PARTS: ${{ needs.goal-part.result }}
-        run: test "$PARTS" = success
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+          DOCS_ONLY: ${{ needs.changes.outputs.docs_only }}
+        run: test "$DOCS_ONLY" = true || test "$PARTS" = success
+      - if: needs.changes.outputs.docs_only != 'true'
+        uses: actions/checkout@v4
+      - if: needs.changes.outputs.docs_only != 'true'
+        uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-      - uses: actions/download-artifact@v4
+      - if: needs.changes.outputs.docs_only != 'true'
+        uses: actions/download-artifact@v4
         with:
           pattern: goal-shard-*
           path: goal-shards
           merge-multiple: true
-      - run: npm run goal:aggregate -- goal-shards
+      - if: needs.changes.outputs.docs_only != 'true'
+        run: npm run goal:aggregate -- goal-shards

@@ -67,16 +67,32 @@ test('process: the goal regression is CI\'s parts in parallel, every file and ev
   // The aggregate: after every part, always, failing unless every part passed; then the shards judged as one.
   const full = jobs['goal-full'];
   assert.ok(full, 'a goal-full job (the one required check)');
-  assert.match(full, /^ {4}needs: goal-part\n/m);
+  assert.match(full, /^ {4}needs: \[changes, goal-part\]\n/m);
   assert.match(full, /^ {4}if: always\(\)\n/m, 'it runs when a part failed, so it fails too (a skipped required check passes)');
-  assert.match(full, /PARTS: \$\{\{ needs\.goal-part\.result \}\}\n\s+run: test "\$PARTS" = success\n/, 'it fails unless every part passed');
+  assert.match(full, /PARTS: \$\{\{ needs\.goal-part\.result \}\}\n\s+DOCS_ONLY: \$\{\{ needs\.changes\.outputs\.docs_only \}\}\n\s+run: test "\$DOCS_ONLY" = true \|\| test "\$PARTS" = success\n/, 'it fails unless every part passed (or the change is documents only, which skips the parts)');
   assert.match(full, /uses: actions\/download-artifact@v4\n\s+with:\n\s+pattern: goal-shard-\*\n\s+path: goal-shards\n\s+merge-multiple: true\n/);
-  assert.match(full, /- run: npm run goal:aggregate -- goal-shards\n/);
+  assert.match(full, /run: npm run goal:aggregate -- goal-shards\n/);
   assert.strictEqual(pkg['goal:aggregate'], 'node tests/goal/tier2-aggregate.js');
   assert.match(pkg['goal:full'], /tests\/goal\/\*\.goal\.js/);
   assert.ok(!pkg.verify.includes('goal:full'), 'not in npm run verify (its tier 1 is: tests/plugin/goal-regression.test.js)');
   assert.match(read('CLAUDE.md'), /goal regression/i);
   assert.match(read('.github/pull_request_template.md'), /Goal regression: main vs this PR/);
+});
+
+// A change to documents only skips tier 2 (it reads no document); nothing else is skipped, and any doubt runs it all.
+test('process: documents-only skips only the goal regression, from one scope job that fails closed', () => {
+  const ci = read('.github/workflows/ci.yml');
+  const jobs = Object.fromEntries(jobsOf(ci).map(j => [j.name, j.body]));
+  assert.match(jobs.changes, /docs_only: \$\{\{ steps\.scope\.outputs\.docs_only \}\}/, 'one output');
+  assert.match(jobs.changes, /fetch-depth: 0/, 'the diff needs the base');
+  assert.match(jobs.changes, /run: node scripts\/ci-scope\.js --base "\$\{\{ github\.event\.pull_request\.base\.sha \}\}"\n/, 'the base is the pull request\'s only: a push to main runs everything');
+  assert.strictEqual((jobs.changes.match(/^ {6}- /gm) || []).length, 2, 'the scope job is a checkout and the one scope step, nothing else');
+  assert.match(jobs['goal-part'], /^ {4}needs: changes\n {4}if: needs\.changes\.outputs\.docs_only != 'true'\n/m, 'the parts skip only when docs_only is true');
+  for (const name of Object.keys(jobs).filter(n => !['goal-part', 'goal-full'].includes(n))) assert.ok(!/^ {4}if:/m.test(jobs[name]), `${name} always runs`);
+  assert.ok(!/needs:/.test(jobs.test), 'the tests, lint, sync check, strategies and secrets never wait on or skip for the scope');
+  const full = jobs['goal-full'];
+  const steps = full.split(/^ {6}- /m).slice(2);
+  assert.ok(steps.length >= 4 && steps.every(st => /^if: needs\.changes\.outputs\.docs_only != 'true'\n/.test(st)), 'every step after the check is skipped only when docs_only is true');
 });
 
 test('process: the hard rule is where every coding agent reads it, and the PR template asks for both', () => {

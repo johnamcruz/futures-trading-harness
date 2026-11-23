@@ -92,7 +92,8 @@ regression passes (`npm run verify`), and an adversarial review by someone
 other than the change's author found nothing left to fix (each confirmed
 finding fixed, the regression re-run, the fixes reviewed again). A
 change to documents only (Markdown under `docs/`, the README, this file, and
-nothing else) still runs the regression, with a review that it is sound and
+nothing else) still runs the regression (CI skips only the goal regression's
+tier 2 for it, which reads no document), with a review that it is sound and
 its claims about the code are true instead of the full round. A document
 that a skill, agent, command, rule, strategy, account, hook, or script
 points to (the list is in `CLAUDE.md`) gets
