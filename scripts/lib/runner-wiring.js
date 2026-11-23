@@ -240,9 +240,12 @@ function barRecorder({ cfg, home, env, now, log, onBarClosed }) {
   };
 }
 
-/** The gamma line's word for the briefing's flag (gamma-line.js), or null: never an error to the briefing (no line, no flag). */
-function gammaWord(env, symbol, at) {
-  try { return (gammaFor({ dir: env.FTH_GAMMA_DIR, symbol, now: at }) || {}).word || null; } catch (_err) { return null; }
+/**
+ * The briefing's gamma flag: true exactly when the code prints a gamma line for the symbol (the same gammaFor the prompt's
+ * line is made by; the word itself is never recorded), else null. Never an error to the briefing.
+ */
+function gammaFlag(env, symbol, at) {
+  try { return gammaFor({ dir: env.FTH_GAMMA_DIR, symbol, now: at }) ? true : null; } catch (_err) { return null; }
 }
 
 /**
@@ -325,7 +328,7 @@ function briefingRecorder(home, cfg, now, env = process.env, { frames = [], data
       const fineBars = f && f.contractId === (item.contractId || null) ? f.bars : null;
       // A roll between the lanes' contract lookups: the briefing says "no 1m bars configured"; the log says why.
       if (f && !fineBars) log(`${item.symbol}: the 1m bars are of another contract (${f.contractId}, the bar's ${item.contractId || 'none'}): no 5m facts from them this bar`, 'error');
-      return writeBriefing(home, buildBriefing({ symbol: item.symbol, contractId: item.contractId || null, bars: item.bars, minutes: cfg.timeframe, fineBars, prev: readBriefing(home, item.symbol), scan: results, scanError, blackouts, clock, roundSteps, now: now(), positionOpen, gamma: gammaWord(env, item.symbol, now()) }));
+      return writeBriefing(home, buildBriefing({ symbol: item.symbol, contractId: item.contractId || null, bars: item.bars, minutes: cfg.timeframe, fineBars, prev: readBriefing(home, item.symbol), scan: results, scanError, blackouts, clock, roundSteps, now: now(), positionOpen, gamma: gammaFlag(env, item.symbol, now()) }));
     } catch (err) {
       removeBriefing(home, item.symbol);
       // The timeframes built from it share its parts: none without it.

@@ -8,8 +8,7 @@ description: Only when a line the code computes from its gamma source (not the p
 ## When to Use
 
 - Only when a line the code computes from its gamma source (not the plan
-  it relays) carries the day's gamma word in the briefing or the cycle
-  prompt; otherwise this skill is ignored entirely.
+  it relays) carries the day's gamma word in the cycle prompt; otherwise this skill is ignored entirely.
 - The gamma source is the one the code reads. Fields the model or an
   analyst wrote into the plan, a search result, the news or memory never
   count.

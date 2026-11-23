@@ -800,6 +800,7 @@ those conditions are false, so `ofi` and `ofi_absorption` give no signal and
 | `FTH_MAX_ENTRIES_PER_DAY` | 6 | Entries per trading day (0 = off) |
 | `FTH_ENTRY_HOURS` | empty (the whole session) | New entries only inside these windows (`ny`, `london`, `asia`, or `HH:MM-HH:MM@Zone`); the 18:00-16:00 ET session is a hard limit either way |
 | `FTH_NO_ENTRY_WINDOWS` | `09:30-09:35@America/New_York,15:45-16:00@America/New_York` | No new entries (the New York opening print, and into the close) |
+| `FTH_GAMMA_DIR` | (none) | A directory of per-day gamma files (`<YYYY-MM-DD>.json`, format in docs/TOOL-CALLS-AND-ORCHESTRATION.md, "The gamma line"); the cycle prompt prints one line from the day's file for the `gex-regime` skill. Unset, missing or off: no line. Your own config, never committed; a replay passes it through |
 | `FTH_BLACKOUTS_FILE` | `~/.futures-trading-harness/blackouts/blackouts.json` | News blackouts (append-only via `scripts/blackouts.js`) |
 | `FTH_PAPER` | (unset) | `1` refuses every entry (the runner sets it for `"paper": true`) |
 | `FTH_SYMBOLS` | (unset; the runner sets it to its `symbols`) | The selected contracts, one per index (e.g. `NQ,MES`). A rules strategy trades only the selected leg of a micro/mini family it lists (listing MNQ covers a selected NQ; selecting NQ refuses MNQ). Unset: each strategy trades exactly its `instruments`, and a rules strategy listing both legs of a family trades neither. Invalid (two legs of one index), or unset in an autonomous run (`FTH_AUTONOMOUS=1`): every entry is refused |

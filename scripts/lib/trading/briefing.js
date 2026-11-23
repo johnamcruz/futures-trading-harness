@@ -890,9 +890,9 @@ function buildBriefing({ symbol, contractId = null, bars: raw, minutes, fineBars
     roundStep: roundStepFor(root, roundSteps), roundError: roundStepError(root, roundSteps), own, keyLevels });
   // The base timeframe's timing against the side the entry rule allows (ltf-timing.js, BG), from these closed bars: the
   // runner's briefing only (a frame's is another timeframe's read).
-  // The gamma line's word when the code printed one (gamma-line.js): only the flag the gate's situational trigger reads;
+  // The gamma line's flag when the code printed one (gamma-line.js, a boolean, never the word): only what the gate's situational trigger reads;
   // no line, no key (SUMMARY_FIELDS: left out of the detail, the prompt carries the line).
-  if (!own && typeof gamma === 'string' && gamma) fresh.m3.data.gamma = { word: gamma };
+  if (!own && gamma === true) fresh.m3.data.gamma = true;
   if (!own) {
     const m3 = fresh.m3.data;
     const h = fresh.h1.data || {};

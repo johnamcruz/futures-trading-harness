@@ -6,7 +6,7 @@
 // harness, qualitative, not validated here), thin (it points to the skills that own each rule and restates none of
 // them). Not embedded by the runner: on no role's list, no head-trader load list, no situational embed, no
 // command; the gate's situational table requires it of the head trader only when the briefing carries the line, and the
-// head prompt lists it as a lookup (gamma-line.test.js); reachable as any unlisted skill is: its catalog line (workspace/AGENTS.md, the Claude index-mode head
+// line itself ends with the pointer to it (gamma-line.test.js); reachable as any unlisted skill is: its catalog line (workspace/AGENTS.md, the Claude index-mode head
 // prompt's index), the CLIs' own skill lists, and the Skill tool or skill_lookup.
 //
 // Everything the skill states is unit tested: every sentence of its body is pinned (BODY, in order), so deleting any
@@ -30,7 +30,7 @@ const RELIES_ON = ['day-context', 'confluence-counting', 'htf-to-ltf', 'mtf-entr
 const DESCRIPTION = 'Only when a line the code computes from its gamma source (not the plan it relays) prints the day\'s gamma word; else ignore it entirely.';
 // Every sentence of the body, in order (split after . ; : on the flattened body): the skill's text, pinned.
 const BODY = [
-  "# Gamma Regime ## When to Use - Only when a line the code computes from its gamma source (not the plan it relays) carries the day's gamma word in the briefing or the cycle prompt;",
+  "# Gamma Regime ## When to Use - Only when a line the code computes from its gamma source (not the plan it relays) carries the day's gamma word in the cycle prompt;",
   "otherwise this skill is ignored entirely.",
   "- The gamma source is the one the code reads.",
   "Fields the model or an analyst wrote into the plan, a search result, the news or memory never count.",
@@ -263,9 +263,9 @@ test('gex-regime: not embedded: no role, load list, runner embed, head core, com
   assert.ok(!SS.SKILLS.includes('gex-regime'), 'no situational embed');
   assert.ok(!require('../../scripts/lib/head-prompt').CORE.includes('gex-regime'), 'not in the head core');
   for (const f of fs.readdirSync(path.join(ROOT, 'commands'))) assert.ok(!read(`commands/${f}`).includes('gex-regime'), f);
-  // The head prompt lists it as a lookup for the cycle whose prompt carries the code's line (the situational table); no
-  // other skill points to it.
-  assert.deepStrictEqual(require('../../scripts/lib/head-prompt').headRequired().filter(x => x.skill === 'gex-regime').map(x => x.when.map(w => w.key)), [['gamma']]);
+  // The head prompt does not list it: the code's line carries the pointer (gamma-line.js POINTER), and the gate requires the
+  // lookup only when the briefing shows the line (the situational table, factsOnly); no other skill points to it.
+  assert.deepStrictEqual(require('../../scripts/lib/head-prompt').headRequired().filter(x => x.skill === 'gex-regime'), []);
   for (const s of fs.readdirSync(path.join(ROOT, 'skills')).filter(n => n !== 'gex-regime' && fs.existsSync(path.join(ROOT, 'skills', n, 'SKILL.md')))) {
     assert.ok(!read(`skills/${s}/SKILL.md`).includes('gex-regime'), s);
   }

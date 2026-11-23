@@ -4244,7 +4244,7 @@ test('order gate hook: a briefing carrying the gamma line\'s word (m3.gamma) req
   const loaded = ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'setup-judgment', 'trade-plan'].map(name => ev('skill', { name }));
   const transcript = path.join(dir, 'cycle-transcript.jsonl');
   const run = (lines, order = orderPayload()) => { fs.writeFileSync(transcript, lines.join('\n')); return gate({ ...order, transcript_path: transcript }, env); };
-  brief({ gamma: { word: 'negative' } });
+  brief({ gamma: true });
   const refused = run(loaded);
   assert.match(refused.stderr, /\[skills-loaded\][^\n]*not loaded in this session: gex-regime/);
   assert.doesNotMatch(run([...loaded, ev('skill', { name: 'gex-regime' })]).stderr, /gex-regime/, 'read: not asked for');
