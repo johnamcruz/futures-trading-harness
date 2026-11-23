@@ -32,8 +32,10 @@ true before the order can go (`compose_check`, the `trade-lifecycle` skill).
 - **Confluence:** the model combines independent reads from its skills
   (structure breaks, CISD, VWAP, value areas, momentum). The more agree, the
   better the trade, which the data confirms (below).
-- **Exit:** bank the swing target, then lock most of it and trail the stop
-  behind the latest confirmed 15m swing to ride the trend (`target_then_trail`,
+- **Exit:** bank the swing target, then lock the stop at the level the
+  rulebook sets below it (room for an ordinary pullback, so only part of
+  the target is locked) and trail it behind the latest confirmed 15m swing
+  to ride the trend (`target_then_trail`,
   the account's rulebook). Of every exit tested, a structure trail like this
   kept the most edge.
 - **Selective:** a valid setup is a pass when the R:R to its target is under
