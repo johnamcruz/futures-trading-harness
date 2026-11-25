@@ -158,7 +158,6 @@ test('in the briefing: the summary line carries the server\'s words when given, 
 });
 
 test('wireRunner: the words the server gave (client.barFieldDocs) reach the briefing the runner writes; none given, the old line', async () => {
-  const fs = require('fs');
   const { wireRunner } = require('../../scripts/lib/runner-wiring');
   const { validateConfig } = require('../../scripts/lib/autotrader');
   const { tmpDir } = require('../helpers');
