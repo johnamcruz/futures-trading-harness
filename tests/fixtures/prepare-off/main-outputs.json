@@ -1,5 +1,5 @@
 {
- "commit": "e1ac0a9a7",
+ "commit": "71d8ef5aa",
  "days": {
   "no-fill": {
    "passes": [
@@ -8,7 +8,7 @@
      "ran": [
       {
        "action": "trade",
-       "prompt": "sha256:8e6becb624285b53393e73d29babe89104d5a29548637e02a62abb1de68e9700 (67742 chars)",
+       "prompt": "sha256:99c55366bd18023dad120e391d6cf48cdd9abcffca111108af5b69cf4172e450 (67742 chars)",
        "result": "CYCLE RESULT: no-trade - nothing to take",
        "ok": true,
        "timedOut": false
@@ -25,7 +25,7 @@
       "FTH_CYCLE": "full",
       "FTH_CYCLE_BARS": "{\"MNQ\":\"2026-04-28T04:06:00.000Z\"}",
       "FTH_CYCLE_DESK": "market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager",
-      "FTH_CYCLE_SKILLS": "sha256:edb6c8992a6a61b8c905e7f46011499fad9f73bfc5b8de0f92d769e48e1f8fde (476 chars)",
+      "FTH_CYCLE_SKILLS": "sha256:c1e5c9fca0e0c117bc59af1946afe87f686510ffa2f30a27864ef7df0ed4663b (476 chars)",
       "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript3>.jsonl",
       "FTH_EARLY_CLOSE_DATES": "2026-11-27,2026-12-24,2027-11-26",
       "FTH_ENTRY_HOURS": "",
@@ -388,7 +388,7 @@
        "complete": true,
        "decided": true
       },
-      "prompt": "sha256:8e6becb624285b53393e73d29babe89104d5a29548637e02a62abb1de68e9700 (67742 chars)",
+      "prompt": "sha256:99c55366bd18023dad120e391d6cf48cdd9abcffca111108af5b69cf4172e450 (67742 chars)",
       "context": {
        "symbols": [
         {
@@ -1678,8 +1678,8 @@
      "sha256:5b2dd2f8eaeed4aa6611eda7fbed97e8f8773b86f23175dc82ca08cbe8e6378e (133449 chars)"
     ],
     [
-     "head-prompt/cycle-skills-1f43650ed809be4b307e6649508c721f3e3387b3799744b9cfbdcd5ab176d6f1.md",
-     "sha256:1f43650ed809be4b307e6649508c721f3e3387b3799744b9cfbdcd5ab176d6f1 (64700 chars)"
+     "head-prompt/cycle-skills-5097f9a3624f26f8e435817efc1c4ff98b50ae838ab56b1516ef9cdb42c11d3a.md",
+     "sha256:5097f9a3624f26f8e435817efc1c4ff98b50ae838ab56b1516ef9cdb42c11d3a (64700 chars)"
     ],
     [
      "head-prompt/cycle-skills-b22e628ad8f25db8e8d71a4124249af8c7532f66a9ac84a15a8df7709ccc3340.md",
@@ -1837,7 +1837,7 @@
      "ran": [
       {
        "action": "trade",
-       "prompt": "sha256:8e6becb624285b53393e73d29babe89104d5a29548637e02a62abb1de68e9700 (67742 chars)",
+       "prompt": "sha256:99c55366bd18023dad120e391d6cf48cdd9abcffca111108af5b69cf4172e450 (67742 chars)",
        "result": "CYCLE RESULT: no-trade - nothing to take",
        "ok": true,
        "timedOut": false
@@ -1854,7 +1854,7 @@
       "FTH_CYCLE": "full",
       "FTH_CYCLE_BARS": "{\"MNQ\":\"2026-04-28T04:06:00.000Z\"}",
       "FTH_CYCLE_DESK": "market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager",
-      "FTH_CYCLE_SKILLS": "sha256:edb6c8992a6a61b8c905e7f46011499fad9f73bfc5b8de0f92d769e48e1f8fde (476 chars)",
+      "FTH_CYCLE_SKILLS": "sha256:c1e5c9fca0e0c117bc59af1946afe87f686510ffa2f30a27864ef7df0ed4663b (476 chars)",
       "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript3>.jsonl",
       "FTH_EARLY_CLOSE_DATES": "2026-11-27,2026-12-24,2027-11-26",
       "FTH_ENTRY_HOURS": "",
@@ -2234,7 +2234,7 @@
        "complete": true,
        "decided": true
       },
-      "prompt": "sha256:8e6becb624285b53393e73d29babe89104d5a29548637e02a62abb1de68e9700 (67742 chars)",
+      "prompt": "sha256:99c55366bd18023dad120e391d6cf48cdd9abcffca111108af5b69cf4172e450 (67742 chars)",
       "context": {
        "symbols": [
         {
@@ -3671,7 +3671,7 @@
      "ran": [
       {
        "action": "trade",
-       "prompt": "sha256:a602420788bc544b539b7e25df097b61082a0d92792b31a4b0bda118a16e3191 (67808 chars)",
+       "prompt": "sha256:116d56b8a6f9c6cf65b24458f41e14b93a4088906d9d68e25910a290aaa07521 (67808 chars)",
        "result": "CYCLE RESULT: no-trade - nothing to take",
        "ok": true,
        "timedOut": false
@@ -3688,7 +3688,7 @@
       "FTH_CYCLE": "full",
       "FTH_CYCLE_BARS": "{\"MNQ\":\"2026-04-28T04:06:00.000Z\"}",
       "FTH_CYCLE_DESK": "market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager",
-      "FTH_CYCLE_SKILLS": "sha256:edb6c8992a6a61b8c905e7f46011499fad9f73bfc5b8de0f92d769e48e1f8fde (476 chars)",
+      "FTH_CYCLE_SKILLS": "sha256:c1e5c9fca0e0c117bc59af1946afe87f686510ffa2f30a27864ef7df0ed4663b (476 chars)",
       "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript2>.jsonl",
       "FTH_EARLY_CLOSE_DATES": "2026-11-27,2026-12-24,2027-11-26",
       "FTH_ENTRY_HOURS": "",
@@ -3980,7 +3980,7 @@
        "complete": true,
        "decided": true
       },
-      "prompt": "sha256:a602420788bc544b539b7e25df097b61082a0d92792b31a4b0bda118a16e3191 (67808 chars)",
+      "prompt": "sha256:116d56b8a6f9c6cf65b24458f41e14b93a4088906d9d68e25910a290aaa07521 (67808 chars)",
       "context": {
        "symbols": [
         {
@@ -4735,12 +4735,12 @@
      "sha256:8958c92cf593bd05692ee4d6acc6e57af3982754417c4bd8dba205b76d902c70 (134398 chars)"
     ],
     [
-     "head-prompt/cycle-skills-1f43650ed809be4b307e6649508c721f3e3387b3799744b9cfbdcd5ab176d6f1.md",
-     "sha256:1f43650ed809be4b307e6649508c721f3e3387b3799744b9cfbdcd5ab176d6f1 (64700 chars)"
-    ],
-    [
      "head-prompt/cycle-skills-296d86423b05cdc0f4e6521f17dcbda13d77a795818538e6d3d21904dbd3ea4c.md",
      "sha256:296d86423b05cdc0f4e6521f17dcbda13d77a795818538e6d3d21904dbd3ea4c (35169 chars)"
+    ],
+    [
+     "head-prompt/cycle-skills-5097f9a3624f26f8e435817efc1c4ff98b50ae838ab56b1516ef9cdb42c11d3a.md",
+     "sha256:5097f9a3624f26f8e435817efc1c4ff98b50ae838ab56b1516ef9cdb42c11d3a (64700 chars)"
     ],
     [
      "journal.jsonl",
@@ -4877,7 +4877,7 @@
      "ran": [
       {
        "action": "trade",
-       "prompt": "sha256:8e6becb624285b53393e73d29babe89104d5a29548637e02a62abb1de68e9700 (67742 chars)",
+       "prompt": "sha256:99c55366bd18023dad120e391d6cf48cdd9abcffca111108af5b69cf4172e450 (67742 chars)",
        "result": "CYCLE RESULT: no-trade - nothing to take",
        "ok": true,
        "timedOut": false
@@ -4894,7 +4894,7 @@
       "FTH_CYCLE": "full",
       "FTH_CYCLE_BARS": "{\"MNQ\":\"2026-04-28T04:06:00.000Z\"}",
       "FTH_CYCLE_DESK": "market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager",
-      "FTH_CYCLE_SKILLS": "sha256:edb6c8992a6a61b8c905e7f46011499fad9f73bfc5b8de0f92d769e48e1f8fde (476 chars)",
+      "FTH_CYCLE_SKILLS": "sha256:c1e5c9fca0e0c117bc59af1946afe87f686510ffa2f30a27864ef7df0ed4663b (476 chars)",
       "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript3>.jsonl",
       "FTH_EARLY_CLOSE_DATES": "2026-11-27,2026-12-24,2027-11-26",
       "FTH_ENTRY_HOURS": "",
@@ -5274,7 +5274,7 @@
        "complete": true,
        "decided": true
       },
-      "prompt": "sha256:8e6becb624285b53393e73d29babe89104d5a29548637e02a62abb1de68e9700 (67742 chars)",
+      "prompt": "sha256:99c55366bd18023dad120e391d6cf48cdd9abcffca111108af5b69cf4172e450 (67742 chars)",
       "context": {
        "symbols": [
         {

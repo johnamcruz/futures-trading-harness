@@ -19,20 +19,25 @@ A read, never a veto and never a setup: the priority order
 are untouched. Thresholds are hypotheses; a missing field is `unknown`.
 
 **What they are.** The broker computes them; the harness passes them
-through untouched and gives them no meaning. The line lists each field by
-its dotted path with its value on each of the last 3 bars, oldest first
-(`null`: that bar had no value); the JSON (`bar_briefing` with `json`) has
-them in full as `m3.brokerFields` (`paths`, `bars`; `omitted`: a bar's
-fields too large to keep).
+through untouched and gives them no meaning. Without the broker's
+words the line lists each field by its dotted path with its value on each of
+the last 3 bars, oldest first (`null`: that bar had no value); the JSON
+(`bar_briefing` with `json`) has them in full as `m3.brokerFields` (`paths`,
+`bars`, `shown` for the described ones; `omitted`: a bar's fields too large
+to keep).
 
-**Their meaning is the broker's.** What a field measures, its units and its
-windows come from the broker's own documentation of its server. The
-harness states none, and neither does this skill. Never guess one from its
-name, and never work one out from OHLCV. A field whose meaning you were
-not given is `unknown`; so is one that is null or missing.
+**Their meaning is the broker's.** When the broker publishes a field's
+meaning, the briefing prints it: the line then reads `Broker bar fields as
+the broker describes them`, each described field with its last 3 values (a
+share of the bar's volume, rounded, where the broker says so) and the
+broker's words in brackets. Read those words as written; the rest of the
+fields are in the JSON only. The harness states no meaning and neither does
+this skill. A field with no meaning printed, in the line or the JSON, is
+`unknown`; so is one that is null or missing. Never guess a meaning from a
+name, and never work one out from OHLCV.
 
 **Reading one whose meaning you were given.** Read it against price, never
-alone:
+alone, and at a level, not mid-range (`absorption`):
 
 - **Confirms**: it agrees with the move on this bar and the bars before,
   and price progresses with it (`momentum-and-volume`).
@@ -41,12 +46,14 @@ alone:
 - **No read**: the bars disagree, it sits near its neutral value, or it is
   `unknown`.
 
-**Confirmation only.** It is part of participation in the count
+**Confirmation only.** It is one participation vote, never decisive
 (`confluence-counting`, with volume): FOR when it confirms the
 read's side, AGAINST when it is against it, neutral otherwise. It never
 makes a setup, never moves a stop and never sizes a trade.
 
-**Evidence**: none measured.
+**Evidence**: as a mechanical confirmer it was not shown to work (26
+months); a model reading a stated meaning is untested; a context read,
+never an edge.
 
 ## Examples
 
@@ -55,6 +62,6 @@ Confirms: a long read at the opening range high; 3m momentum up; a field documen
   rising with buying reads 0.38 / 0.51 / 0.42 while price rose 6.25 pts. Item 5 FOR.
 Against: a short read at prior VAL; the same field reads -0.62 / -0.58 / -0.66 while the
   closes hold 21480.00 / 21480.50 / 21480.25. Item 5 AGAINST the short.
-Unknown: a field with no documented meaning, or no Broker bar fields line: the read rests
-  on price and volume.
+Unknown: a field whose meaning the line does not print, or no Broker bar fields line: the
+  read rests on price and volume.
 ```

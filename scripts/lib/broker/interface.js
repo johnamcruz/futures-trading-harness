@@ -31,13 +31,36 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const dataGapsOk = v => v !== null && typeof v === 'object' && !Array.isArray(v)
   && Object.entries(v).every(([root, days]) => /^[A-Z0-9]{1,8}$/.test(root) && Array.isArray(days) && days.every(g => g !== null && typeof g === 'object'
     && typeof g.day === 'string' && DATE.test(g.day) && new Date(`${g.day}T00:00:00Z`).toISOString().startsWith(g.day) && typeof g.bars === 'boolean' && typeof g.flow === 'boolean'));
+/**
+ * A server's barFields (get_server_config, optional, live and replay): the words and the presentation for the extra fields
+ * its bars carry, so the harness can print what a field means without knowing it. { "<dotted path on a bar>": { meaning,
+ * per?, digits? } }: `meaning` a non-empty one-line string (no control, format or bidi character, tab or line separator), printed verbatim, never edited or guessed; `per` the dotted path
+ * of another value on the same bar (v, or another field) the field is shown divided by; `digits` how many decimals it is shown
+ * to (0 to 6; a field with `per` states it). The harness prints a field only when its entry is valid and the bar carries it.
+ */
+const PATH = /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)*$/;
+const DIGITS = /^[0-6]$/;
+const barFieldProblems = v => {
+  if (v === null || typeof v !== 'object' || Array.isArray(v)) return ['barFields is not an object'];
+  const out = [];
+  for (const [path, e] of Object.entries(v)) {
+    if (!PATH.test(path)) out.push(`${JSON.stringify(path)} is not a dotted path`);
+    else if (e === null || typeof e !== 'object' || Array.isArray(e)) out.push(`${path}: not an object`);
+    else if (typeof e.meaning !== 'string' || !e.meaning.trim() || /[\p{Cc}\p{Cf}\u2028\u2029]/u.test(e.meaning)) out.push(`${path}: meaning is not a non-empty one-line string`);
+    else if (e.per !== undefined && (typeof e.per !== 'string' || !PATH.test(e.per))) out.push(`${path}: per is not a dotted path`);
+    else if (e.digits !== undefined && !DIGITS.test(String(e.digits))) out.push(`${path}: digits is not a whole number 0 to 6`);
+    else if (e.per !== undefined && e.digits === undefined) out.push(`${path}: a field with per states its digits`);
+  }
+  return out;
+};
+const barFieldsOk = v => barFieldProblems(v).length === 0;
 const listOf = fields => Object.fromEntries([['[]', field('array', true)], ...Object.entries(fields).map(([k, f]) => [`[].${k}`, f])]);
 
 const TOOLS = {
   // Session and accounts.
   get_server_config: {
     role: 'read', input: {},
-    result: { tradingEnabled: field('boolean', true), allowedAccountIds: field('array|string', true, 'integer[] or "any"'), allowedSymbols: field('array|string', true, 'string[] or "any"'), maxOrderSize: field('number', true), maxPositionSize: field('number', true), maxDailyLoss: field('number|string', true, 'number or "off"'), journalPath: field('string', true), tradingDayStartedAt: field('string', true), serverTime: field('string', true), replay: field('boolean', false, 'true only for a replay server (serverTime is then the replayed time); live servers omit it'), dataGaps: field('object', false, 'replay only: { <root>: [{ day, bars, flow }] }, the trading days of the replay window missing bars (the replay driver skips them) or only flow; live servers omit it', dataGapsOk) },
+    result: { tradingEnabled: field('boolean', true), allowedAccountIds: field('array|string', true, 'integer[] or "any"'), allowedSymbols: field('array|string', true, 'string[] or "any"'), maxOrderSize: field('number', true), maxPositionSize: field('number', true), maxDailyLoss: field('number|string', true, 'number or "off"'), journalPath: field('string', true), tradingDayStartedAt: field('string', true), serverTime: field('string', true), barFields: field('object', false, '{ <dotted path on a bar>: { meaning, per?, digits? } }: the words and presentation of the bars\' extra fields; the harness prints a meaning only when the server gives it', barFieldsOk), replay: field('boolean', false, 'true only for a replay server (serverTime is then the replayed time); live servers omit it'), dataGaps: field('object', false, 'replay only: { <root>: [{ day, bars, flow }] }, the trading days of the replay window missing bars (the replay driver skips them) or only flow; live servers omit it', dataGapsOk) },
   },
   list_accounts: {
     role: 'read', input: { onlyActiveAccounts: field('boolean', false, 'default true') },
@@ -196,4 +219,4 @@ function validateResult(name, data) {
   return [...new Set(problems)];
 }
 
-module.exports = { TRANSPORT, TOOLS, OUTCOMES, ENUMS, JOURNAL, GUARDRAILS, validateTools, validateResult, dataGapsOk };
+module.exports = { TRANSPORT, TOOLS, OUTCOMES, ENUMS, JOURNAL, GUARDRAILS, validateTools, validateResult, dataGapsOk, barFieldsOk, barFieldProblems };

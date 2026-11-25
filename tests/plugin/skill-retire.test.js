@@ -152,6 +152,9 @@ const ALLOWED = {
       home: [[A('market-structure-analyst'), '1h / 15m / 3m: <one line each with swing prices>'], [A('market-structure-analyst'), 'Invalidation of bias: <price and condition>']], reason: 'the role\'s own Output says it' },
   ],
   'market-snapshot': [
+    { old: "The regime reads its own trailing 500 bars, as its source did. 3-minute bars match the strategy parameters (1-minute for the flow strategies).",
+      home: [[S('market-snapshot'), "The regime reads its own trailing 500 bars, as its source did. 3-minute bars match the strategy parameters."]],
+      reason: "feat/order-flow-readable: every flow strategy was retired (2026-10-14, strategies/retired.json), so no strategy parameter set is on 1-minute bars" },
     { old: "Otherwise the harness tool `bars_fetch` (`{\"symbol\": \"MNQ\", \"timeframe\": 3}`: the runner's default, 5000 bars) writes `<FTH_HOME>/bars-scratch/MNQ-3m.json` (the path it returns) and says when its last bar closed (see the `bar-briefing` skill).",
       home: [[S('market-snapshot'), "Otherwise the harness tool `bars_fetch` (`{\"symbol\": \"MNQ\", \"timeframe\": 3}`: the runner's default count) writes `<FTH_HOME>/bars-scratch/MNQ-3m.json` (the path it returns)"]],
       reason: "feat/htf-history: the runner's bar count follows the read's window (config/analysis.json mtf.historyHours), so the skills name no count (its one home is the config)" },

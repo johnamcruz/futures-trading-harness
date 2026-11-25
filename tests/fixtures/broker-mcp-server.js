@@ -10,7 +10,7 @@
  * the newest closed seconds ago), FAKE_FLAT (no position or order),
  * FAKE_CALLS (a file it appends each tool call's name to), FAKE_ARGS (a file it
  * appends each call's name and arguments to, as JSON lines), FAKE_TRADING_OFF
- * (get_server_config reports trading disabled), FAKE_TICK (JSON merged into the
+ * (get_server_config reports trading disabled), FAKE_BAR_FIELDS (JSON: its barFields), FAKE_TICK (JSON merged into the
  * MNQ contracts: another tickSize or tickValue), FAKE_BARS (a JSON file of bars that
  * get_bars serves as they are, the server's own extra fields included, as a server whose
  * settings add fields to its bars; with FAKE_BARS_FROM_START, only those from startTime on), FAKE_BALANCE (the
@@ -56,7 +56,7 @@ const journal = entry => {
 const ok = { success: true, errorCode: 0, errorName: 'Success', errorMessage: null };
 
 const HANDLERS = {
-  get_server_config: () => ({ apiUrl: process.env.FAKE_BROKER_API_URL || 'https://api.fake-broker.test', tradingEnabled: !process.env.FAKE_TRADING_OFF, maxOrderSize: Number(process.env.FAKE_MAX_ORDER) || 1, maxPositionSize: Number(process.env.FAKE_MAX_POSITION) || 2, maxDailyLoss: process.env.FAKE_MAX_DAILY ? Number(process.env.FAKE_MAX_DAILY) : 500, allowedAccountIds: process.env.FAKE_SERVER_ACCOUNTS ? process.env.FAKE_SERVER_ACCOUNTS.split(',').map(Number) : [7], allowedSymbols: ['MNQ'], journalPath: '/tmp/j.jsonl', tradingDayStartedAt: '2026-10-06T22:00:00Z', serverTime: new Date().toISOString(), ...(process.env.FAKE_REPLAY_NOW ? { replay: true, serverTime: process.env.FAKE_REPLAY_NOW } : {}) }),
+  get_server_config: () => ({ apiUrl: process.env.FAKE_BROKER_API_URL || 'https://api.fake-broker.test', tradingEnabled: !process.env.FAKE_TRADING_OFF, maxOrderSize: Number(process.env.FAKE_MAX_ORDER) || 1, maxPositionSize: Number(process.env.FAKE_MAX_POSITION) || 2, maxDailyLoss: process.env.FAKE_MAX_DAILY ? Number(process.env.FAKE_MAX_DAILY) : 500, allowedAccountIds: process.env.FAKE_SERVER_ACCOUNTS ? process.env.FAKE_SERVER_ACCOUNTS.split(',').map(Number) : [7], allowedSymbols: ['MNQ'], journalPath: '/tmp/j.jsonl', tradingDayStartedAt: '2026-10-06T22:00:00Z', serverTime: new Date().toISOString(), ...(process.env.FAKE_BAR_FIELDS ? { barFields: JSON.parse(process.env.FAKE_BAR_FIELDS) } : {}), ...(process.env.FAKE_REPLAY_NOW ? { replay: true, serverTime: process.env.FAKE_REPLAY_NOW } : {}) }),
   list_accounts: () => state.accounts,
   get_account_snapshot: a => ({ account: state.accounts.find(x => x.id === a.accountId) || null, positions: state.positions, openOrders: state.orders, today: { realizedNetPnL: 0 } }),
   search_contracts: a => state.contracts.filter(c => c.name.startsWith(String(a.searchText).toUpperCase())),

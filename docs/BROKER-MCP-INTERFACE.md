@@ -162,7 +162,7 @@ Input: none.
 
 Result: `{ apiUrl, username, tradingEnabled, allowedAccountIds (integer[] | "any"),
 allowedSymbols (string[] | "any"), maxOrderSize, maxPositionSize,
-maxDailyLoss (number | "off"), journalPath, tradingDayStartedAt, serverTime, replay?, dataGaps? }`.
+maxDailyLoss (number | "off"), journalPath, tradingDayStartedAt, serverTime, replay?, dataGaps?, barFields? }`.
 Never returns credentials. `replay` (optional boolean) is `true` only for a
 replay server, which simulates history; its `serverTime` is then the replayed
 time. Live servers omit it. The gateway honors `FTH_REPLAY_NOW` only when the
@@ -182,6 +182,29 @@ the run trades: no decision time, not a session of a combine attempt
 normally (the flow facts absent). The training preflight warns listing the
 days without bars and notes the days without flow. The conformance check
 refuses a malformed list.
+`barFields` (optional, live and replay) is the server's own words for the
+extra fields its bars carry (`get_bars`): `{ "<dotted path on a bar>": {
+meaning, per?, digits? } }`. `meaning` is a non-empty one-line string in the
+server's words (what the value measures, its sign and its range or unit),
+with no control, format (zero-width, bidi, byte-order mark), tab or
+line-separator character (U+2028, U+2029): the conformance check refuses an
+entry that has one; the
+harness prints it verbatim beside the field in the briefing and never edits,
+shortens or writes one. `per` (optional) is the dotted path of another value
+on the same bar (`v`, or another field) the field is shown divided by, so a
+raw size reads as a share of the bar's volume; `digits` (0 to 6; required with
+`per`) is how many decimals it is shown to. The harness divides and rounds and
+nothing more (a missing, null, non-numeric, zero, negative or non-finite divisor, or a non-finite ratio, shows no value): the meaning of
+the ratio is the server's to say. The harness prints a field only when its
+entry is valid and its bar carries the field; a field without an entry, or a
+server without `barFields`, is printed as the values it was served with no
+meaning, and the agent treats it as unknown. A meaning is at most
+`prompt.brokerFieldChars` characters (`config/runner.json`, 250 as shipped)
+and at most `prompt.brokerFieldsShown` entries are printed (6), so a server
+lists the few fields a reader needs, not all of them: the rest stay in the
+bar's JSON. The conformance check refuses a malformed entry and warns about
+one the harness would leave out. What the live and replay servers add:
+[ORDER-FLOW-BAR-FIELDS-HANDOFF.md](ORDER-FLOW-BAR-FIELDS-HANDOFF.md).
 `maxOrderSize` is a whole number of contracts, 1 or more: the contract
 translator records it from each successful answer (`server` in the same local file as
 the tick specs), and the order gate refuses an entry larger than it, and

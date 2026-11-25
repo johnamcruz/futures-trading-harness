@@ -629,9 +629,18 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // removed and the frame named, -209, where it is embedded): the market-structure analyst 123885 -> 124341 full, 53760 ->
 // 54216 index; the trend-momentum analyst 82507 -> 82963 full, 49891 -> 50347 index; the risk-manager 95928 -> 96593 full,
 // 81816 -> 82481 index; the volume-liquidity analyst 51155 -> 51820 full, 35787 -> 36452 index.
+// Then the order-flow repair (feat/order-flow-readable, at the measured need: broker-bar-fields on the volume analyst's index, which
+// full mode embeds in full, +3704 bytes; absorption's flow reading-order item (full mode only: it is indexed otherwise);
+// confluence-counting's delta only with its meaning printed, +64 in every role that embeds it): the volume-liquidity analyst 51820 -> 55384 full, 36452 -> 36556
+// index; the risk-manager 96593 -> 96657 full, 82481 -> 82545 index.
+// Then the review fixes (feat/order-flow-readable): the evidence sentences (broker-bar-fields, absorption, the confluence row) say what was
+// measured, and cisd and fib-retracement say absorption counts with the setup, never alone: the risk manager 96657 -> 96661 full, 82545 -> 82549
+// index; the volume analyst 55384 -> 55618 full (index unchanged); the market-structure analyst unchanged (the cisd and fib-retracement edits are byte-neutral).
+// Then the review's one phrase for the vote ("one participation vote, never decisive" in confluence-counting, absorption, broker-bar-fields) and absorption's evidence line: the risk manager
+// 96661 -> 96678 full, 82549 -> 82566 index (the confluence row, +17); the volume analyst 55618 -> 55640 full (index unchanged).
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 124341, 'news-calendar-analyst': 10868, 'risk-manager': 96593, 'strategy-researcher': 25728, 'trade-executor': 30768, 'trade-reviewer': 9400, 'trend-momentum-analyst': 82963, 'volume-liquidity-analyst': 51820 },
-  index: { 'market-structure-analyst': 54216, 'news-calendar-analyst': 10868, 'risk-manager': 82481, 'strategy-researcher': 25728, 'trade-executor': 30757, 'trade-reviewer': 9400, 'trend-momentum-analyst': 50347, 'volume-liquidity-analyst': 36452 },
+  full: { 'market-structure-analyst': 124341, 'news-calendar-analyst': 10868, 'risk-manager': 96678, 'strategy-researcher': 25728, 'trade-executor': 30768, 'trade-reviewer': 9400, 'trend-momentum-analyst': 82963, 'volume-liquidity-analyst': 55640 },
+  index: { 'market-structure-analyst': 54216, 'news-calendar-analyst': 10868, 'risk-manager': 82566, 'strategy-researcher': 25728, 'trade-executor': 30757, 'trade-reviewer': 9400, 'trend-momentum-analyst': 50347, 'volume-liquidity-analyst': 36556 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

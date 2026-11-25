@@ -486,10 +486,9 @@ bar files through the same strategy evaluator the live scan uses.
   500-bar `get_bars`) can show those as missing.
 - Order flow is the broker server's: it puts it on its bars as extra
   fields, which the harness passes through untouched and the strategies
-  read with `field("path")` (`docs/ORDER-FLOW.md`). On a bar without them
-  those conditions are false (the order-flow pair gives no signal;
-  `value_area` can still confirm by range expansion); the harness estimates
-  nothing.
+  read with `field("path")` (`docs/ORDER-FLOW.md`; the strategies that did are
+  retired). The briefing prints the last bars' fields, with the server's own
+  words for them when it publishes any. The harness estimates nothing.
 - The hook can't see positions; only the gateway checks that `[exit]` and
   `[protect]` orders really reduce exposure. Use the gateway on every harness.
 - A broker MCP server's own guardrails may have gaps (a position flip that

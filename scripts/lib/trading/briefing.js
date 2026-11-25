@@ -468,7 +468,7 @@ function candleLevelsAt(bars, minutes, ownLevels = []) {
 }
 
 /** Each section's data and expiry, from this bar's snapshot and read. */
-function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts, clock, tick, grid = null, roundStep = null, roundError = null, own = false, keyLevels = null }) {
+function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts, clock, tick, grid = null, roundStep = null, roundError = null, own = false, keyLevels = null, barFieldDocs = null }) {
   // A price level as the model reads it, on the contract's tick (grid: contracts.js; two decimals for a root it doesn't
   // list). Display only: room, R and every other decision input are computed from the unrounded levels.
   const level = x => (Number.isFinite(x) ? (grid ? levelOnTick(x, grid) : round2(x)) : null);
@@ -700,7 +700,7 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
         cisd: cisdBlock(bars, level, causal),
         // The broker's own fields on the last 3 bars, as served (broker-fields.js): no meaning given here. In the JSON in
         // full; the summary's "Broker bar fields" line says them compactly (not repeated in the detail: SUMMARY_ONLY).
-        brokerFields: brokerFieldsAt(bars, bars.length - 1),
+        brokerFields: brokerFieldsAt(bars, bars.length - 1, { docs: barFieldDocs }),
         // Per timeframe, the last completed candle's facts and the levels it met; the next swing target each side.
         // Not on a frame's own bars: its candle facts are the runner's (buildFrameBriefing), one value per level.
         // fvgRelations: how each candle met the 5m, 15m and 1h gaps' edges as they stood at its open (fvg-frames.js).
@@ -859,7 +859,7 @@ function htfTrendsOf(raw, minutes) {
  * The briefing for `symbol`'s closed bars on `minutes`-minute bars: each section from `prev` while it is
  * valid (same symbol and bar size, not expired), else recomputed with a new version.
  */
-function buildBriefing({ symbol, contractId = null, bars: raw, minutes, fineBars = null, prev = null, scan = [], scanError = null, blackouts = null, clock = null, roundSteps = null, now = new Date(), own = false, keyLevels = null, mtfMode = null, positionOpen = false, gamma = null }) {
+function buildBriefing({ symbol, contractId = null, bars: raw, minutes, fineBars = null, prev = null, scan = [], scanError = null, blackouts = null, clock = null, roundSteps = null, now = new Date(), own = false, keyLevels = null, mtfMode = null, positionOpen = false, gamma = null, barFieldDocs = null }) {
   const bars = normalizeBars(raw);
   if (bars.length < 3) throw new Error(`need closed bars, got ${bars.length}`);
   const last = bars[bars.length - 1];
@@ -887,7 +887,7 @@ function buildBriefing({ symbol, contractId = null, bars: raw, minutes, fineBars
   // 1m bars (a 1m lane's) build a timeframe the base bars can't (5m from 3m); only those closed by this bar's close.
   const fine = Array.isArray(fineBars) && fineBars.length ? normalizeBars(fineBars) : null;
   const fresh = computeSections({ bars, fine, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts, clock, tick, grid,
-    roundStep: roundStepFor(root, roundSteps), roundError: roundStepError(root, roundSteps), own, keyLevels });
+    roundStep: roundStepFor(root, roundSteps), roundError: roundStepError(root, roundSteps), own, keyLevels, barFieldDocs });
   // The base timeframe's timing against the side the entry rule allows (ltf-timing.js, BG), from these closed bars: the
   // runner's briefing only (a frame's is another timeframe's read).
   // The gamma line's flag when the code printed one (gamma-line.js, a boolean, never the word): only what the gate's situational trigger reads;

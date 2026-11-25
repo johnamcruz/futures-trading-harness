@@ -31,11 +31,26 @@ progress (`(c-o)`, `m3.bar.rangeAtr`, whether price got past the level).
 A bar's volume has no side: from bars, absorption is a guess at who
 traded, never a measurement.
 
+**Reading order for flow** (context and confirmation only: as a mechanical
+confirmer flow was not shown to work; a model reading a stated meaning is
+untested). The day so far first (`day-context`: a read of the morning, not
+a predictor of the rest) and the open against the prior value area, then a mapped level, then flow.
+
+- Mid-range, away from a mapped level, or in the day's balance
+  (`day-context`) → no flow read: neutral, nothing to confirm.
+- At a level, a field whose meaning the briefing prints agrees with the
+  level's read → one participation vote, never decisive
+  (`confluence-counting`).
+- Heavy one-sided flow the price does not pay at a level (effort without
+  result) → absorption, which alone is not an entry: wait for the other
+  side to take over and price to close through local structure
+  (`bos-vs-choch`).
+
 **Broker fields** a broker adds to its bars (the harness computes none of
 them): `broker-bar-fields`. Never derive one from OHLCV; without them,
 `unknown`.
 
-**Evidence**: none measured on bars yet.
+**Evidence**: as a mechanical confirmer, not shown to work.
 
 ## Examples
 

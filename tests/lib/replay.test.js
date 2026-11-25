@@ -1604,3 +1604,22 @@ test('cycleDataInPrompt is part of what makes a run a run: absent, nothing is ad
   assert.strictEqual(cmp.ok, false);
   assert.ok(cmp.refusals.some(x => /cfg\.cycleDataInPrompt/.test(x)), JSON.stringify(cmp.refusals));
 });
+
+test('runner wiring: the server\'s own words for its bar fields are read once at start, from the config it gave; none (or a server that cannot say) is none, never a guess', async () => {
+  const WORDS = { 'x.a': { meaning: 'what x.a is, in the server\'s words', per: 'v', digits: 2 }, 'x.b': { meaning: '' } };
+  const said = [];
+  const fake = (config, fail = false) => ({ verify: async () => {}, serverConfig: async () => { if (fail) throw new Error('down'); return config; }, close: () => {} });
+  const { barFieldDocsFrom } = require('../../scripts/lib/runner-wiring');
+  const open = c => async () => ({ barFieldDocs: await barFieldDocsFrom(c, null, m => said.push(m)) });
+  const withWords = await open(fake({ barFields: WORDS }))();
+  assert.deepStrictEqual(withWords.barFieldDocs, { 'x.a': WORDS['x.a'] });
+  assert.match(said.join(), /x\.b: meaning is not a non-empty one-line string; not printed/);
+  assert.strictEqual((await open(fake({}))()).barFieldDocs, null);
+  assert.strictEqual((await open(fake({}, true))()).barFieldDocs, null, 'a server that cannot be asked gives no words');
+  assert.strictEqual((await open({ verify: async () => {}, close: () => {} })()).barFieldDocs, null, 'a client without a config read');
+  // A paper run (a real server with trading off) reads the words like live and replay: they are what its judged edge is read with. A call that fails costs nothing.
+  const viaOpen = async (serverConfig, cfgOver = { paper: true }) => openRunnerBroker({ cfg: { account: '7', ...cfgOver }, root: ROOT, env: {}, open: () => ({ verify: async () => {}, serverConfig, close: () => {} }), log: () => {} });
+  assert.deepStrictEqual((await viaOpen(async () => ({ barFields: WORDS }))).barFieldDocs, { 'x.a': WORDS['x.a'] });
+  assert.strictEqual((await viaOpen(async () => ({}))).barFieldDocs, null);
+  assert.strictEqual((await viaOpen(async () => { throw new Error('down'); })).barFieldDocs, null, 'a failing call costs nothing: the run opens, no words');
+});

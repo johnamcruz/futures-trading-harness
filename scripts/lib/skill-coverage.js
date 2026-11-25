@@ -26,7 +26,6 @@ const fs = require('fs');
 const path = require('path');
 
 const WORKFLOW = Object.freeze({
-  'broker-bar-fields': 'a broker server\'s extra bar fields: a reference for strategy authors and the broker interface',
   'design-self-review': 'the training loop\'s proposer prompt, never shown to the trader',
   'end-of-day': 'the end-of-day cycle\'s own skill: its prompt names it',
   // gex-regime is class d, the nearest fit: no class covers a trading skill that is inert until a code line exists (b, a

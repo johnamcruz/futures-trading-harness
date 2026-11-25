@@ -106,6 +106,7 @@
     "brokerFieldsKept": 3,
     "brokerFieldsBytes": 600,
     "brokerFieldChars": 250,
+    "brokerFieldsShown": 6,
     "cycleDataMaxBytes": 48000,
     "situationalSkillBytes": 90431,
     "maxPromptBytes": 126976,

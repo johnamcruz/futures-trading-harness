@@ -148,8 +148,9 @@ test('CORE: the composed bar\'s reads the gate requires (SITUATIONAL taught in t
   // Then 85822 (feat/mtf-structure, raised with the owner's approval 2026-11-17): bar-briefing's `MTF structure` paragraph
   // (+558, the measured need); then 85895 (SPEC v3, owner-approved 2026-11-18: its clause naming each level's `pullback against the <parent>`
   // phrase, +73, the measured need); then 86560 (SPEC v4, owner-approved 2026-11-18: the four reading rules in its
-  // always-loaded paragraph and the below line's frame named, +665, the measured need).
-  assert.ok(Buffer.byteLength(prompt) <= 86560, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
+  // always-loaded paragraph and the below line's frame named, +665, the measured need); then 86624 (feat/order-flow-readable: confluence-counting's participation row says delta only
+  // when the briefing prints its meaning, +64, the measured need); then 86628 (the review: the row reads "a described delta at a level: one weak confirmation", +4); then 86645 (the row's one phrase for the vote, +17, the measured need).
+  assert.ok(Buffer.byteLength(prompt) <= 86645, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
   // Only the head trader's prompt grows: no other role's prompt embeds trade-lifecycle (the risk manager's embeds
   // confluence-counting and invalidation as before; its prompt is unchanged, pinned in trade-session-split.test.js).
   for (const [name, a] of Object.entries(index.agent)) if (name !== H.HEAD_AGENT && a.prompt) assert.ok(!a.prompt.includes('<skill name="trade-lifecycle">'), name);
