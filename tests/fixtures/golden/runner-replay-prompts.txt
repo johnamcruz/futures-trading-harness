@@ -869,14 +869,6 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
    0.35 ADR; neutral: both sides), and the range against the average daily
    range (`rangeVsAdr`, over 10 days).
 
-6.
-  **Flow** (`broker-bar-fields`; context, no measured edge): day type
-   and open first (item 5), then a mapped level, then flow.
-   - Mid-range → no flow read; stand aside in the middle of balance.
-   - Heavy one-sided flow the price does not pay at a level →
-     absorption (`absorption`), not an entry: wait for the other side
-     and a close through local structure.
-
 ## Examples
 
 ```text
@@ -2344,14 +2336,6 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
    extended, under 2 IBs; trend: 2 IBs or more, or 1 from a narrow IB under
    0.35 ADR; neutral: both sides), and the range against the average daily
    range (`rangeVsAdr`, over 10 days).
-
-6.
-  **Flow** (`broker-bar-fields`; context, no measured edge): day type
-   and open first (item 5), then a mapped level, then flow.
-   - Mid-range → no flow read; stand aside in the middle of balance.
-   - Heavy one-sided flow the price does not pay at a level →
-     absorption (`absorption`), not an entry: wait for the other side
-     and a close through local structure.
 
 ## Examples
 
@@ -3821,14 +3805,6 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
    0.35 ADR; neutral: both sides), and the range against the average daily
    range (`rangeVsAdr`, over 10 days).
 
-6.
-  **Flow** (`broker-bar-fields`; context, no measured edge): day type
-   and open first (item 5), then a mapped level, then flow.
-   - Mid-range → no flow read; stand aside in the middle of balance.
-   - Heavy one-sided flow the price does not pay at a level →
-     absorption (`absorption`), not an entry: wait for the other side
-     and a close through local structure.
-
 ## Examples
 
 ```text
@@ -5287,14 +5263,6 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
    extended, under 2 IBs; trend: 2 IBs or more, or 1 from a narrow IB under
    0.35 ADR; neutral: both sides), and the range against the average daily
    range (`rangeVsAdr`, over 10 days).
-
-6.
-  **Flow** (`broker-bar-fields`; context, no measured edge): day type
-   and open first (item 5), then a mapped level, then flow.
-   - Mid-range → no flow read; stand aside in the middle of balance.
-   - Heavy one-sided flow the price does not pay at a level →
-     absorption (`absorption`), not an entry: wait for the other side
-     and a close through local structure.
 
 ## Examples
 
@@ -6851,14 +6819,6 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
    0.35 ADR; neutral: both sides), and the range against the average daily
    range (`rangeVsAdr`, over 10 days).
 
-6.
-  **Flow** (`broker-bar-fields`; context, no measured edge): day type
-   and open first (item 5), then a mapped level, then flow.
-   - Mid-range → no flow read; stand aside in the middle of balance.
-   - Heavy one-sided flow the price does not pay at a level →
-     absorption (`absorption`), not an entry: wait for the other side
-     and a close through local structure.
-
 ## Examples
 
 ```text
@@ -8411,14 +8371,6 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
    0.35 ADR; neutral: both sides), and the range against the average daily
    range (`rangeVsAdr`, over 10 days).
 
-6.
-  **Flow** (`broker-bar-fields`; context, no measured edge): day type
-   and open first (item 5), then a mapped level, then flow.
-   - Mid-range → no flow read; stand aside in the middle of balance.
-   - Heavy one-sided flow the price does not pay at a level →
-     absorption (`absorption`), not an entry: wait for the other side
-     and a close through local structure.
-
 ## Examples
 
 ```text
@@ -9892,14 +9844,6 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
    0.35 ADR; neutral: both sides), and the range against the average daily
    range (`rangeVsAdr`, over 10 days).
 
-6.
-  **Flow** (`broker-bar-fields`; context, no measured edge): day type
-   and open first (item 5), then a mapped level, then flow.
-   - Mid-range → no flow read; stand aside in the middle of balance.
-   - Heavy one-sided flow the price does not pay at a level →
-     absorption (`absorption`), not an entry: wait for the other side
-     and a close through local structure.
-
 ## Examples
 
 ```text
@@ -11372,14 +11316,6 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
    extended, under 2 IBs; trend: 2 IBs or more, or 1 from a narrow IB under
    0.35 ADR; neutral: both sides), and the range against the average daily
    range (`rangeVsAdr`, over 10 days).
-
-6.
-  **Flow** (`broker-bar-fields`; context, no measured edge): day type
-   and open first (item 5), then a mapped level, then flow.
-   - Mid-range → no flow read; stand aside in the middle of balance.
-   - Heavy one-sided flow the price does not pay at a level →
-     absorption (`absorption`), not an entry: wait for the other side
-     and a close through local structure.
 
 ## Examples
 
@@ -12927,14 +12863,6 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
    0.35 ADR; neutral: both sides), and the range against the average daily
    range (`rangeVsAdr`, over 10 days).
 
-6.
-  **Flow** (`broker-bar-fields`; context, no measured edge): day type
-   and open first (item 5), then a mapped level, then flow.
-   - Mid-range → no flow read; stand aside in the middle of balance.
-   - Heavy one-sided flow the price does not pay at a level →
-     absorption (`absorption`), not an entry: wait for the other side
-     and a close through local structure.
-
 ## Examples
 
 ```text
@@ -14415,14 +14343,6 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
    0.35 ADR; neutral: both sides), and the range against the average daily
    range (`rangeVsAdr`, over 10 days).
 
-6.
-  **Flow** (`broker-bar-fields`; context, no measured edge): day type
-   and open first (item 5), then a mapped level, then flow.
-   - Mid-range → no flow read; stand aside in the middle of balance.
-   - Heavy one-sided flow the price does not pay at a level →
-     absorption (`absorption`), not an entry: wait for the other side
-     and a close through local structure.
-
 ## Examples
 
 ```text
@@ -15804,14 +15724,6 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
    extended, under 2 IBs; trend: 2 IBs or more, or 1 from a narrow IB under
    0.35 ADR; neutral: both sides), and the range against the average daily
    range (`rangeVsAdr`, over 10 days).
-
-6.
-  **Flow** (`broker-bar-fields`; context, no measured edge): day type
-   and open first (item 5), then a mapped level, then flow.
-   - Mid-range → no flow read; stand aside in the middle of balance.
-   - Heavy one-sided flow the price does not pay at a level →
-     absorption (`absorption`), not an entry: wait for the other side
-     and a close through local structure.
 
 ## Examples
 
