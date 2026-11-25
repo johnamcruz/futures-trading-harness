@@ -106,8 +106,8 @@ async function openRunnerBroker({ cfg, root, env = process.env, open = openAdapt
     // and trades only an account on the broker's allow-list (a confirmed replay is exempt).
     const config = cfg.paper ? null : await client.serverConfig();
     // The server's own words for its bar fields (get_server_config barFields), read once: the briefing prints them (broker-fields.js).
-    // A paper run asks the server nothing more for them.
-    client.barFieldDocs = cfg.paper ? null : await barFieldDocsFrom(client, config, log);
+    // A paper run reads them too (a real server with trading off: its judged edge is read with the same words).
+    client.barFieldDocs = await barFieldDocsFrom(client, config, log);
     const why = cfg.paper ? null : liveRunBlocked({ broker: b, config, env, accountId: cfg.account });
     if (why) throw new Error(why);
     // A live run on an account the user marks as a prop account starts only with its profile's attempt running: the

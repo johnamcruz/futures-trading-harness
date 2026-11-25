@@ -1617,9 +1617,9 @@ test('runner wiring: the server\'s own words for its bar fields are read once at
   assert.strictEqual((await open(fake({}))()).barFieldDocs, null);
   assert.strictEqual((await open(fake({}, true))()).barFieldDocs, null, 'a server that cannot be asked gives no words');
   assert.strictEqual((await open({ verify: async () => {}, close: () => {} })()).barFieldDocs, null, 'a client without a config read');
-  // A paper run asks the server nothing for them (no extra get_server_config call at start).
-  let asked = 0;
-  const paper = await openRunnerBroker({ cfg: { account: '7', paper: true }, root: ROOT, env: {}, open: () => ({ verify: async () => {}, serverConfig: async () => { asked += 1; return { barFields: WORDS }; }, close: () => {} }), log: () => {} });
-  assert.strictEqual(asked, 0);
-  assert.strictEqual(paper.barFieldDocs, null);
+  // A paper run (a real server with trading off) reads the words like live and replay: they are what its judged edge is read with. A call that fails costs nothing.
+  const viaOpen = async (serverConfig, cfgOver = { paper: true }) => openRunnerBroker({ cfg: { account: '7', ...cfgOver }, root: ROOT, env: {}, open: () => ({ verify: async () => {}, serverConfig, close: () => {} }), log: () => {} });
+  assert.deepStrictEqual((await viaOpen(async () => ({ barFields: WORDS }))).barFieldDocs, { 'x.a': WORDS['x.a'] });
+  assert.strictEqual((await viaOpen(async () => ({}))).barFieldDocs, null);
+  assert.strictEqual((await viaOpen(async () => { throw new Error('down'); })).barFieldDocs, null, 'a failing call costs nothing: the run opens, no words');
 });
