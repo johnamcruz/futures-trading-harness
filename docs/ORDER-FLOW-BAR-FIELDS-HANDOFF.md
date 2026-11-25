@@ -15,7 +15,9 @@ In `get_server_config`, one optional key, `barFields`
 to see, an entry `{ meaning, per?, digits? }` keyed by the field's dotted
 path on a bar.
 
-- `meaning`: one line, the server's own words, at most 250 characters:
+- `meaning`: one line, the server's own words, at most 250 characters, with no
+  control, zero-width, bidi, byte-order-mark, tab or line-separator character
+  (the conformance check refuses it):
   what the value measures, which sign is which side, and its range or unit.
   The live server writes it from its design document; the replay server
   carries the same text (the replay reproduces the live server's output, so
@@ -29,6 +31,8 @@ path on a bar.
   any value on the bar, such as a window volume), and otherwise say in
   the meaning which volume the share is of, so a reader does not read a share
   above 1 as an error.
+  The harness shows no value for a missing, null, non-numeric, zero, negative or
+  non-finite divisor, or a non-finite ratio.
 - `digits`: decimals to show (0 to 6). Required with `per`; give it on a
   bounded score too (two is enough for a value in -1 to 1) so the line is
   not 17 decimals wide.

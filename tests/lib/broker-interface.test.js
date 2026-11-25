@@ -621,7 +621,7 @@ test('barFields (get_server_config, optional): a meaning per field, per and digi
   for (const [bad, why] of [
     [{ 'x.a': { meaning: '' } }, /meaning/], [{ 'x.a': { meaning: 'a\nb' } }, /meaning/], [{ 'x.a': {} }, /meaning/], [{ 'x.a': { meaning: 'm', per: 'v' } }, /states its digits/],
     [{ 'x.a': { meaning: 'm', per: 3, digits: 1 } }, /per is not/], [{ 'x.a': { meaning: 'm', digits: 7 } }, /digits/], [{ 'x.a': { meaning: 'm', digits: 1.5 } }, /digits/],
-    [{ 'x.a': { meaning: 'a\u2028b' } }, /meaning/], [{ 'x.a': { meaning: 'a\u2029b' } }, /meaning/], [{ 'x.a': { meaning: 'a\u0000b' } }, /meaning/], [{ 'x.a': { meaning: 'a\tb' } }, /meaning/],
+    [{ 'x.a': { meaning: 'a\u2028b' } }, /meaning/], [{ 'x.a': { meaning: 'a\u200bb' } }, /meaning/], [{ 'x.a': { meaning: 'a\u202eb' } }, /meaning/], [{ 'x.a': { meaning: '\ufeffa' } }, /meaning/], [{ 'x.a': { meaning: 'a\u2029b' } }, /meaning/], [{ 'x.a': { meaning: 'a\u0000b' } }, /meaning/], [{ 'x.a': { meaning: 'a\tb' } }, /meaning/],
     [{ 'x.a': { meaning: 'a\u007fb' } }, /meaning/], [{ 'x.a': { meaning: 'a\u0085b' } }, /meaning/], [{ 'x.a': { meaning: 'a\u009fb' } }, /meaning/],
     [{ 'x a': { meaning: 'm' } }, /dotted path/], [{ 'x.a': 'm' }, /not an object/], [[], /not an object/], [null, /not an object/],
   ]) assert.match(barFieldProblems(bad).join(), why, JSON.stringify(bad));

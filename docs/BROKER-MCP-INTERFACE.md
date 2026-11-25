@@ -185,13 +185,16 @@ refuses a malformed list.
 `barFields` (optional, live and replay) is the server's own words for the
 extra fields its bars carry (`get_bars`): `{ "<dotted path on a bar>": {
 meaning, per?, digits? } }`. `meaning` is a non-empty one-line string in the
-server's words (what the value measures, its sign and its range or unit); the
+server's words (what the value measures, its sign and its range or unit),
+with no control, format (zero-width, bidi, byte-order mark), tab or
+line-separator character (U+2028, U+2029): the conformance check refuses an
+entry that has one; the
 harness prints it verbatim beside the field in the briefing and never edits,
 shortens or writes one. `per` (optional) is the dotted path of another value
 on the same bar (`v`, or another field) the field is shown divided by, so a
 raw size reads as a share of the bar's volume; `digits` (0 to 6; required with
 `per`) is how many decimals it is shown to. The harness divides and rounds and
-nothing more (a missing, null or zero divisor shows no value): the meaning of
+nothing more (a missing, null, non-numeric, zero, negative or non-finite divisor, or a non-finite ratio, shows no value): the meaning of
 the ratio is the server's to say. The harness prints a field only when its
 entry is valid and its bar carries the field; a field without an entry, or a
 server without `barFields`, is printed as the values it was served with no
