@@ -73,8 +73,8 @@ test('the flow teaching states what was measured and keeps absorption with the s
   assert.ok(ab.includes("in the day's balance (`day-context`) → no flow read"));
   assert.match(flat(read('skills/day-context/SKILL.md')), /is balance \(the edges are its levels/);
   // Absorption alone is never the entry: with the setup.
-  assert.ok(flat(read('skills/cisd/SKILL.md')).includes('`absorption` in the zone counts with the setup, never alone'));
-  assert.ok(flat(read('skills/fib-retracement/SKILL.md')).includes('or, with the setup, absorption at the zone (`absorption`)'));
+  assert.ok(flat(read('skills/cisd/SKILL.md')).includes('`absorption` there counts, with the setup'));
+  assert.ok(flat(read('skills/fib-retracement/SKILL.md')).includes('or, with the setup, absorption (`absorption`)'));
   // A described delta is one weak confirmation at a level.
   assert.ok(flat(read('skills/confluence-counting/SKILL.md')).includes('a described delta at a level: one weak confirmation (`broker-bar-fields`)'));
   // No skill still says the flow strategies set a bar size.

@@ -45,10 +45,10 @@ not a bounce. A close through the origin, or well beyond 0.79, says the leg
 failed.
 
 **Confirmation** of a bounce at the zone: a rejection candle
-(`candle-reading`), or, with the setup, absorption at the zone (`absorption`): effort
+(`candle-reading`), or, with the setup, absorption (`absorption`): effort
 without result, heavy volume with little progress into the zone, or the
-broker's own bar fields showing the other side absorbed, where a bar
-carries them (never derived from OHLCV).
+broker's own bar fields showing the other side absorbed, where given
+(never derived from OHLCV).
 
 **Evidence** (Train, docs/research/mtf-setup-catalog.md): buying a 0.5 or
 0.618 retrace with the 4h trend lost after costs (F5): depth alone is no

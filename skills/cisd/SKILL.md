@@ -54,10 +54,9 @@ noise. The stronger one has a strong displacement candle (its strength
 and close: an engulfing ranks with other strong ones).
 
 **OTE and bounce** (`fib-retracement`): a strong CISD's `leg` gives
-`ote`: support, never a wait (the 15m CISD is the setup). A completed
-candle closing back the CISD's way in it (`candle-reading`) or
-`absorption` in the zone counts with the setup, never alone. Never
-anticipate the bounce.
+`ote`: support, never a wait (the 15m CISD is the setup). A candle
+closing back the CISD's way in it (`candle-reading`) or `absorption`
+there counts, with the setup. Never anticipate the bounce.
 
 ## Examples
 
