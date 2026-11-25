@@ -633,9 +633,12 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // full mode embeds in full, +3704 bytes; absorption's flow reading-order item (full mode only: it is indexed otherwise);
 // confluence-counting's delta only with its meaning printed, +64 in every role that embeds it): the volume-liquidity analyst 51820 -> 55384 full, 36452 -> 36556
 // index; the risk-manager 96593 -> 96657 full, 82481 -> 82545 index.
+// Then the review fixes (feat/order-flow-readable): the evidence sentences (broker-bar-fields, absorption, the confluence row) say what was
+// measured, and cisd and fib-retracement say absorption counts with the setup, never alone: the risk manager 96657 -> 96661 full, 82545 -> 82549
+// index; the volume analyst 55384 -> 55618 full (index unchanged); the market-structure analyst 124341 -> 124348 full (cisd, fib-retracement).
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 124341, 'news-calendar-analyst': 10868, 'risk-manager': 96657, 'strategy-researcher': 25728, 'trade-executor': 30768, 'trade-reviewer': 9400, 'trend-momentum-analyst': 82963, 'volume-liquidity-analyst': 55384 },
-  index: { 'market-structure-analyst': 54216, 'news-calendar-analyst': 10868, 'risk-manager': 82545, 'strategy-researcher': 25728, 'trade-executor': 30757, 'trade-reviewer': 9400, 'trend-momentum-analyst': 50347, 'volume-liquidity-analyst': 36556 },
+  full: { 'market-structure-analyst': 124348, 'news-calendar-analyst': 10868, 'risk-manager': 96661, 'strategy-researcher': 25728, 'trade-executor': 30768, 'trade-reviewer': 9400, 'trend-momentum-analyst': 82963, 'volume-liquidity-analyst': 55618 },
+  index: { 'market-structure-analyst': 54216, 'news-calendar-analyst': 10868, 'risk-manager': 82549, 'strategy-researcher': 25728, 'trade-executor': 30757, 'trade-reviewer': 9400, 'trend-momentum-analyst': 50347, 'volume-liquidity-analyst': 36556 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

@@ -26,8 +26,7 @@ LLMs are bad at indicator arithmetic. This skill runs it in code.
    levels, and the multi-timeframe read up to the 4-hour trend (its EMA50
    vote needs about 4000 3-minute bars). The regime reads its own trailing
    500 bars, as its source did.
-   3-minute bars match the strategy parameters (1-minute for the flow
-   strategies).
+   3-minute bars match the strategy parameters.
 2. (The file is the broker's `get_bars` JSON; a CSV file works too. The
    tools read only JSON and CSV.)
 3. Call the harness tool `market_snapshot` with the file. The volume

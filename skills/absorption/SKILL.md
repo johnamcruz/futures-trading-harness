@@ -31,12 +31,14 @@ progress (`(c-o)`, `m3.bar.rangeAtr`, whether price got past the level).
 A bar's volume has no side: from bars, absorption is a guess at who
 traded, never a measurement.
 
-**Reading order for flow** (context and confirmation; no edge measured):
-day type and the open against the prior value area first
-(`vwap-volume-profile`), then a mapped level, then flow.
+**Reading order for flow** (context and confirmation only: as a mechanical
+confirmer flow was not shown to work; a model reading a stated meaning is
+untested). The day so far first (`day-context`: a read, not a measured
+filter, since the day type is not recognisable early) and the open against
+the prior value area, then a mapped level, then flow.
 
-- Mid-range, away from a mapped level, in the middle of balance → no flow
-  read: neutral, nothing to confirm.
+- Mid-range, away from a mapped level, or in the day's balance
+  (`day-context`) → no flow read: neutral, nothing to confirm.
 - At a level, a field whose meaning the briefing prints agrees with the
   level's read → one confirmation (`confluence-counting`).
 - Heavy one-sided flow the price does not pay at a level (effort without

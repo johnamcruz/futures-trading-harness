@@ -45,7 +45,7 @@ not a bounce. A close through the origin, or well beyond 0.79, says the leg
 failed.
 
 **Confirmation** of a bounce at the zone: a rejection candle
-(`candle-reading`), or absorption at the zone (`absorption`): effort
+(`candle-reading`), or, with the setup, absorption at the zone (`absorption`): effort
 without result, heavy volume with little progress into the zone, or the
 broker's own bar fields showing the other side absorbed, where a bar
 carries them (never derived from OHLCV).

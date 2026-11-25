@@ -61,3 +61,22 @@ test('broker-bar-fields: reached by its AGENTS.md index line; on the volume anal
     assert.strictEqual(r.index.includes('broker-bar-fields'), r.name === 'volume-liquidity-analyst', r.name);
   }
 });
+
+test('the flow teaching states what was measured and keeps absorption with the setup (the review: not "none measured")', () => {
+  const evidence = flat(read(SKILL));
+  assert.ok(evidence.includes('as a mechanical confirmer it was not shown to work (26 months); a model reading a stated meaning is untested'), 'broker-bar-fields: what was measured');
+  assert.doesNotMatch(evidence, /none measured/);
+  const ab = flat(read('skills/absorption/SKILL.md'));
+  assert.ok(ab.includes('as a mechanical confirmer flow was not shown to work; a model reading a stated meaning is untested'), 'absorption: what was measured');
+  // The day type and balance are day-context's words, and the day type is a read, not a measured filter.
+  assert.ok(ab.includes('The day so far first (`day-context`: a read, not a measured filter, since the day type is not recognisable early)'));
+  assert.ok(ab.includes("in the day's balance (`day-context`) → no flow read"));
+  assert.match(flat(read('skills/day-context/SKILL.md')), /is balance \(the edges are its levels/);
+  // Absorption alone is never the entry: with the setup.
+  assert.ok(flat(read('skills/cisd/SKILL.md')).includes('`absorption` in the zone counts with the setup, never alone'));
+  assert.ok(flat(read('skills/fib-retracement/SKILL.md')).includes('or, with the setup, absorption at the zone (`absorption`)'));
+  // A described delta is one weak confirmation at a level.
+  assert.ok(flat(read('skills/confluence-counting/SKILL.md')).includes('a described delta at a level: one weak confirmation (`broker-bar-fields`)'));
+  // No skill still says the flow strategies set a bar size.
+  for (const f of ['skills/market-snapshot/SKILL.md', 'skills/timeframe-sources/SKILL.md']) assert.doesNotMatch(flat(read(f)), /for the flow strategies/, f);
+});

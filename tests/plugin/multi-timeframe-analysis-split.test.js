@@ -85,6 +85,8 @@ const ALLOWED = [
 // home to its edited text, and a late edit that matches nothing fails.
 const { withLate } = require('./skill-split-late');
 const LATE = [
+  { from: "3 minutes (1 minute for the flow strategies)", to: "3 minutes",
+    reason: "feat/order-flow-readable: every flow strategy was retired (2026-10-14, strategies/retired.json), so no trigger is on 1-minute bars for one" },
   { from: "Swing structure: higher highs and higher lows (HH/HL), lower highs and lower lows (LH/LL), mixed, or unclear (fewer than two confirmed swing highs or lows: no structure vote).",
     to: "Swing structure: higher highs and higher lows (HH/HL), lower highs and lower lows (LH/LL), mixed, or few-swings (fewer than two confirmed swing highs or lows: no structure vote).",
     reason: "round 20 (feat/chop-read): the swing-structure vote `unclear` is renamed `few-swings` (mtf.js), so the class word `unclear` has one meaning" },

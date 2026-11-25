@@ -51,7 +51,9 @@ alone, and at a level, not mid-range (`absorption`):
 read's side, AGAINST when it is against it, neutral otherwise. It never
 makes a setup, never moves a stop and never sizes a trade.
 
-**Evidence**: none measured: a context read, never an edge.
+**Evidence**: as a mechanical confirmer it was not shown to work (26
+months); a model reading a stated meaning is untested; a context read,
+never an edge.
 
 ## Examples
 
