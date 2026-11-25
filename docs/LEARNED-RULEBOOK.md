@@ -165,7 +165,7 @@ rulebook. Today every multiplier is 1 (no items), so nothing changes.
   score, gate result or adherence finding about a flow strategy, or about
   `value_area`'s flow branch, is drawn from them. The other strategies are
   scored there as usual, on the months the replay server serves bars for.
-  **Attempts of a policy with a flow branch** (`prop_flow_1m`, or
+  **Attempts of a policy with a flow branch** (retired; `prop_flow_1m`, or
   `prop_portfolio` with `value_area`) on a window that is not wholly
   covered:
   - **coverage is decided at the start, never by the outcome:** an attempt
@@ -206,7 +206,7 @@ rulebook. Today every multiplier is 1 (no items), so nothing changes.
   strategies in the role they already have.
 
   **The tuning and held-out halves for flow parameters.** Inside coverage,
-  the flow parameters (R34) are set on the **tuning half**, Train (2021-05
+  the flow parameters (R34, retired 2026-10-14) are set on the **tuning half**, Train (2021-05
   to 2023-06, 26 months; calibration inside its folds, R5), and judged on
   the **held-out half**, Select and Out-of-sample (2023-07 to 2025-06, 24
   months), which choose and judge as they do for every other value, under
@@ -229,7 +229,7 @@ rulebook. Today every multiplier is 1 (no items), so nothing changes.
   - Select and Out-of-sample months (the held-out half) are used **only for
     judging, each month once**, and every such look is logged in the ledger
     (R16; an Out-of-sample look counts against its budget). The months the
-    parity look already touched (March to June and August 2024, R34) count
+    parity look already touched (March to June and August 2024, R34, retired) count
     as used;
   - Recent's covered months stay reserved (R16), as for every other use;
   - departures seen on these windows give no candidate claims (R22 is
@@ -648,7 +648,7 @@ replay server's history only, not trusted live.
 **R37. Pre-registered hypothesis: expansion against the bar's delta**
 (owner's decision, 2026-10-13; registered before any held-out look). One
 hypothesis, entered in the claim registry (R11) beside the flow
-strategies' claims (R34):
+strategies' claims (R34, retired 2026-10-14):
 
 > On 1m expansion bars (range ≥ 1.5-2× ATR), when `flow.delta` opposes the
 > bar's direction, the move over the next 3-5 bars continues further than
@@ -690,7 +690,7 @@ strategies' claims (R34):
 - **Judged once.** The frozen specification is measured once on held-out
   months: Select and Out-of-sample, the held-out half for flow parameters
   (section 4), leaving out the months the parity look touched (March to
-  June and August 2024), which count as used (section 4, R34). It is a
+  June and August 2024), which count as used (section 4, R34, retired). It is a
   claim like any other in the registry, so R12 and R13 judge it: it passes
   only if agree minus disagree is below zero in RTH with its day-clustered
   bootstrap p-value surviving Benjamini-Hochberg across the whole
@@ -1181,7 +1181,7 @@ of which only the recorded flow and the fingerprint allowlist exist yet:
    come from Recent's replays, because they make no claim about the market;
    any fix that changes what is traded waits for walk-forward data: the
    replay server's bars over 2026-H2 (the first walk-forward half-year), and
-   for a fix to a flow strategy, flow coverage there too (section 4).
+   for a fix to a flow strategy (all retired 2026-10-14), flow coverage there too (section 4).
 3. The schedule in code (R32): Recent, the walk-forward and reserve
    half-years, and their tuning and held-out quarters, before any of them is
    used.
@@ -1190,9 +1190,9 @@ of which only the recorded flow and the fingerprint allowlist exist yet:
 5. Paper components stay paper inside a policy (owner's decision, right
    after step 4): the runner passes over a component whose status is not
    `active` when it picks the setup, and the gate refuses an entry whose
-   latest verdict names one; gate and wiring tests. Today a `paper`
-   component (e.g. `value_area`) can be traded live through
-   `prop_portfolio`.
+   latest verdict names one; gate and wiring tests. Until 2026-10-14 a
+   `paper` component (e.g. `value_area`, since retired) could be traded live
+   through `prop_portfolio`.
 6. The dynamic account: limits as fractions of the MLL, with the account and
    its contract taken from the running attempt.
 7. The rulebook document, its single-place test, the enforced or taught
@@ -1337,7 +1337,7 @@ Decided by the owner (2026-10-13):
   through the broker interface. They replace the back-adjusted 1-minute
   files and the bars derived from them (section 4).
 - **Splits restricted to flow coverage**, 2021-05 to 2025-11; no window in
-  code moves; outside coverage the flow strategies have no signal and are
+  code moves; outside coverage the flow strategies (retired 2026-10-14) have no signal and are
   excluded from claims (section 4).
 - **Flow strategies in scope** (retired 2026-10-14, history): their thresholds are calibrated parameters,
   set on the tuning half and judged on the held-out half, with their claims
