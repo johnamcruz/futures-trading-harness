@@ -58,7 +58,7 @@ the champion is replaced only with the owner's approval.
 | Pacing | risk per trade as a fraction of the cushion, the cap, the drawdown halving point, `min_size_guard`, the floor of contracts (`min_contracts`: fewer micro-equivalents than this at the stop, a mini counting as its family's ratio, is a skip, never sized up; the gate refuses an entry under it, `[min-contracts]`; with a floor above 1 the one-contract guard never applies; with the composed $300 cap, counted all in (the stop, the slippage ticks and fees both ways), a floor of 3 skips MNQ stops over 197 ticks and MES stops over 78, unless the floor stretch takes them: `floor_stretch_max_usd`, exactly the floor all in within it while the attempt is healthy, no deficit and no losing trade yet this trading day; near the target, `near_target_usd`: once the target alone, never the consistency rule, is that much profit away or less, a trade is the floor) (each policy's `sizing` in its account's `RULEBOOK.md`, every key stated: a key left out is refused; the code has no default, `combine.js` `SIZING_KEYS` only names the keys); the soft daily stop (`daily_loss_soft` in the account's `RULEBOOK.md`); the loss streak stop (`loss_streak_stop`: losing trades in a row before the session takes no new entries); the pacing clock (`clock_k`, off until the search sets it); stop-for-the-day rules near the target or under the consistency rule (`prop-challenge-pacing` skill) | Monte Carlo search (section 5) |
 | Selection | which strategies are enabled per market; size multipliers per strategy and context (e.g. orb in a `mixed` read: half) | Calibration (section 6), then the search |
 | Priority order | the judgment calls in the `strategy-library` priority order: whether a mixed read halves the size or skips the setup, how much room is enough, which secondary context halves | Calibration, then the search |
-| Strategy parameters | stops, targets, filters (e.g. ORB's ADX gate), per market where they differ; the flow strategies' thresholds on their `field("...")` paths (R34) | Calibration |
+| Strategy parameters | stops, targets, filters (e.g. ORB's ADX gate), per market where they differ; the flow strategies' thresholds on their `field("...")` paths (R34; retired 2026-10-14, history) | Calibration |
 | Exits | `prop_portfolio` `exit`: its mode (`target`: each trade's own stop and target, a trail on top only when set; `target_then_trail`: the stop held to the trade's own target, then locked near it and trailed past it, behind swings or by R, with `ratchet: on` (opt in, off today) never giving back more than `lock_giveback_r` from the best R reached; `trail`: hold the stop, then trail in place of the target) | The search, jointly with sizing (R10) |
 | Stand-down | stop entries when the cushion to the floor falls below an amount (headroom) | The search |
 
@@ -156,7 +156,8 @@ rulebook. Today every multiplier is 1 (no items), so nothing changes.
     tuning and held-out quarters (R17) and the reserve: not covered.
   - **LLM** months (2026-06 on): not covered.
 
-  **Outside coverage**, a bar has no flow fields, so every flow condition is
+  (History: every flow strategy was retired on 2026-10-14, `strategies/retired.json`;
+  this paragraph describes how they were scoped.) **Outside coverage**, a bar has no flow fields, so every flow condition is
   false: `ofi` and `ofi_absorption` give no signal, `prop_flow_1m` has no
   setup, and `value_area` confirms only through its range expansion (fails
   closed; nothing estimates the flow). The flow strategies are **excluded
@@ -554,7 +555,7 @@ will judge them, before any measurement. Examples:
   never a veto; likewise "don't chase beyond 2 ATR from VWAP");
 - "lunch-window setups are weaker";
 - each strategy's skip rules and filters;
-- the flow strategies' claims (R34), measured only on covered months
+- the flow strategies' claims (R34; retired 2026-10-14, history), measured only on covered months
   (section 4): `ofi`'s "flow that agrees over 1, 3 and 5 bars and moves
   price continues"; `ofi_absorption`'s "heavy one-sided flow over 5 bars that
   fails to move price, then a turn, reverses"; `value_area`'s "the 3-bar flow
@@ -589,7 +590,9 @@ rule). Each base rate is computed only from data before the bar it
 describes. Phase B's bars are not back-adjusted (section 4), so a price
 level is the price traded then.
 
-**R34. Flow strategies in scope** (owner's decision, 2026-10-13). `ofi`,
+**R34. Flow strategies in scope** (owner's decision, 2026-10-13; **retired 2026-10-14**,
+`strategies/retired.json`: kept as history, no flow strategy is calibrated, searched or
+gated today). `ofi`,
 `ofi_absorption`, `value_area` (its flow confirmation) and, through them,
 `prop_flow_1m` are calibrated, searched and gated like every other
 strategy, on covered months only (section 4).
@@ -1206,7 +1209,8 @@ of which only the recorded flow and the fingerprint allowlist exist yet:
    (`scripts/lib/prop/`; section 5 says how it reads
    R6-R9, and what it still takes as inputs).
 10. Calibration: the registry, the measurements and the reports (R11-R13),
-   the flow strategies' thresholds among them, on covered months (R34).
+   the flow strategies' thresholds among them, on covered months (R34; retired
+   2026-10-14, history).
    It starts with the claims the June replay shows the LLM relies on most
    (by how often, never by their June outcomes).
 11. The search and promotion (R8, R10, R15-R16, R18). This produces the first
@@ -1335,7 +1339,7 @@ Decided by the owner (2026-10-13):
 - **Splits restricted to flow coverage**, 2021-05 to 2025-11; no window in
   code moves; outside coverage the flow strategies have no signal and are
   excluded from claims (section 4).
-- **Flow strategies in scope:** their thresholds are calibrated parameters,
+- **Flow strategies in scope** (retired 2026-10-14, history): their thresholds are calibrated parameters,
   set on the tuning half and judged on the held-out half, with their claims
   in the registry (R34).
 - **The flow at each decision** is recorded, shown to the model and joined
