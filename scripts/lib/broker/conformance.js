@@ -18,7 +18,8 @@
  *   checkConformance(mcp, { accountId, symbol, now, replayAt }) -> { ok, results: [{ check, ok, problems }] }
  */
 
-const { TOOLS, validateTools, validateResult } = require('./interface');
+const { TOOLS, validateTools, validateResult, barFieldProblems } = require('./interface');
+const { barFieldDocsOf } = require('../trading/broker-fields');
 const { tradingDayStart } = require('../trading/clock');
 const { validSpec, specMismatch } = require('../trading/broker-specs');
 const { parseTicker } = require('./translator');
@@ -52,6 +53,13 @@ async function checkConformance(mcp, { accountId = null, symbol = 'MNQ', now: wa
   if (extra.length) results.push({ check: `extra tools (allowed; agents won't use them): ${extra.join(', ')}`, ok: true, problems: [] });
 
   const config = await probe('get_server_config', 'get_server_config', {});
+  // A server's own words for its bar fields (optional): each entry valid, so the harness can print it; a problem names the entry.
+  // One the harness would leave out (a meaning too long, more entries than it prints) is a warning: that field prints no meaning.
+  if (config && config.barFields !== undefined) {
+    record('get_server_config.barFields: each entry a meaning (one line), with per and digits where it divides', barFieldProblems(config.barFields));
+    const { dropped } = barFieldDocsOf(config);
+    if (dropped.length) results.push({ check: 'get_server_config.barFields (warning: the harness would not print these)', ok: true, problems: dropped });
+  }
   const { now, replay } = clockOf(config, { wall, replayAt, record, results });
   const accounts = await probe('list_accounts', 'list_accounts', { onlyActiveAccounts: false });
   const acct = accountId !== null ? Number(accountId) : (Array.isArray(accounts) && accounts[0] ? Number(accounts[0].id) : null);

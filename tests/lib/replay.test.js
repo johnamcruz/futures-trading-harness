@@ -1604,3 +1604,16 @@ test('cycleDataInPrompt is part of what makes a run a run: absent, nothing is ad
   assert.strictEqual(cmp.ok, false);
   assert.ok(cmp.refusals.some(x => /cfg\.cycleDataInPrompt/.test(x)), JSON.stringify(cmp.refusals));
 });
+
+test('runner wiring: the server\'s own words for its bar fields are read once at start, from the config it gave; none (or a server that cannot say) is none, never a guess', async () => {
+  const WORDS = { 'x.a': { meaning: 'what x.a is, in the server\'s words', per: 'v', digits: 2 }, 'x.b': { meaning: '' } };
+  const said = [];
+  const fake = (config, fail = false) => ({ verify: async () => {}, serverConfig: async () => { if (fail) throw new Error('down'); return config; }, close: () => {} });
+  const open = c => async () => (await openRunnerBroker({ cfg: { account: '7', paper: true }, root: ROOT, env: {}, open: () => c, log: m => said.push(m) }));
+  const withWords = await open(fake({ barFields: WORDS }))();
+  assert.deepStrictEqual(withWords.barFieldDocs, { 'x.a': WORDS['x.a'] });
+  assert.match(said.join(), /x\.b: meaning is not a non-empty one-line string; not printed/);
+  assert.strictEqual((await open(fake({}))()).barFieldDocs, null);
+  assert.strictEqual((await open(fake({}, true))()).barFieldDocs, null, 'a server that cannot be asked gives no words');
+  assert.strictEqual((await open({ verify: async () => {}, close: () => {} })()).barFieldDocs, null, 'a client without a config read');
+});

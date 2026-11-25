@@ -49,6 +49,7 @@ const { dayKey, endOfDayAt, ROLE_RUNS, TIMED_LAUNCHES, deskConcurrencyProblem } 
 const { dayContextSeries, describeDay, describeOvernight } = require('./trading/day-context');
 const { premarketPlan, newsLine, unreviewedLine } = require('./trading/session-context');
 const { gammaFor, gammaLines } = require('./trading/gamma-line');
+const { barFieldDocsOf } = require('./trading/broker-fields');
 const { readBlackouts } = require('./trading/check-order');
 const { readRecord, liveRecord, describeRecord, excursionNote } = require('./trading/track-record');
 const { loadStrategies, scan, retiredCopies, composedExit, citingPolicies } = require('./trading/strategies');
@@ -84,6 +85,17 @@ const { levelOnTick } = require('./trading/contracts');
  * logs in), taken once the server answers, released when the adapter closes or the process exits. The adapter's
  * ensureLock() (async) says whether the lock is still this runner's (holdAccountLock).
  */
+/** The server's bar-field words: from the config it already read, else asked once; null when it gives none or can't be asked (quiet: no meaning is ever guessed). */
+async function barFieldDocsFrom(client, config, log) {
+  try {
+    const { docs, dropped } = barFieldDocsOf(config || (typeof client.serverConfig === 'function' ? await client.serverConfig() : null));
+    for (const d of dropped) log(`broker bar field words: ${d}; not printed`, 'error');
+    return docs;
+  } catch (_err) {
+    return null;
+  }
+}
+
 async function openRunnerBroker({ cfg, root, env = process.env, open = openAdapter, broker = null, log = () => {} }) {
   const b = cfg.paper ? null : broker || activeBroker(env);
   if (b && b.replay !== true && normId(cfg.account) !== null) checkAccountLock({ env, broker: b, servers: serverIdentities({ broker: b, env }), accountId: cfg.account });
@@ -93,6 +105,8 @@ async function openRunnerBroker({ cfg, root, env = process.env, open = openAdapt
     // A live run manages its positions (trailing stops, exits, leftover cancels): the server must accept those,
     // and trades only an account on the broker's allow-list (a confirmed replay is exempt).
     const config = cfg.paper ? null : await client.serverConfig();
+    // The server's own words for its bar fields (get_server_config barFields), read once: the briefing prints them (broker-fields.js).
+    client.barFieldDocs = await barFieldDocsFrom(client, config, log);
     const why = cfg.paper ? null : liveRunBlocked({ broker: b, config, env, accountId: cfg.account });
     if (why) throw new Error(why);
     // A live run on an account the user marks as a prop account starts only with its profile's attempt running: the
@@ -252,7 +266,7 @@ function gammaFlag(env, symbol, at) {
  * The runner's bar-briefing step: each part kept from the last briefing until it expires (trading/briefing.js). A
  * build that fails removes the file, so an earlier bar's briefing is never read as this one's.
  */
-function briefingRecorder(home, cfg, now, env = process.env, { frames = [], dataDir = null, log = () => {} } = {}) {
+function briefingRecorder(home, cfg, now, env = process.env, { frames = [], dataDir = null, log = () => {}, barFieldDocs = null } = {}) {
   // The analysts' own timeframes: built from the first lane's bars, or another lane's (its bars when they close).
   const built = [...new Set(frames.filter(f => f.lane < 0).map(f => f.minutes))];
   const laned = new Set(frames.filter(f => f.lane > 0).map(f => f.minutes));
@@ -328,7 +342,7 @@ function briefingRecorder(home, cfg, now, env = process.env, { frames = [], data
       const fineBars = f && f.contractId === (item.contractId || null) ? f.bars : null;
       // A roll between the lanes' contract lookups: the briefing says "no 1m bars configured"; the log says why.
       if (f && !fineBars) log(`${item.symbol}: the 1m bars are of another contract (${f.contractId}, the bar's ${item.contractId || 'none'}): no 5m facts from them this bar`, 'error');
-      return writeBriefing(home, buildBriefing({ symbol: item.symbol, contractId: item.contractId || null, bars: item.bars, minutes: cfg.timeframe, fineBars, prev: readBriefing(home, item.symbol), scan: results, scanError, blackouts, clock, roundSteps, now: now(), positionOpen, gamma: gammaFlag(env, item.symbol, now()) }));
+      return writeBriefing(home, buildBriefing({ symbol: item.symbol, contractId: item.contractId || null, bars: item.bars, minutes: cfg.timeframe, fineBars, prev: readBriefing(home, item.symbol), scan: results, scanError, blackouts, clock, roundSteps, now: now(), positionOpen, gamma: gammaFlag(env, item.symbol, now()), barFieldDocs }));
     } catch (err) {
       removeBriefing(home, item.symbol);
       // The timeframes built from it share its parts: none without it.
@@ -774,7 +788,7 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
   // new entry), while housekeeping closes what no cycle can protect and end of day flattens, on the built-in values.
   const critical = exitsOnly(env, log, configCritical); // configCritical: the error (tests); undefined: tunables.js critical()
   const record = barRecorder({ cfg, home, env, now, log, onBarClosed });
-  const recorder = briefingRecorder(home, cfg, now, env, { frames, dataDir, log });
+  const recorder = briefingRecorder(home, cfg, now, env, { frames, dataDir, log, barFieldDocs: (client && client.barFieldDocs) || null });
   return createRunner({
     cfg,
     prop,

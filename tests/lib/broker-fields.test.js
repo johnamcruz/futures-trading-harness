@@ -4,7 +4,7 @@
 // bars', with no meaning given; causal; in the JSON in full and on one capped summary line.
 const test = require('node:test');
 const assert = require('node:assert');
-const { brokerFieldsAt, brokerFieldsText, fieldPathsOf, LAST, MAX_BYTES, TEXT_MAX } = require('../../scripts/lib/trading/broker-fields');
+const { brokerFieldsAt, brokerFieldsText, barFieldDocsOf, fieldPathsOf, LAST, MAX_BYTES, TEXT_MAX } = require('../../scripts/lib/trading/broker-fields');
 const { normalizeBars } = require('../../scripts/lib/trading/indicators');
 const B = require('../../scripts/lib/trading/briefing');
 const G = require('../fixtures/golden-bars');
@@ -78,4 +78,77 @@ test('in the briefing: m3.brokerFields from the broker\'s bars, null without the
     most = Math.max(most, Buffer.byteLength(JSON.stringify(d)));
   }
   assert.ok(most <= BROKER_FIELDS_JSON_MAX, `brokerFields is at most ${most} bytes of JSON`);
+});
+
+// The server's own words for its bar fields (get_server_config barFields): printed verbatim, with the values as the server says
+// to show them (a ratio to another value of the bar, rounded); nothing printed or invented when the server gives none.
+const WORDS = { 'flow.windows.3.delta': { meaning: 'the 3-bar window\'s net signed volume, as a share of the bar volume', per: 'v', digits: 3 }, 'ext.b.flag': { meaning: 'a flag the server sets' }, 'flow.ofiTrade': { meaning: 'the bar\'s trade-based pressure, -1 to 1', digits: 2 } };
+
+test('barFieldDocsOf: the valid entries as the server gave them; none given is none (never invented); a bad one is left out and says why', () => {
+  assert.deepStrictEqual(barFieldDocsOf({}), { docs: null, dropped: [] });
+  assert.deepStrictEqual(barFieldDocsOf(null), { docs: null, dropped: [] });
+  assert.deepStrictEqual(barFieldDocsOf({ barFields: WORDS }), { docs: WORDS, dropped: [] });
+  const r = barFieldDocsOf({ barFields: { ...WORDS, 'x.y': { meaning: '' }, 'x.z': { meaning: 'w'.repeat(TEXT_MAX + 1) } } });
+  assert.deepStrictEqual(r.docs, WORDS);
+  assert.strictEqual(r.dropped.length, 2);
+  assert.match(r.dropped.join(), /x\.y: meaning/);
+  assert.match(r.dropped.join(), new RegExp(`x\\.z: meaning is over ${TEXT_MAX} characters`));
+  const many = Object.fromEntries(Array.from({ length: 9 }, (_x, k) => [`f.${k}`, { meaning: `m${k}` }]));
+  const cut = barFieldDocsOf({ barFields: many });
+  assert.strictEqual(Object.keys(cut.docs).length, require('../../scripts/lib/tunables').runner().prompt.brokerFieldsShown);
+  assert.strictEqual(cut.dropped.length, 9 - Object.keys(cut.docs).length);
+  assert.deepStrictEqual(barFieldDocsOf({ barFields: [] }).docs, null);
+});
+
+test('with the server\'s words: only the described fields, each with its meaning verbatim and its values as the server says; the raw line otherwise', () => {
+  const bars = normalizeBars(BROKER.slice(0, 400));
+  const i = bars.length - 1;
+  const f = brokerFieldsAt(bars, i, { docs: WORDS });
+  assert.deepStrictEqual(f.shown.map(s => s.path), ['flow.windows.3.delta', 'ext.b.flag', 'flow.ofiTrade']);
+  const d = f.shown[0];
+  assert.strictEqual(d.meaning, WORDS['flow.windows.3.delta'].meaning);
+  d.values.forEach((x, k) => {
+    const b = bars[i - 2 + k];
+    const raw = b.flow.windows[3].delta;
+    assert.strictEqual(x, raw === null ? null : Number((raw / b.v).toFixed(3)), `bar ${k}`);
+  });
+  assert.deepStrictEqual(f.shown[2].values, f.bars.map(b => (b.fields.flow.ofiTrade === null ? null : Number(b.fields.flow.ofiTrade.toFixed(2)))));
+  assert.deepStrictEqual(f.shown[1].values, f.bars.map(b => b.fields.ext.b.flag));
+  const line = brokerFieldsText(f);
+  assert.ok(line.startsWith('- Broker bar fields as the broker describes them (last 3 bars, oldest first; the rest are in the JSON): flow.windows.3.delta per v '), line);
+  assert.ok(line.includes(`(${WORDS['flow.ofiTrade'].meaning})`) && line.endsWith('.'));
+  assert.doesNotMatch(line, /ext\.a|complete/, 'a field the server did not describe is not printed');
+  // No words, or words for fields the bars do not carry: the line as before, nothing invented.
+  assert.strictEqual(brokerFieldsAt(bars, i, { docs: null }).shown, undefined);
+  assert.strictEqual(brokerFieldsAt(bars, i, { docs: { 'no.such': { meaning: 'm' } } }).shown, undefined);
+  assert.deepStrictEqual(brokerFieldsAt(bars, i, { docs: null }), brokerFieldsAt(bars, i));
+  assert.strictEqual(brokerFieldsText(brokerFieldsAt(bars, i, { docs: { 'no.such': { meaning: 'm' } } })), brokerFieldsText(brokerFieldsAt(bars, i)));
+});
+
+test('a ratio is shown only when both values are there: no volume, a zero volume or a value that is not a number gives null or the value as served', () => {
+  const mk = (v, x) => ({ t: '2026-01-01T00:00:00Z', o: 1, h: 2, l: 0, c: 1, v, f: { x } });
+  const docs = { 'f.x': { meaning: 'm', per: 'v', digits: 1 } };
+  const at = (v, x) => brokerFieldsAt([mk(v, x)], 0, { last: 1, docs }).shown[0].values[0];
+  assert.strictEqual(at(200, 50), 0.3);
+  assert.strictEqual(at(200, -50), -0.3);
+  assert.strictEqual(at(0, 5), null);
+  assert.strictEqual(at(undefined, 5), null);
+  assert.strictEqual(at(200, null), null);
+  assert.strictEqual(at(200, 'n/a'), 'n/a');
+  assert.strictEqual(at(3, true), true);
+});
+
+test('in the briefing: the summary line carries the server\'s words when given, in the JSON and the text; the other lines are unchanged', () => {
+  const n = 400;
+  const build = docs => B.buildBriefing({ symbol: 'MNQ', bars: BROKER.slice(0, n), minutes: 3, blackouts: { items: [] }, barFieldDocs: docs });
+  const plain = build(null);
+  const worded = build(WORDS);
+  assert.deepStrictEqual(worded.sections.m3.data.brokerFields, brokerFieldsAt(normalizeBars(BROKER.slice(0, n)), n - 1, { docs: WORDS }));
+  const now = new Date(worded.closedAt);
+  const lines = B.renderBriefing({ ...worded, builtAt: plain.builtAt }, { now }).split('\n');
+  const line = lines.find(l => l.startsWith('- Broker bar fields'));
+  assert.strictEqual(line, brokerFieldsText(worded.sections.m3.data.brokerFields));
+  assert.match(line, /describes them/);
+  const base = B.renderBriefing(plain, { now }).split('\n');
+  assert.deepStrictEqual(lines.filter(l => l !== line), base.filter(l => !l.startsWith('- Broker bar fields')));
 });
