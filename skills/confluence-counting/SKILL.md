@@ -42,7 +42,7 @@ neutral = 6: reads of one price move are one piece of evidence.
 | location | the level, POI or FVG it reacts at |
 | liquidity | a sweep taken, or liquidity as the target |
 | trigger | the setup candle's strength and close (`candle-reading`) |
-| participation | volume, absorption, a described delta at a level: one weak confirmation (`broker-bar-fields`); thin is neutral |
+| participation | volume, absorption, a described delta at a level: one participation vote, never decisive (`broker-bar-fields`); thin is neutral |
 | context | VWAP side, value area, day type, session |
 
 **Rules.**

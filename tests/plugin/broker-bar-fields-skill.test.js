@@ -69,14 +69,21 @@ test('the flow teaching states what was measured and keeps absorption with the s
   const ab = flat(read('skills/absorption/SKILL.md'));
   assert.ok(ab.includes('as a mechanical confirmer flow was not shown to work; a model reading a stated meaning is untested'), 'absorption: what was measured');
   // The day type and balance are day-context's words, and the day type is a read, not a measured filter.
-  assert.ok(ab.includes('The day so far first (`day-context`: a read, not a measured filter, since the day type is not recognisable early)'));
+  assert.ok(ab.includes('The day so far first (`day-context`: a read of the morning, not a predictor of the rest)'));
+  assert.doesNotMatch(ab, /none measured/);
+  assert.ok(ab.includes('**Evidence**: as a mechanical confirmer, not shown to work.'));
   assert.ok(ab.includes("in the day's balance (`day-context`) → no flow read"));
   assert.match(flat(read('skills/day-context/SKILL.md')), /is balance \(the edges are its levels/);
   // Absorption alone is never the entry: with the setup.
   assert.ok(flat(read('skills/cisd/SKILL.md')).includes('`absorption` there counts, with the setup'));
   assert.ok(flat(read('skills/fib-retracement/SKILL.md')).includes('or, with the setup, absorption (`absorption`)'));
   // A described delta is one weak confirmation at a level.
-  assert.ok(flat(read('skills/confluence-counting/SKILL.md')).includes('a described delta at a level: one weak confirmation (`broker-bar-fields`)'));
+  // One phrase for the vote everywhere: one participation vote, never decisive.
+  const VOTE = 'one participation vote, never decisive';
+  assert.ok(flat(read('skills/confluence-counting/SKILL.md')).includes(`a described delta at a level: ${VOTE} (\`broker-bar-fields\`)`));
+  assert.ok(ab.includes(`${VOTE} (\`confluence-counting\`)`), 'absorption');
+  assert.ok(evidence.includes(`It is ${VOTE} (\`confluence-counting\`, with volume)`), 'broker-bar-fields');
+  assert.doesNotMatch(`${ab} ${evidence} ${flat(read('skills/confluence-counting/SKILL.md'))}`, /weak confirmation/);
   // No skill still says the flow strategies set a bar size.
   for (const f of ['skills/market-snapshot/SKILL.md', 'skills/timeframe-sources/SKILL.md']) assert.doesNotMatch(flat(read(f)), /for the flow strategies/, f);
 });

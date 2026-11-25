@@ -161,7 +161,7 @@ const PINS = {
     '| location | the level, POI or FVG it reacts at |',
     '| liquidity | a sweep taken, or liquidity as the target |',
     '| trigger | the setup candle\'s strength and close (`candle-reading`) |',
-    '| participation | volume, absorption, a described delta at a level: one weak confirmation (`broker-bar-fields`); thin is neutral |',
+    '| participation | volume, absorption, a described delta at a level: one participation vote, never decisive (`broker-bar-fields`); thin is neutral |',
     '| context | VWAP side, value area, day type, session |',
     '**One vote**: all its reads your way → for; all against → against; mixed, none or `unknown` → neutral.',
     'Labels never add: a 15m BOS, an EMA slope and ADX are one structure vote.',

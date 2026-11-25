@@ -46,7 +46,7 @@ alone, and at a level, not mid-range (`absorption`):
 - **No read**: the bars disagree, it sits near its neutral value, or it is
   `unknown`.
 
-**Confirmation only.** It is part of participation in the count
+**Confirmation only.** It is one participation vote, never decisive
 (`confluence-counting`, with volume): FOR when it confirms the
 read's side, AGAINST when it is against it, neutral otherwise. It never
 makes a setup, never moves a stop and never sizes a trade.
