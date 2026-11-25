@@ -44,7 +44,7 @@ never works one out. What the servers add:
 [ORDER-FLOW-BAR-FIELDS-HANDOFF.md](ORDER-FLOW-BAR-FIELDS-HANDOFF.md).
 Nothing in the gate, sizing, exits or entry check reads a flow field; the
 model reads one only as context and confirmation, at a mapped level
-(`skills/vwap-volume-profile`).
+(`skills/absorption`).
 
 ## What the server's contract defines
 

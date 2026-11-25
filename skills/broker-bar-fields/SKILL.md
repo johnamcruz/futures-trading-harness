@@ -37,7 +37,7 @@ this skill. A field with no meaning printed, in the line or the JSON, is
 name, and never work one out from OHLCV.
 
 **Reading one whose meaning you were given.** Read it against price, never
-alone, and at a level, not mid-range (`vwap-volume-profile`):
+alone, and at a level, not mid-range (`absorption`):
 
 - **Confirms**: it agrees with the move on this bar and the bars before,
   and price progresses with it (`momentum-and-volume`).
