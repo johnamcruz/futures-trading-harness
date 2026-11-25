@@ -108,7 +108,7 @@
     "brokerFieldChars": 250,
     "brokerFieldsShown": 6,
     "cycleDataMaxBytes": 48000,
-    "situationalSkillBytes": 90431,
+    "situationalSkillBytes": 90810,
     "maxPromptBytes": 126976,
     "cacheTtlMinutes": { "5m": 5, "1h": 60 }
   },

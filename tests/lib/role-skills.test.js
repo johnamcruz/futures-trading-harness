@@ -73,8 +73,8 @@ test('the agents: role-index skills exist, aren\'t core, and the role holds skil
   // no order): order-types and order-mechanics (order-mechanics-split.test.js), order-failures and trade-journal.
   const RM_CORE = ['confluence-counting', 'invalidation'];
   const RM_ORDER = ['order-types', 'order-mechanics', 'order-failures', 'trade-journal'];
-  // contract-roll too: the volume-liquidity analyst reads VWAP and levels, which a roll day breaks.
-  assert.deepStrictEqual([...new Set(agents.flatMap(a => a.index))].sort(), [...BASICS.filter(s => !RM_CORE.includes(s)), ...SPLIT, ...RM_ORDER, 'contract-roll', 'market-snapshot'].sort());
+  // broker-bar-fields: the volume-liquidity analyst's index (feat/order-flow-readable). contract-roll too: the volume-liquidity analyst reads VWAP and levels, which a roll day breaks.
+  assert.deepStrictEqual([...new Set(agents.flatMap(a => a.index))].sort(), [...BASICS.filter(s => !RM_CORE.includes(s)), ...SPLIT, ...RM_ORDER, 'contract-roll', 'market-snapshot', 'broker-bar-fields'].sort());
   const rmRole = agents.find(a => a.name === 'risk-manager');
   for (const s of RM_CORE) assert.ok(rmRole.skills.includes(s) && !rmRole.index.includes(s), `risk-manager: ${s} in its core`);
   for (const s of RM_ORDER) assert.ok(rmRole.index.includes(s), `risk-manager: ${s} in its index`);
@@ -105,7 +105,7 @@ test('opencode.json: the committed file is index, the default; full embeds role-
   assert.doesNotMatch(fullVl, /Look up as needed/, 'full: one load sentence, as before');
   assert.ok(!vl.includes('<skill name="absorption">'), 'index: not embedded');
   assert.ok(vl.includes('## Your skill index') && vl.includes(`- absorption: ${ab.description}`), 'index: one line, its description');
-  assert.match(vl.replace(/\s+/g, ' '), /Your skills `vwap-volume-profile`, `session-timing`, `trader-process`, `tool-arguments`, and `bar-briefing` are below, already loaded \(Your skills, at the end\)\. Look up as needed: `levels-and-reactions`, `fair-value-gaps`, `momentum-and-volume`, `absorption`, `contract-roll`, and `market-snapshot`, listed in Your skill index \(at the end\); read one with skill_lookup only when this cycle needs it\./);
+  assert.match(vl.replace(/\s+/g, ' '), /Your skills `vwap-volume-profile`, `session-timing`, `trader-process`, `tool-arguments`, and `bar-briefing` are below, already loaded \(Your skills, at the end\)\. Look up as needed: `levels-and-reactions`, `fair-value-gaps`, `momentum-and-volume`, `absorption`, `broker-bar-fields`, `contract-roll`, and `market-snapshot`, listed in Your skill index \(at the end\); read one with skill_lookup only when this cycle needs it\./);
   assert.match(vl, /`skill_lookup \{"skill": "<skill>", "role": "volume-liquidity-analyst"\}`/);
   assert.doesNotMatch(vl, /Required by the situation/);
   // Every other skill is one call away (skill_lookup's catalog): one short line in index mode, never the catalog.
@@ -200,7 +200,7 @@ const MAIN_SKILLS = {
   'trade-executor': ['broker-mcp', 'order-types', 'order-mechanics', 'order-failures', 'order-rationale', 'trade-journal', 'gate-refusals', 'gate-refusals-positions', 'broker-refusals'],
   'trade-reviewer': ['trade-review', 'setup-expectancy'],
   'trend-momentum-analyst': ['trend-momentum-indicators', 'market-snapshot', 'strategy-library', 'trader-process', 'trend-vs-range', 'bos-vs-choch', 'momentum-and-volume', 'pullback-vs-reversal', 'displacement', 'tool-arguments', 'strategy-scan', 'strategy-gate-checks', 'bar-briefing', 'strategy-tools'],
-  'volume-liquidity-analyst': ['vwap-volume-profile', 'session-timing', 'market-snapshot', 'trader-process', 'levels-and-reactions', 'momentum-and-volume', 'absorption', 'contract-roll', 'tool-arguments', 'bar-briefing', 'fair-value-gaps'],
+  'volume-liquidity-analyst': ['vwap-volume-profile', 'session-timing', 'market-snapshot', 'trader-process', 'levels-and-reactions', 'momentum-and-volume', 'absorption', 'broker-bar-fields', 'contract-roll', 'tool-arguments', 'bar-briefing', 'fair-value-gaps'],
 };
 
 test('full mode: Claude (the canonical body), Codex and Qwen load the same skills as main for each role, in one load sentence; so does opencode', () => {

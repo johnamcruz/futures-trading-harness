@@ -79,18 +79,12 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
    0.35 ADR; neutral: both sides), and the range against the average daily
    range (`rangeVsAdr`, over 10 days).
 
-6. **Reading order for flow** (`broker-bar-fields`; a context read and a
-   confirmation, never a signal: no edge measured). Day type and the open
-   against the prior value area first (item 5), then a mapped level, then flow:
-   - Mid-range, away from a mapped level → no flow read; stand aside in the
-     middle of balance.
-   - At a mapped level, a field whose meaning the briefing gives agrees with
-     the level's read → one confirmation in the count (`confluence-counting`).
-   - Heavy one-sided flow the price does not pay at a level (effort without
-     result) → absorption (`absorption`), a read, not an entry: wait for the
-     other side to take over and price to close through local structure
-     (`bos-vs-choch`).
-   - The field's meaning is not printed → no flow read.
+6. **Flow** (`broker-bar-fields`; context, no measured edge): day type
+   and open first (item 5), then a mapped level, then flow.
+   - Mid-range → no flow read; stand aside in the middle of balance.
+   - Heavy one-sided flow the price does not pay at a level →
+     absorption (`absorption`), not an entry: wait for the other side
+     and a close through local structure.
 
 ## Examples
 

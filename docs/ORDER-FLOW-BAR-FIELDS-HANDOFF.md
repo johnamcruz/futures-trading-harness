@@ -24,6 +24,11 @@ path on a bar.
   (a net signed volume, a count of large prints): the harness shows the
   value divided by that bar value. Leave it off a value that is already a
   ratio or a bounded score.
+  A window value (the last 3 or 5 bars) is a sum over several bars: divide
+  it by a bar value of the same span if the server serves one (`per` may name
+  any value on the bar, such as a window volume), and otherwise say in
+  the meaning which volume the share is of, so a reader does not read a share
+  above 1 as an error.
 - `digits`: decimals to show (0 to 6). Required with `per`; give it on a
   bounded score too (two is enough for a value in -1 to 1) so the line is
   not 17 decimals wide.
