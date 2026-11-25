@@ -1609,11 +1609,17 @@ test('runner wiring: the server\'s own words for its bar fields are read once at
   const WORDS = { 'x.a': { meaning: 'what x.a is, in the server\'s words', per: 'v', digits: 2 }, 'x.b': { meaning: '' } };
   const said = [];
   const fake = (config, fail = false) => ({ verify: async () => {}, serverConfig: async () => { if (fail) throw new Error('down'); return config; }, close: () => {} });
-  const open = c => async () => (await openRunnerBroker({ cfg: { account: '7', paper: true }, root: ROOT, env: {}, open: () => c, log: m => said.push(m) }));
+  const { barFieldDocsFrom } = require('../../scripts/lib/runner-wiring');
+  const open = c => async () => ({ barFieldDocs: await barFieldDocsFrom(c, null, m => said.push(m)) });
   const withWords = await open(fake({ barFields: WORDS }))();
   assert.deepStrictEqual(withWords.barFieldDocs, { 'x.a': WORDS['x.a'] });
   assert.match(said.join(), /x\.b: meaning is not a non-empty one-line string; not printed/);
   assert.strictEqual((await open(fake({}))()).barFieldDocs, null);
   assert.strictEqual((await open(fake({}, true))()).barFieldDocs, null, 'a server that cannot be asked gives no words');
   assert.strictEqual((await open({ verify: async () => {}, close: () => {} })()).barFieldDocs, null, 'a client without a config read');
+  // A paper run asks the server nothing for them (no extra get_server_config call at start).
+  let asked = 0;
+  const paper = await openRunnerBroker({ cfg: { account: '7', paper: true }, root: ROOT, env: {}, open: () => ({ verify: async () => {}, serverConfig: async () => { asked += 1; return { barFields: WORDS }; }, close: () => {} }), log: () => {} });
+  assert.strictEqual(asked, 0);
+  assert.strictEqual(paper.barFieldDocs, null);
 });

@@ -69,7 +69,7 @@ function barFieldDocsOf(config, { cap = SHOWN, chars = TEXT_MAX } = {}) {
 
 /**
  * One value as the server's entry says to show it: divided by its `per` on the same bar (a ratio of two values the server
- * gave; null when either is missing or the divisor is 0) and rounded to its `digits`. Presentation only: the harness
+ * gave; null when either is missing, the divisor is not above 0, or the ratio is not finite) and rounded to its `digits`. Presentation only: the harness
  * knows neither field's meaning. A value that is not a number is shown as served.
  */
 function presented(raw, entry, bar) {
@@ -78,8 +78,9 @@ function presented(raw, entry, bar) {
   let x = raw;
   if (entry.per !== undefined) {
     const d = valueAt(bar, entry.per);
-    if (typeof d !== 'number' || !Number.isFinite(d) || d === 0) return null;
+    if (typeof d !== 'number' || !(d > 0) || !Number.isFinite(d)) return null;
     x = raw / d;
+    if (!Number.isFinite(x)) return null;
   }
   return entry.digits === undefined ? x : Number(x.toFixed(entry.digits));
 }

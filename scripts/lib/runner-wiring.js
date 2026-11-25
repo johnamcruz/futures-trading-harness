@@ -106,7 +106,8 @@ async function openRunnerBroker({ cfg, root, env = process.env, open = openAdapt
     // and trades only an account on the broker's allow-list (a confirmed replay is exempt).
     const config = cfg.paper ? null : await client.serverConfig();
     // The server's own words for its bar fields (get_server_config barFields), read once: the briefing prints them (broker-fields.js).
-    client.barFieldDocs = await barFieldDocsFrom(client, config, log);
+    // A paper run asks the server nothing more for them.
+    client.barFieldDocs = cfg.paper ? null : await barFieldDocsFrom(client, config, log);
     const why = cfg.paper ? null : liveRunBlocked({ broker: b, config, env, accountId: cfg.account });
     if (why) throw new Error(why);
     // A live run on an account the user marks as a prop account starts only with its profile's attempt running: the
@@ -912,4 +913,4 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
   });
 }
 
-module.exports = { prepareShadowFor, sectionInputsFor, deskFor, deskConcurrencyOf, managedDeskNote, entryFor, lookupsKeyOf, exitsOnly, laneSignals, lookupRoles, lookupNeeds, openRunnerBroker, manualRunBroker, holdAccountLock, wireRunner, dayLine, passHold, practiceSelector, barRecorder, briefingRecorder, reportCacheFor, runnerScan, replayUnattested, closedBarsOnly };
+module.exports = { prepareShadowFor, sectionInputsFor, deskFor, deskConcurrencyOf, managedDeskNote, entryFor, lookupsKeyOf, exitsOnly, laneSignals, lookupRoles, lookupNeeds, openRunnerBroker, manualRunBroker, holdAccountLock, wireRunner, barFieldDocsFrom, dayLine, passHold, practiceSelector, barRecorder, briefingRecorder, reportCacheFor, runnerScan, replayUnattested, closedBarsOnly };

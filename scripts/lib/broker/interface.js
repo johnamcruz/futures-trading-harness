@@ -34,7 +34,7 @@ const dataGapsOk = v => v !== null && typeof v === 'object' && !Array.isArray(v)
 /**
  * A server's barFields (get_server_config, optional, live and replay): the words and the presentation for the extra fields
  * its bars carry, so the harness can print what a field means without knowing it. { "<dotted path on a bar>": { meaning,
- * per?, digits? } }: `meaning` a non-empty one-line string, printed verbatim, never edited or guessed; `per` the dotted path
+ * per?, digits? } }: `meaning` a non-empty one-line string (no control character, tab or line separator), printed verbatim, never edited or guessed; `per` the dotted path
  * of another value on the same bar (v, or another field) the field is shown divided by; `digits` how many decimals it is shown
  * to (0 to 6; a field with `per` states it). The harness prints a field only when its entry is valid and the bar carries it.
  */
@@ -46,7 +46,7 @@ const barFieldProblems = v => {
   for (const [path, e] of Object.entries(v)) {
     if (!PATH.test(path)) out.push(`${JSON.stringify(path)} is not a dotted path`);
     else if (e === null || typeof e !== 'object' || Array.isArray(e)) out.push(`${path}: not an object`);
-    else if (typeof e.meaning !== 'string' || !e.meaning.trim() || /[\r\n]/.test(e.meaning)) out.push(`${path}: meaning is not a non-empty one-line string`);
+    else if (typeof e.meaning !== 'string' || !e.meaning.trim() || /[\p{Cc}\u2028\u2029]/u.test(e.meaning)) out.push(`${path}: meaning is not a non-empty one-line string`);
     else if (e.per !== undefined && (typeof e.per !== 'string' || !PATH.test(e.per))) out.push(`${path}: per is not a dotted path`);
     else if (e.digits !== undefined && !DIGITS.test(String(e.digits))) out.push(`${path}: digits is not a whole number 0 to 6`);
     else if (e.per !== undefined && e.digits === undefined) out.push(`${path}: a field with per states its digits`);

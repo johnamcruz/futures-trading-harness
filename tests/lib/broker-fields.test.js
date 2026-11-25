@@ -136,6 +136,10 @@ test('a ratio is shown only when both values are there: no volume, a zero volume
   assert.strictEqual(at(200, null), null);
   assert.strictEqual(at(200, 'n/a'), 'n/a');
   assert.strictEqual(at(3, true), true);
+  // A tiny divisor never prints Infinity, and a divisor that is not above 0 gives no value.
+  assert.strictEqual(at(1e-320, 1e10), null);
+  assert.strictEqual(at(-200, 50), null);
+  assert.strictEqual(at(5e-324, 1), null);
 });
 
 test('in the briefing: the summary line carries the server\'s words when given, in the JSON and the text; the other lines are unchanged', () => {
@@ -151,4 +155,30 @@ test('in the briefing: the summary line carries the server\'s words when given, 
   assert.match(line, /describes them/);
   const base = B.renderBriefing(plain, { now }).split('\n');
   assert.deepStrictEqual(lines.filter(l => l !== line), base.filter(l => !l.startsWith('- Broker bar fields')));
+});
+
+test('wireRunner: the words the server gave (client.barFieldDocs) reach the briefing the runner writes; none given, the old line', async () => {
+  const fs = require('fs');
+  const { wireRunner } = require('../../scripts/lib/runner-wiring');
+  const { validateConfig } = require('../../scripts/lib/autotrader');
+  const { tmpDir } = require('../helpers');
+  const ROOT = require('path').resolve(__dirname, '..', '..');
+  const bars = BROKER.slice(0, 400);
+  const last = bars[bars.length - 1];
+  const at = new Date(Date.parse(last.t) + 3 * 60000 + 2000);
+  const run = async barFieldDocs => {
+    const home = tmpDir();
+    const client = { barFieldDocs, async activeContract(symbol) { return { id: symbol, tickSize: 0.25 }; }, async closedBars() { return bars; } };
+    const cfg = validateConfig({ harness: 'custom', command: ['x', '{prompt}'], symbols: ['MNQ'], timeframe: 3, premarketAt: '', eodAt: '15:50@America/New_York', trigger: 'bar' });
+    const runner = wireRunner({ cfg, root: ROOT, home, env: { FTH_HOME: home }, client, dataDir: require('path').join(home, 'bars'), now: () => at, runCycle: async () => ({ ok: true }), loadState: () => null, saveState: () => {}, killSwitchFile: require('path').join(home, 'STOP'), log: () => {}, event: () => {} });
+    await runner.step();
+    const b = B.readBriefing(home, 'MNQ');
+    assert.ok(b, 'the runner wrote a briefing');
+    return b.sections.m3.data.brokerFields;
+  };
+  const words = await run(WORDS);
+  assert.deepStrictEqual(words.shown.map(s => s.path), Object.keys(WORDS));
+  assert.strictEqual(words.shown[0].meaning, WORDS['flow.windows.3.delta'].meaning);
+  assert.strictEqual((await run(null)).shown, undefined);
+  assert.strictEqual((await run(undefined)).shown, undefined);
 });

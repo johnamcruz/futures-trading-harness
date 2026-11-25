@@ -616,9 +616,13 @@ test('the broker client: accountStatus reads the balance and the trading flags f
 test('barFields (get_server_config, optional): a meaning per field, per and digits where it divides; a malformed entry is named, never passed', async () => {
   const good = { 'x.a': { meaning: 'what x.a measures, in the server\'s words', per: 'v', digits: 2 }, 'x.b': { meaning: 'a count' } };
   assert.ok(barFieldsOk(good) && barFieldsOk({}));
+  // Brackets and semicolons are the server's own words (a meaning may use them); only line breaks and control characters could break the printed line.
+  assert.ok(barFieldsOk({ 'x.a': { meaning: 'a (b); c: d' } }) && barFieldsOk({ 'x.a': { meaning: 'caf\u00e9 \u2192 up' } }));
   for (const [bad, why] of [
     [{ 'x.a': { meaning: '' } }, /meaning/], [{ 'x.a': { meaning: 'a\nb' } }, /meaning/], [{ 'x.a': {} }, /meaning/], [{ 'x.a': { meaning: 'm', per: 'v' } }, /states its digits/],
     [{ 'x.a': { meaning: 'm', per: 3, digits: 1 } }, /per is not/], [{ 'x.a': { meaning: 'm', digits: 7 } }, /digits/], [{ 'x.a': { meaning: 'm', digits: 1.5 } }, /digits/],
+    [{ 'x.a': { meaning: 'a\u2028b' } }, /meaning/], [{ 'x.a': { meaning: 'a\u2029b' } }, /meaning/], [{ 'x.a': { meaning: 'a\u0000b' } }, /meaning/], [{ 'x.a': { meaning: 'a\tb' } }, /meaning/],
+    [{ 'x.a': { meaning: 'a\u007fb' } }, /meaning/], [{ 'x.a': { meaning: 'a\u0085b' } }, /meaning/], [{ 'x.a': { meaning: 'a\u009fb' } }, /meaning/],
     [{ 'x a': { meaning: 'm' } }, /dotted path/], [{ 'x.a': 'm' }, /not an object/], [[], /not an object/], [null, /not an object/],
   ]) assert.match(barFieldProblems(bad).join(), why, JSON.stringify(bad));
   assert.deepStrictEqual(validateResult('get_server_config', { tradingEnabled: true, allowedAccountIds: 'any', allowedSymbols: 'any', maxOrderSize: 1, maxPositionSize: 1, maxDailyLoss: 'off', journalPath: 'j', tradingDayStartedAt: 't', serverTime: 't', barFields: { 'x.a': {} } }), ['get_server_config: barFields is malformed']);
