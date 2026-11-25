@@ -2,7 +2,7 @@
 
 // The broker-bar-fields skill: one job (reading the broker's own bar fields as confirmation, never a setup), generic
 // (it gives no field a meaning: that is the broker's), the summary line it names is the briefing's, it is reached by
-// its AGENTS.md index line (no existing skill is edited) and never embedded in a role.
+// its AGENTS.md index line, and listed only on the volume analyst's index (looked up, never embedded in index mode).
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -28,8 +28,10 @@ test('broker-bar-fields: the sections in order, small, a read never a veto, conf
   for (const pin of [
     'A read, never a veto and never a setup',
     'the harness passes them through untouched and gives them no meaning',
-    'come from the broker\'s own documentation of its server. The harness states none, and neither does this skill.',
-    'Never guess one from its name, and never work one out from OHLCV.',
+    'The harness states no meaning and neither does this skill.',
+    'Never guess a meaning from a name, and never work one out from OHLCV.',
+    '`Broker bar fields as the broker describes them`',
+    'a context read, never an edge',
     'It never makes a setup, never moves a stop and never sizes a trade.',
     '`Broker bar fields` line',
   ]) assert.ok(f.includes(pin), pin);
@@ -45,7 +47,17 @@ test('broker-bar-fields: the line it names is the briefing\'s summary line', () 
   assert.ok(line.includes('Broker bar fields') && read(SKILL).includes('`Broker bar fields` line'));
 });
 
-test('broker-bar-fields: reached by its AGENTS.md index line, never embedded or indexed in a role', () => {
+test('broker-bar-fields: the line it names when the broker gives words is the briefing\'s described line', () => {
+  const f = { paths: ['x.a'], bars: [{ t: '1', fields: { x: { a: 5 } } }], shown: [{ path: 'x.a', per: 'v', meaning: 'the broker\'s words', values: [0.25] }] };
+  const line = brokerFieldsText(f);
+  assert.ok(line.startsWith('- Broker bar fields as the broker describes them ') && line.includes('(the broker\'s words)'), line);
+  assert.ok(read(SKILL).includes('`Broker bar fields as\nthe broker describes them`'), 'the skill names the described line');
+});
+
+test('broker-bar-fields: reached by its AGENTS.md index line; on the volume analyst\'s index only (looked up when the briefing line has fields), never embedded in another role', () => {
   assert.match(read('workspace/AGENTS.md'), /^- `broker-bar-fields` \(skills\/broker-bar-fields\/SKILL\.md\): Use when /m);
-  for (const r of loadRoles(ROOT)) assert.ok(![...r.skills, ...r.index].includes('broker-bar-fields'), r.name);
+  for (const r of loadRoles(ROOT)) {
+    assert.ok(!r.skills.includes('broker-bar-fields'), `${r.name}: never in the embedded list`);
+    assert.strictEqual(r.index.includes('broker-bar-fields'), r.name === 'volume-liquidity-analyst', r.name);
+  }
 });

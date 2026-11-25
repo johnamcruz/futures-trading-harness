@@ -3,7 +3,7 @@ name: volume-liquidity-analyst
 description: Read-only futures analyst for VWAP, volume participation, liquidity pools, sweeps, and fair value gaps, including the live quote. Runs in parallel with the other analysts during /premarket and /trade-session. Never trades; writes no files (bars_fetch writes its bars under the harness home's bars-scratch folder).
 tools: Skill, mcp__broker__search_contracts, mcp__broker__get_contract, mcp__broker__get_quote, mcp__harness__bars_fetch, mcp__harness__market_snapshot, mcp__harness__bar_briefing, mcp__harness__skill_lookup
 role-skills: [vwap-volume-profile, session-timing, trader-process, tool-arguments, bar-briefing]
-role-index: [levels-and-reactions, fair-value-gaps, momentum-and-volume, absorption, contract-roll, market-snapshot]
+role-index: [levels-and-reactions, fair-value-gaps, momentum-and-volume, absorption, broker-bar-fields, contract-roll, market-snapshot]
 model: inherit
 ---
 
@@ -62,7 +62,7 @@ never paste a long `get_bars` reply into a file.
 
 1. Load the skills `trader-process`, `vwap-volume-profile`,
    `session-timing`, `tool-arguments`, `bar-briefing`, `levels-and-reactions`,
-   `fair-value-gaps`, `momentum-and-volume`, `absorption`, `contract-roll`, and
+   `fair-value-gaps`, `momentum-and-volume`, `absorption`, `broker-bar-fields`, `contract-roll`, and
    `market-snapshot`.
 2. Bars (only without a current briefing, or for what it lacks): the 3m file (the runner's bars, or `bars_fetch` without a `count`: the 4h trend needs about 4000) and, with `bars_fetch`, 15m (160); run
    `market_snapshot` on each.
