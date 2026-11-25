@@ -410,12 +410,13 @@ test('the order-flow activation says what holds: one runner per broker account, 
     // The account lock (account-lock.js) is built: the skill says it refuses a second runner; the README still says coming.
     assert.match(t, f.startsWith('skills/') ? /the account lock refuses one/ : /a per-account lock is coming/, f);
   }
-  // Without flow the flow conditions are false; value_area can still confirm by range expansion.
+  // The flow strategies (ofi, ofi_absorption, prop_flow_1m, value_area) were all retired on 2026-10-14: no document says one is active.
   for (const f of ['docs/OPERATING.md', 'docs/ORDER-FLOW.md', 'docs/HARNESS-DESIGN.md']) {
     const t = read(f).replace(/\s+/g, ' ');
-    assert.match(t, /`value_area` can (still )?confirm (only )?(through its range-expansion branch|through its other branch|by range expansion)/, f);
-    assert.doesNotMatch(t, /`value_area` strategies read them with the rules' `field\("path"\)`; a bar without them gives no signal/, f);
+    assert.match(t, /retired/, f);
+    assert.doesNotMatch(t, /active for replay and live|`status: active`|They are active/, f);
   }
+  for (const name of ['ofi', 'ofi_absorption', 'prop_flow_1m', 'value_area']) assert.ok(Object.hasOwn(require('../../scripts/lib/trading/strategies').RETIRED, name), name);
   const bt = read('docs/BACKTESTING.md').replace(/\s+/g, ' ');
   // The backtester's prop runs are retired (docs/research/mechanical-prop-backtester.md): no doc example runs one.
   assert.match(bt, /### Prop challenges \(retired\)/);

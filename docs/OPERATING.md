@@ -780,11 +780,11 @@ trader over history and measuring its decisions is
 The harness computes no order flow. A broker MCP server that has it puts it
 on its bars as extra fields (turned on by the server's own settings, which
 its `mcp-configs/brokers.json` entry passes through), and the harness passes
-them through untouched. The `ofi`, `ofi_absorption`, and `value_area`
-strategies read them with the rules' `field("path")`; on a bar without them
-those conditions are false, so `ofi` and `ofi_absorption` give no signal and
-`value_area` can confirm only through its range-expansion branch. They are active for replay and live (the owner's call), as is
-`prop_flow_1m`, the policy strategy over the 1-minute pair. See
+them through untouched. A strategy may read them with the rules'
+`field("path")`; the ones that did (`ofi`, `ofi_absorption`, `prop_flow_1m`,
+`value_area`) were retired on 2026-10-14, so none is active. The briefing
+prints the last bars' fields, with the server's own words for them when it
+publishes any. See
 [docs/ORDER-FLOW.md](ORDER-FLOW.md).
 
 ### Order gate settings

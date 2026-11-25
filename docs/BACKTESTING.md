@@ -71,7 +71,8 @@ backtest a strategy that reads broker fields, fetch its bars from the broker
 at its timeframe:
 
 ```bash
-# value_area (3 minutes, also inside prop_portfolio) and ofi (1 minute)
+# the shape of a backtest of a strategy that reads broker fields (value_area and ofi were such
+# strategies; both are retired, strategies/README.md): substitute one that loads
 node scripts/backtest.js fetch --contract MNQ --from 2024-06-10 --to 2024-06-15 --timeframe 3 --out data/MNQ-3m.jsonl
 node scripts/backtest.js --data data/MNQ-3m.jsonl --symbol MNQ --fees <fee> --timeframe 3 --strategy value_area
 node scripts/backtest.js fetch --contract MNQ --from 2024-06-10 --to 2024-06-15 --timeframe 1 --out data/MNQ-1m.jsonl
