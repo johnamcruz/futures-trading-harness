@@ -18,8 +18,11 @@
  *                                and the window's net the leg's way >= trendNetAtr x ATR) | failing (loss of control) |
  *                                overlapping (overlap >= overlapHigh) | rotating (efficiency < effLow) | mixed | early
  *                                (fewer than earlyBars RTH bars)
- *   word15(beh, atr15, p)        the 15m candles' word: trending <way> (|net| >= trendNetAtr x the 15m ATR) |
- *                                overlapping | rotating | mixed | early (fewer than early15 candles); printed, never a rule
+ *   word15(beh, atr15, p)        the 15m candles' word: moving <way> (|net| >= trendNetAtr x the 15m ATR) |
+ *                                overlapping | rotating | mixed | early (fewer than early15 candles); printed, never a rule.
+ *                                Never "trending" (read audit F4): the 15m trend word in the prompt is the 15m frame's
+ *                                (m15.frame.trend), one per prompt; this one is the last candles' movement, printed
+ *                                "15m <word>" (market-state.js)
  */
 
 const SE = require('./structure-events');
@@ -70,7 +73,7 @@ function word3({ rthBars, beh, side, sinceProgress, loss, atr }, p) {
 
 function word15(beh, atr15, p) {
   if (!beh || beh.bars < p.early15 || beh.overlap === null) return 'early';
-  if (atr15 > 0 && Math.abs(beh.net) >= p.trendNetAtr * atr15) return `trending ${beh.net > 0 ? 'up' : 'down'}`;
+  if (atr15 > 0 && Math.abs(beh.net) >= p.trendNetAtr * atr15) return `moving ${beh.net > 0 ? 'up' : 'down'}`;
   if (beh.overlap >= p.overlapHigh) return 'overlapping';
   if (beh.eff !== null && beh.eff < p.effLow) return 'rotating';
   return 'mixed';
