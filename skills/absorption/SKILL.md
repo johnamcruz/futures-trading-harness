@@ -46,6 +46,15 @@ a predictor of the rest) and the open against the prior value area, then a mappe
   side to take over and price to close through local structure
   (`bos-vs-choch`).
 
+**Who is aggressive now**: buyers, sellers, or no read (near its neutral
+value, unknown, or the bars disagree), from a described field against price
+(`broker-bar-fields`), never OHLCV; a large order at the level only if a
+field says so. It describes this bar (NQ 1m: bars with a clear one-sided
+reading closed that way 93%, near-neutral ones 66%; the next bar followed
+49%): never a forecast. At a burst (an extreme
+one-sided bar) the side is clear, but absorbed and a real push look alike
+on that bar: state the side, not which; it never delays a valid setup.
+
 **Broker fields** a broker adds to its bars (the harness computes none of
 them): `broker-bar-fields`. Never derive one from OHLCV; without them,
 `unknown`.

@@ -57,6 +57,8 @@ The prior RTH day's high and low and the 4h swings are in the briefing
    medium when one does not, low when two or more do not; the reasons by
    step; the level that flips it.
 
+Flow (`absorption`) may back bias, never set it.
+
 **Flips intraday**: a 1h CHoCH against it, or closes back inside the prior
 range after a breakout of it.
 

@@ -46,6 +46,8 @@ alone, and at a level, not mid-range (`absorption`):
 - **No read**: the bars disagree, it sits near its neutral value, or it is
   `unknown`.
 
+A field about side: state it as buyers, sellers or no read (`absorption`).
+
 **Confirmation only.** It is one participation vote, never decisive
 (`confluence-counting`, with volume): FOR when it confirms the
 read's side, AGAINST when it is against it, neutral otherwise. It never

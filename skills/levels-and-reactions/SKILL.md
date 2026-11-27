@@ -56,7 +56,7 @@ RTH VWAP held (+R), the IB lost (-0.22R/-0.19R).
 - sweep: `breakout-vs-fakeout` (`m3.sweeps`);
 - none yet: not reached. No reaction is not a rejection.
 
-No call until the close; wicks are information, not signals.
+A level may be a first touch or a later one: say which, from the candles shown; else `unknown`. No call until the close; wicks are information, not signals.
 
 ## Examples
 

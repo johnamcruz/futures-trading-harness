@@ -62,6 +62,21 @@ test('broker-bar-fields: reached by its AGENTS.md index line; on the volume anal
   }
 });
 
+test('the context reads: the 80% rule at its measured 45% on 30m closes, nodes not shown on NQ, the moving session profile, who is aggressive in generic words, aggression may back the bias and never set it, first touch or a later one from the candles shown', () => {
+  const vp = flat(read('skills/vwap-volume-profile/SKILL.md'));
+  assert.ok(vp.includes('two 30m closes (a 15m close at :00 or :30) → rotation toward the far side: reached in 45% of NQ cases, not 80% (3m closes unmeasured; a read, never a forecast)'));
+  assert.doesNotMatch(vp, /far side is likely/);
+  assert.ok(vp.includes('not shown on NQ (an LVN was touched no more often than a copy of it shifted away): judge a node by the reaction there'));
+  assert.ok(vp.includes("moves as it builds: weigh it below the fixed prior-day levels; the briefing's reads at it stand"));
+  const ab = flat(read('skills/absorption/SKILL.md'));
+  assert.ok(ab.includes('**Who is aggressive now**: buyers, sellers, or no read (near its neutral value, unknown, or the bars disagree)'));
+  assert.ok(ab.includes('bars with a clear one-sided reading closed that way 93%, near-neutral ones 66%; the next bar followed 49%'));
+  assert.ok(ab.includes('the side is clear, but absorbed and a real push look alike on that bar: state the side, not which; it never delays a valid setup'));
+  assert.ok(flat(read(SKILL)).includes('A field about side: state it as buyers, sellers or no read (`absorption`).'));
+  assert.ok(flat(read('skills/daily-bias/SKILL.md')).includes('Flow (`absorption`) may back bias, never set it.'));
+  assert.ok(flat(read('skills/levels-and-reactions/SKILL.md')).includes('A level may be a first touch or a later one: say which, from the candles shown; else `unknown`.'));
+});
+
 test('the flow teaching states what was measured and keeps absorption with the setup (the review: not "none measured")', () => {
   const evidence = flat(read(SKILL));
   assert.ok(evidence.includes('as a mechanical confirmer it was not shown to work (26 months); a model reading a stated meaning is untested'), 'broker-bar-fields: what was measured');

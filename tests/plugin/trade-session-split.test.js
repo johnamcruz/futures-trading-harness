@@ -638,9 +638,12 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // index; the volume analyst 55384 -> 55618 full (index unchanged); the market-structure analyst unchanged (the cisd and fib-retracement edits are byte-neutral).
 // Then the review's one phrase for the vote ("one participation vote, never decisive" in confluence-counting, absorption, broker-bar-fields) and absorption's evidence line: the risk manager
 // 96661 -> 96678 full, 82549 -> 82566 index (the confluence row, +17); the volume analyst 55618 -> 55640 full (index unchanged).
+// Then feat/context-skills (owner-approved 2026-11-26: the harness must know the context it reads): daily-bias's one line that who is aggressive may back the bias,
+// levels-and-reactions' first test or retest, vwap-volume-profile's 80% rule at the measured 45%, its not-shown node line and moving-session line, absorption's who-is-aggressive read,
+// broker-bar-fields' one line: the market-structure analyst 124295 measured on main (the pin held 46 bytes of slack at 124341) -> 124441 full (index unchanged); the volume analyst 55640 -> 56866 full, 36556 -> 37048 index.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 124341, 'news-calendar-analyst': 10868, 'risk-manager': 96678, 'strategy-researcher': 25728, 'trade-executor': 30768, 'trade-reviewer': 9400, 'trend-momentum-analyst': 82963, 'volume-liquidity-analyst': 55640 },
-  index: { 'market-structure-analyst': 54216, 'news-calendar-analyst': 10868, 'risk-manager': 82566, 'strategy-researcher': 25728, 'trade-executor': 30757, 'trade-reviewer': 9400, 'trend-momentum-analyst': 50347, 'volume-liquidity-analyst': 36556 },
+  full: { 'market-structure-analyst': 124441, 'news-calendar-analyst': 10868, 'risk-manager': 96678, 'strategy-researcher': 25728, 'trade-executor': 30768, 'trade-reviewer': 9400, 'trend-momentum-analyst': 82963, 'volume-liquidity-analyst': 56866 },
+  index: { 'market-structure-analyst': 54216, 'news-calendar-analyst': 10868, 'risk-manager': 82566, 'strategy-researcher': 25728, 'trade-executor': 30757, 'trade-reviewer': 9400, 'trend-momentum-analyst': 50347, 'volume-liquidity-analyst': 37048 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {
