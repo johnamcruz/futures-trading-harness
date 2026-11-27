@@ -41,10 +41,12 @@ const line = o => M.marketStateLine(S(o));
 test('precedence: forming before the first RTH break; the pullback guard beats chop, aligned or not (the owner: a pullback is never chop)', () => {
   assert.strictEqual(st({ layers: lay({ structure: null }) }), 'forming');
   assert.strictEqual(word({ layers: lay({ structure: null }) }), 'trend-up', 'forming under 4h + 1h up: the alignment default');
-  assert.strictEqual(word({ layers: lay({ structure: null }), h4: 'range' }), 'unclear');
+  assert.strictEqual(word({ layers: lay({ structure: null }), h4: 'range' }), 'trend-up', 'forming under 4h range, 1h up: the side the entry rule gives (read audit F1)');
+  assert.strictEqual(word({ layers: lay({ structure: null }), h4: 'range', h1: 'range' }), 'unclear', 'both ranging: no class side');
   assert.deepStrictEqual([st({ layers: lay({ chop: CHOP }), pullback: pb() }), word({ layers: lay({ chop: CHOP }), pullback: pb() })], ['pullback', 'trend-up']);
   assert.strictEqual(st({ layers: lay({ chop: CHOP }), pullback: pb(), h4: 'range' }), 'pullback', 'unaligned: still never chop');
-  assert.strictEqual(word({ layers: lay({ chop: CHOP }), pullback: pb(), h4: 'range' }), 'unclear');
+  assert.strictEqual(word({ layers: lay({ chop: CHOP }), pullback: pb(), h4: 'range' }), 'trend-up', 'a long leg\'s pullback under 4h range, 1h up');
+  assert.strictEqual(word({ layers: lay({ chop: CHOP }), pullback: pb(), h4: 'down' }), 'unclear', 'a frame against: never counter');
   assert.strictEqual(word({ layers: lay(), pullback: pb({ side: 'short' }) }), 'unclear', 'a short leg\'s pullback under 4h + 1h up');
   assert.strictEqual(word({ layers: lay(), pullback: pb({ side: 'short' }), h4: 'down', h1: 'down' }), 'trend-down');
   assert.strictEqual(st({ layers: lay({ chop: CHOP, structure: null }), pullback: pb() }), 'pullback', 'before any RTH break too');
@@ -102,9 +104,64 @@ test('precedence: trend needs an established leg and the behavior word trending;
   const l = lay({ behavior: { ...lay().behavior, word: 'overlapping' } });
   assert.deepStrictEqual([st({ layers: l }), word({ layers: l })], ['leg', 'trend-up']);
   assert.strictEqual(word({ layers: lay(), h4: 'down', h1: 'down' }), 'unclear', 'a 3m leg against the 4h + 1h: unclear, never counter');
-  assert.strictEqual(word({ layers: lay(), h4: 'range' }), 'unclear');
+  assert.strictEqual(word({ layers: lay(), h4: 'range' }), 'trend-up', 'the 1h up, the 4h ranging: the entry rule\'s side (read audit F1)');
+  assert.strictEqual(word({ layers: lay(), h4: 'range', h1: 'down' }), 'unclear', 'a 3m up leg under the 1h down: never counter');
   const r = lay({ structure: leg({ legOK: false }) });
-  assert.deepStrictEqual([st({ layers: r }), word({ layers: r }), word({ layers: r, h4: 'range' })], ['range', 'trend-up', 'unclear'], 'range: the alignment default (decision 3)');
+  assert.deepStrictEqual([st({ layers: r }), word({ layers: r }), word({ layers: r, h4: 'range' }), word({ layers: r, h4: 'range', h1: 'range' })], ['range', 'trend-up', 'trend-up', 'unclear'], 'range: the alignment default (decision 3), on the entry rule\'s side');
+});
+
+// Read audit F1 (2026-11-27): the class word printed `unclear` whenever one of the 4h and 1h ranged, though the entry rule
+// (bias_agree neutral-15m-declared, the rulebook's) gives a side there: the trending one's, none against. The class now
+// takes the side the entry rule's bias frames give; a frame against, a frame unknown, or both ranging gives none.
+test('read audit F1: the class word\'s side is the entry rule\'s: one of the 4h and 1h trending, the other ranging, none against', () => {
+  // The audit's repro shape, synthetic: the 4h ranging, the 1h up, a 3m trend up: class trend-up, the line says why.
+  assert.strictEqual(word({ layers: lay(), h4: 'range', h1: 'up' }), 'trend-up');
+  assert.strictEqual(word({ layers: lay({ structure: leg({ side: 'down', level: 21440.25 }) }), h4: 'down', h1: 'range' }), 'trend-down');
+  assert.match(line({ layers: lay(), h4: 'range', h1: 'up' }), /; 4h range, 1h up \(side up\); class trend-up$/);
+  assert.match(line({ layers: lay(), h4: 'up', h1: 'range' }), /; 4h up, 1h range \(side up\); class trend-up$/);
+  // Never counter: a frame against, either way round; the 3m against the side; both ranging; a frame unknown.
+  assert.strictEqual(word({ layers: lay(), h4: 'down', h1: 'up' }), 'unclear');
+  assert.strictEqual(word({ layers: lay(), h4: 'up', h1: 'down' }), 'unclear');
+  assert.strictEqual(word({ layers: lay({ structure: leg({ side: 'down', level: 21440.25 }) }), h4: 'range', h1: 'up' }), 'unclear', 'a 3m down leg under the 1h up');
+  assert.strictEqual(word({ layers: lay(), h4: 'range', h1: 'range' }), 'unclear');
+  assert.strictEqual(word({ layers: lay(), h4: 'none', h1: 'up' }), 'unclear', 'the 4h not in the briefing');
+  assert.match(line({ layers: lay(), h4: 'range', h1: 'range' }), /; 4h range, 1h range \(not aligned\); class unclear$/);
+  // The early read stays the 4h + 1h both one way: half-aligned, a 3m leg against under a 15m with the side is no early read.
+  const against = { layers: lay({ structure: leg({ side: 'down', level: 21440.25 }) }), h4: 'range', h1: 'up', m15: 'up' };
+  assert.deepStrictEqual([S(against).early, word(against)], [false, 'unclear']);
+});
+
+test('read audit F1: on every 4h x 1h trend (up, down, range, missing) and every state, a trend class is a side the shipped entry rule allows, and no bias frame trends against it', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const { entryRuleOf, entryProblems } = require('../../scripts/lib/trading/entry-rule');
+  const { loadRulebookFile, policyEntry } = require('../../scripts/lib/trading/rulebook');
+  const root = path.join(__dirname, '..', '..', 'accounts');
+  const rules = [];
+  for (const d of fs.readdirSync(root)) {
+    const rb = loadRulebookFile(path.join(root, d, 'RULEBOOK.md'));
+    if (!rb || !rb.valid) continue;
+    for (const name of Object.keys(rb.policies || {})) { const e = policyEntry(rb, name); const r = e && e.entry ? entryRuleOf(e.entry) : null; if (r && r.biasFrames) rules.push([`${d}/${name}`, r]); }
+  }
+  assert.ok(rules.length >= 1, 'a policy entry rule with bias frames');
+  const states = [lay(), lay({ structure: null }), lay({ structure: leg({ legOK: false }) }), lay({ behavior: { ...lay().behavior, word: 'overlapping' } }),
+    lay({ structure: leg({ side: 'down', level: 21440.25 }) }), lay({ chop: CHOP, structure: leg({ legOK: false }) }), lay({ stale: true }),
+    lay({ transition: true, structure: leg({ side: 'down', status: 'broken', legOK: false, level: 21437.5, flip: { barsAgo: 3, strong: true, disp: true, held: true, oldSide: 'up', oldLevel: 21380.5, byRule: 'close' } }) })];
+  const pbs = [undefined, pb(), pb({ side: 'short' })];
+  const seen = new Set();
+  for (const h4 of ['up', 'down', 'range', 'none']) for (const h1 of ['up', 'down', 'range', 'none']) for (const layers of states) for (const pullback of pbs) for (const m15 of [undefined, 'up', 'down']) {
+    const br = b({ h4, h1, layers, pullback, m15 });
+    const cls = M.classWordOf(M.stateOf(br, TH));
+    seen.add(`${h4}/${h1}:${cls}`);
+    if (!/^trend-/.test(cls)) continue;
+    const way = cls.slice('trend-'.length);
+    const side = way === 'up' ? 'long' : 'short';
+    assert.ok(![h4, h1].includes(way === 'up' ? 'down' : 'up'), `${h4}/${h1}: ${cls} against a bias frame`);
+    for (const [at, rule] of rules) assert.deepStrictEqual(entryProblems({ briefing: br, side, reads: [], rule }), [], `${at}: ${h4}/${h1} ${cls}`);
+  }
+  // The half-aligned cells reach their trend class; a frame against or missing never reaches one.
+  for (const k of ['range/up:trend-up', 'up/range:trend-up', 'range/down:trend-down', 'down/range:trend-down']) assert.ok(seen.has(k), k);
+  for (const k of seen) if (/^(?:up\/down|down\/up|none\/|[a-z]+\/none|range\/range)/.test(k)) assert.doesNotMatch(k, /:trend-/, k);
 });
 
 test('one 15m trend word (read audit F4): the 15m candles\' behavior word is "moving <way>", never "trending", beside a 15m frame that ranges', () => {
@@ -131,7 +188,7 @@ test('the line: one exact string per state, structure then momentum then behavio
   const tr = lay({ transition: true, structure: leg({ side: 'down', status: 'broken', legOK: false, level: 21437.5, flip: { barsAgo: 3, strong: true, disp: true, held: true, oldSide: 'up', oldLevel: 21380.5, byRule: 'close' } }), behavior: { ...lay().behavior, word: 'mixed', word15: 'overlapping' } });
   assert.strictEqual(line({ layers: tr }), 'Market state (3m): transition down: HL 21380.5 broken by a displaced close 9 min ago, the new leg unconfirmed; behavior mixed (overlap 0.52, efficiency 0.41), 15m overlapping; 4h+1h up; class unclear');
   const ch = lay({ chop: CHOP, structure: leg({ legOK: false }), behavior: { ...lay().behavior, word: 'failing', word15: 'overlapping', overlap: 0.74, eff: 0.09 } });
-  assert.strictEqual(line({ layers: ch, h4: 'range', soFar: { status: 'read', read: 'rotational', vwapCrosses: 7 } }), 'Market state (3m): chop: the up leg\'s last break failed, HL 21380.5 holds (breaks both ways, a failed break); overlap 0.74, efficiency 0.09, failed continuation; 15m overlapping; Day so far rotational, RTH VWAP crosses 7; 4h range, 1h up (not aligned); class chop');
+  assert.strictEqual(line({ layers: ch, h4: 'range', soFar: { status: 'read', read: 'rotational', vwapCrosses: 7 } }), 'Market state (3m): chop: the up leg\'s last break failed, HL 21380.5 holds (breaks both ways, a failed break); overlap 0.74, efficiency 0.09, failed continuation; 15m overlapping; Day so far rotational, RTH VWAP crosses 7; 4h range, 1h up (side up); class chop');
   const rg = lay({ structure: leg({ legOK: false }), behavior: { ...lay().behavior, word: 'rotating' } });
   assert.strictEqual(line({ layers: rg }), 'Market state (3m): range: the up leg\'s last break failed, HL 21380.5 holds, edges 21402-21431.25 (travel edge to edge); overlap 0.52, efficiency 0.41, 15m moving up; 4h+1h up; class trend-up');
   assert.strictEqual(line({ layers: lay({ structure: null }) }), 'Market state (3m): forming (no RTH structure yet); 4h+1h up; class trend-up');
@@ -188,7 +245,7 @@ test('the line: one exact string per state, structure then momentum then behavio
   const wCut = M.marketStateLine(M.stateOf(b(wo), { ...TH, lineBytes: LINE_BYTES }));
   assert.ok(Buffer.byteLength(wFull) > LINE_BYTES, `the case is over the budget unbudgeted: ${Buffer.byteLength(wFull)}`);
   assert.ok(Buffer.byteLength(wCut) <= LINE_BYTES, `${Buffer.byteLength(wCut)}: ${wCut}`);
-  assert.match(wCut, /; overlap 0\.74, efficiency 0\.09, failed continuation, no displacement; 15m overlapping; RTH VWAP crosses 12; 4h range, 1h down \(not aligned\); class chop$/);
+  assert.match(wCut, /; overlap 0\.74, efficiency 0\.09, failed continuation, no displacement; 15m overlapping; RTH VWAP crosses 12; 4h range, 1h down \(side down\); class chop$/);
   assert.strictEqual(M.marketStateLine(M.stateOf(b({ ...wo, soFar: { status: 'read', read: 'rotational', vwapCrosses: null } }), { ...TH, lineBytes: 10 })).includes('Day so far'), false, 'the day-so-far word alone drops too');
   assert.strictEqual(M.marketStateLine(M.stateOf(b({ layers: ch, h4: 'range', soFar: { status: 'read', read: 'rotational', vwapCrosses: 7 } }), { ...TH, lineBytes: LINE_BYTES })), line({ layers: ch, h4: 'range', soFar: { status: 'read', read: 'rotational', vwapCrosses: 7 } }), 'under the budget: unchanged');
 

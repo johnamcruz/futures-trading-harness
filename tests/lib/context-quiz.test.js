@@ -848,7 +848,7 @@ test('marketStateOfText: the Market state line from an item\'s printed lines', (
   const BL = '- Bias: long only (4h up, 1h up; short refused).';
   assert.strictEqual(Q.marketStateOfText('no briefing here'), null);
   assert.strictEqual(Q.marketStateOfText(head('10:30', [BL])), 'Market state (3m): range: no 3m break printed; 4h+1h up; class trend-up');
-  assert.strictEqual(Q.marketStateOfText(head('10:30', ['- Bias: long only (4h range, 1h up; short refused).'])), 'Market state (3m): range: no 3m break printed; 4h range, 1h up (not aligned); class unclear');
+  assert.strictEqual(Q.marketStateOfText(head('10:30', ['- Bias: long only (4h range, 1h up; short refused).'])), 'Market state (3m): range: no 3m break printed; 4h range, 1h up (side up); class trend-up', 'the 1h up, the 4h ranging: the entry rule\'s side (read audit F1)');
   assert.strictEqual(Q.marketStateOfText(head('10:30', ['- Bias: no side yet (15m range).'])), 'Market state (3m): range: no 3m break printed; 4h range, 1h range (not aligned); class unclear');
   assert.strictEqual(Q.marketStateOfText(head('10:30', ['- Bias: no side (4h up, 1h down) → no entry.'])), 'Market state (3m): range: no 3m break printed; 4h up, 1h down (not aligned); class unclear');
   // Round 17 (q95): an item that prints `m3.lastBreak: none since the RTH open` states its RTH breaks (none), so its clock

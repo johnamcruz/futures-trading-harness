@@ -227,10 +227,11 @@ test('context quiz: the pullback questions (q87-q112) are asked against the prom
     ['q91', 'lookup', PB, /A 15m `range` or `transition` here is the pause, not chop\./g],
     ['q92', 'lookup', PB, /Far past the level, no retest: late, not this read's entry/g],
     ['q93', 'lookup', PB, /a live strong 15m CISD on the CISD line is the setup read even when the last 15m candle line shows no pattern/g],
-    // A strict-side guard (main's text): one of the 4h and 1h ranging is chop or unclear to the head trader, whatever the 3m.
+    // Was a strict-side guard (one of the 4h and 1h ranging: unclear to the head trader, whatever the 3m); see below.
     // Re-anchored to the Market state table (PREREG addendum 14): the class rule's sentence is replaced by it.
-    // Round 17: re-anchored to the table keyed on the printed line (one authority for the class word).
-    ['q112', 'head', undefined, /\| `unclear` \| no trend trade, never counter \|/g],
+    // Round 17: re-anchored to the table keyed on the printed line (one authority for the class word). Read audit F1: the
+    // 1h up with the 4h ranging is the entry rule's side, so the line prints trend-up and q112 anchors to the trend row.
+    ['q112', 'head', undefined, /\| `trend-up`, `trend-down` \| setups the side's way \(what the line prints picks the setup, below\) \|/g],
     ['q95', 'head', undefined, /`forming`: no setup yet: wait for the first RTH 3m break\./g],
     ['q96', 'lookup', PB, /watch for the BOS or CISD; not the entry\./g],
     ['q97', 'lookup', PB, /No BOS or CISD after it: no setup, pass\./g],
@@ -319,8 +320,8 @@ test('context quiz: the chop-read questions (q114-q133, less q115, q116, q117, q
   }
   // q99 carries only briefing facts (construct validity, feat/chop-read): no quiz-only framing sentence.
   assert.doesNotMatch(QUIZ.questions.find(x => x.id === 'q99').text, /No exact touch|no named reversal candle/);
-  // q112 prints the Market state line under its Bias line, as the briefing does (market-state.js): not aligned.
-  assert.match(QUIZ.questions.find(x => x.id === 'q112').text, /\n- Bias: [^\n]*\n- Market state \(3m\): [^\n]*\(not aligned\); class unclear\.\n/);
+  // q112 prints the Market state line under its Bias line, as the briefing does (market-state.js): the 1h sets the side.
+  assert.match(QUIZ.questions.find(x => x.id === 'q112').text, /\n- Bias: [^\n]*\n- Market state \(3m\): [^\n]*\(side up\); class trend-up\.\n/);
   // The invalidation items print the protected swing the way the state reads it (round 20: from the printed breaks, holds,
   // broken by a close, failed).
   const tq = id => QUIZ.questions.find(x => x.id === id).text;

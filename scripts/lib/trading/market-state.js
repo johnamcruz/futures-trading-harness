@@ -40,10 +40,15 @@
  *                       the line's byte budget: over it the behavior numbers drop, then the chop's "Day so far rotational"
  *   stateThresholds(an) the briefing's and the quiz's th from the analysis config
  *   stateOf(b, th)      readState, or null off the chain's entry frame or with no 1h part (as the Bias line)
- *   classWordOf(s)      chop -> chop; rotation, weakening -> unclear; not aligned -> unclear; a pullback of a leg the
- *                       4h + 1h way, or the early read -> that trend class; forming, range -> the 4h + 1h trend class
+ *   classWordOf(s)      chop -> chop; rotation, weakening -> unclear; no side -> unclear; a pullback of a leg the
+ *                       side's way, or the early read -> that trend class; forming, range -> the side's trend class
  *                       (the alignment default: a range day is tradeable at the edge or on a breakout the side's way);
- *                       trend, leg, transition the 4h + 1h way -> that trend class, against -> unclear
+ *                       trend, leg, transition the side's way -> that trend class, against -> unclear. The side (s.side,
+ *                       read audit F1) is the one the entry rule's bias frames give (entry-rule.js, bias_agree
+ *                       neutral-15m-declared): the 4h + 1h both one way (s.align), or one of them trending and the other
+ *                       ranging; a frame against the other, a frame unknown, or both ranging: no side (never counter;
+ *                       the entry rule's both-ranging path, the 15m and the declared trend, is the Bias line's, not the
+ *                       class's). The early read stays on s.align
  *   marketStateLine(s)  "Market state (3m): <state>: <structure>; <momentum>; behavior <word> (...), 15m <word>;
  *                       <alignment>; class <c>", the class last (round 18); the behavior word only under rotation,
  *                       weakening and transition (round 20b; elsewhere "overlap x, efficiency y, 15m <word>"); null for null.
@@ -113,6 +118,10 @@ function readState(b, th = {}) {
   const frames = Object.fromEntries(RULE.biasFrames.map(tf => [tf, trendOf(b, tf)]));
   const ts = Object.values(frames);
   const align = ts.every(t => t === 'up') ? 'up' : ts.every(t => t === 'down') ? 'down' : null;
+  // The class's side (read audit F1): the entry rule's on the bias frames: every frame that trends one way, the rest
+  // ranging (none against, none unknown); both ranging: none.
+  const trending = ts.filter(t => t === 'up' || t === 'down');
+  const side = align || (ts.every(t => t === 'up' || t === 'down' || t === 'range') && trending.length > 0 && trending.every(t => t === trending[0]) ? trending[0] : null);
   const m3 = data(b, 'm3');
   // The state's pullback: open and no deeper than the Depth row's bound since its extreme (sticky maxDepth), any side.
   let open;
@@ -152,7 +161,7 @@ function readState(b, th = {}) {
   const context = { rotational: d.status === 'read' && d.read === 'rotational', crosses: crosses !== null && crosses >= th.crossesChop ? crosses : null };
   const age = last && Number.isFinite(closedMs) ? Math.round((closedMs - (Date.parse(last.at) + minutes * 60000)) / 60000) : null;
   return {
-    state: w.state, way: w.way, of: w.of || null, align, frames, m15, pullback: pb, early, layers: L, last, previous, broken, turn, context, age,
+    state: w.state, way: w.way, of: w.of || null, align, side, frames, m15, pullback: pb, early, layers: L, last, previous, broken, turn, context, age,
     price: Number.isFinite(m3.price) ? m3.price : null, minutes, tf: label(minutes), lineBytes: Number.isFinite(th.lineBytes) ? th.lineBytes : null,
   };
 }
@@ -167,10 +176,12 @@ function classWordOf(s) {
   if (!isObj(s)) return null;
   if (s.state === 'chop') return 'chop';
   if (s.state === 'rotation' || s.state === 'weakening') return 'unclear';
-  if (!s.align) return 'unclear';
-  if (s.state === 'pullback') return s.way === s.align ? `trend-${s.align}` : 'unclear';
-  if (s.early === true || s.state === 'range' || s.state === 'forming') return `trend-${s.align}`;
-  return s.way === s.align ? `trend-${s.align}` : 'unclear';
+  // A state read before the side was kept (an older record): its strict 4h + 1h alignment.
+  const side = s.side !== undefined ? s.side : s.align;
+  if (!side) return 'unclear';
+  if (s.state === 'pullback') return s.way === side ? `trend-${side}` : 'unclear';
+  if (s.early === true || s.state === 'range' || s.state === 'forming') return `trend-${side}`;
+  return s.way === side ? `trend-${side}` : 'unclear';
 }
 
 // ---- the printed line ----
@@ -327,7 +338,9 @@ function printedLine(s) {
 
 function marketStateLine(s) {
   if (!isObj(s)) return null;
-  const align = s.align ? `4h+1h ${s.align}` : `${Object.entries(s.frames).map(([tf, t]) => `${tf} ${t || 'unknown'}`).join(', ')} (not aligned)`;
+  // The bias frames: both one way; else each, with the side one of them gives (read audit F1) or none.
+  const frames = () => Object.entries(s.frames).map(([tf, t]) => `${tf} ${t || 'unknown'}`).join(', ');
+  const align = s.align ? `4h+1h ${s.align}` : s.side ? `${frames()} (side ${s.side})` : `${frames()} (not aligned)`;
   const parts = s.layers ? layeredLine(s) : printedLine(s);
   if (s.early === true) parts.push(`${RULE.chain.setup} ${s.align}: a pullback in the ${RULE.chain.setup} trend`);
   const ctx = s.state === 'chop' ? [s.context.rotational ? 'Day so far rotational' : null, s.context.crosses !== null ? `RTH VWAP crosses ${s.context.crosses}` : null].filter(Boolean) : [];

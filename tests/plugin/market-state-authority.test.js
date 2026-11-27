@@ -86,7 +86,7 @@ test('market state authority: the line prints the class code computes (classWord
     // Parse-back (round 18): the class is the line's last `; ` field, said once; the leg's "->" never carries it.
     const fields = line.split('; ');
     assert.strictEqual(fields[fields.length - 1], `class ${cls}`, line);
-    assert.match(fields[fields.length - 2], /(?:^|: )?4h\+1h (?:up|down)$|\(not aligned\)$/, line);
+    assert.match(fields[fields.length - 2], /(?:^|: )?4h\+1h (?:up|down)$|\(side (?:up|down)\)$|\(not aligned\)$/, line);
     assert.strictEqual(line.split('class ').length, 2, `${line}: one class`);
     assert.doesNotMatch(line, /-> class/, line);
     // One 15m trend word (read audit F4): the 15m candles' behavior word is `15m moving <way>`, never trending; the only

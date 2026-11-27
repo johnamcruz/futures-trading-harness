@@ -1530,16 +1530,16 @@
       "id": "q112",
       "layer": "bias",
       "prompt": "head",
-      "text": "Briefing lines (synthetic, 10:42 ET), flat:\n- Bias: long only (4h range, 1h up; short refused).\n- Market state (3m): range: no 3m break printed; 4h range, 1h up (not aligned); class unclear.\n- Day so far (24 3m bars; `day-context`): directional up: efficiency 0.52 (x sqrt(bars) 2.55), RTH VWAP crosses 1, range 3.1 x 3m ATR(14), net up (its size: Trend declared? day's move); IB day type: today.dayType.\n- 15m (setup candle, closed 10:30): no pattern, close top third, range 0.7 ATR, vol 0.8x.\nYour own read: 4h range, 1h up, 15m up; the movement is smooth and one-way, no breaks both ways, little overlap. Which class do you write in STATE?",
-      "rule": "the 4h and 1h not both one way: unclear; chop only when the movement is choppy, and a frame's range alone is never chop",
-      "anchor": "| `unclear` | no trend trade, never counter |",
+      "text": "Briefing lines (synthetic, 10:42 ET), flat:\n- Bias: long only (4h range, 1h up; short refused).\n- Market state (3m): range: no 3m break printed; 4h range, 1h up (side up); class trend-up.\n- Day so far (24 3m bars; `day-context`): directional up: efficiency 0.52 (x sqrt(bars) 2.55), RTH VWAP crosses 1, range 3.1 x 3m ATR(14), net up (its size: Trend declared? day's move); IB day type: today.dayType.\n- 15m (setup candle, closed 10:30): no pattern, close top third, range 0.7 ATR, vol 0.8x.\nYour own read: 4h range, 1h up, 15m up; the movement is smooth and one-way, no breaks both ways, little overlap. Which class do you write in STATE?",
+      "rule": "the class is the line's: the 1h trending and the 4h ranging give the side (the entry rule's, read audit F1); chop only when the movement is choppy, and a frame's range alone is never chop",
+      "anchor": "| `trend-up`, `trend-down` | setups the side's way (what the line prints picks the setup, below) |",
       "choices": [
         "chop",
-        "unclear",
         "trend-up",
+        "unclear",
         "trend-down"
       ],
-      "answer": "unclear"
+      "answer": "trend-up"
     },
     {
       "id": "q114",
