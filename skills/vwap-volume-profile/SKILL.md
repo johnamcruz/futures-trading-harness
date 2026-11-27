@@ -50,15 +50,23 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
    rejection, where price moves fast), with the nearest above and below
    (`hvnAbove`, `lvnBelow`, ...). Strategies read the same levels as
    `prior_poc prior_vah prior_val`, `session_*`, `vp_*(n)`, and the nodes.
-   - Open outside the prior value area, then back inside for two closes →
-     rotation to the far side is likely (the 80% rule).
+   - Open outside the prior value area, then back inside for two 30m
+     closes (a 15m close at :00 or :30) → rotation toward the far side:
+     reached in 45% of NQ cases, not 80% (3m closes unmeasured; a read,
+     never a forecast).
    - Two closes outside value on above-average volume → value is moving;
-     the next HVN is the likely stall, an LVN
+     the next HVN is taught as the stall, an LVN
      beyond the entry is open air.
    - Inside value with VWAP flat → rotation: with the 4h and 1h ranging,
      only the 15m and declared side, from its VA edge.
    - A POC at one end of a wide value area means the day trended: a weak
      reference for the next day.
+   - HVN stalls and LVN runs are teaching, not shown on NQ (an LVN was
+     touched no more often than a copy of it shifted away): judge a node by
+     the reaction there (`levels-and-reactions`).
+   - `session` develops from the 18:00 ET Globex open and moves as it
+     builds: weigh it below the fixed prior-day levels; the briefing's
+     reads at it stand.
    - Levels are computed on a 100-row grid over the day's range, and shown
      on the contract's tick (as in the briefing) for a harness bars file or
      with `symbol`; otherwise to two decimals, between ticks: round to
@@ -85,7 +93,7 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
 10:09 ET: MNQ opened 21462.50, below the prior day's VAL 21480.00
 (volumeProfile.priorRth: POC 21522.00, VAH 21560.00). Two 3m closes back
 inside, 21486.00 and 21490.25 → reads value inside, 3m rejected prior val
-up; target VAH 21560.00, 69.75 points away; the POC at 21522.00 is the halfway mark.
+up; VAH 21560.00 is 69.75 points away (room, not the 45% rule); the POC at 21522.00 is the halfway mark.
 
 09:52 ET: 3m close above OR high, v = 2,140 vs OR average 1,180 (1.8×), price
 0.6 ATR above rising RTH VWAP → participation confirmed: 3m momentum up.
