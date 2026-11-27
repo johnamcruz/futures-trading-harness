@@ -62,7 +62,7 @@ test('broker-bar-fields: reached by its AGENTS.md index line; on the volume anal
   }
 });
 
-test('the context reads: the 80% rule at its measured 45% on 30m closes, nodes not shown on NQ, the moving session profile, who is aggressive in generic words, aggression may back the bias and never set it, first touch or a later one from the candles shown', () => {
+test('the context reads: the 80% rule at its measured 45% on 30m closes, nodes not shown on NQ, the moving session profile, who is aggressive in generic words, flow may back the bias and never set it, first touch or a later one from the candles shown', () => {
   const vp = flat(read('skills/vwap-volume-profile/SKILL.md'));
   assert.ok(vp.includes('two 30m closes (a 15m close at :00 or :30) → rotation toward the far side: reached in 45% of NQ cases, not 80% (3m closes unmeasured; a read, never a forecast)'));
   assert.doesNotMatch(vp, /far side is likely/);
