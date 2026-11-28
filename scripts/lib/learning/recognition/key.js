@@ -27,9 +27,10 @@
  *                      no such side: the side-free signals (C1 C2 C3 C4 C7 C8) class B -> chop, else unclear; it stays
  *                      independent of the taught guardrail (inside an open Pullback line it can read chop on C1 + C7)
  *   state              the briefing's Market state (trading/market-state.js readState, the one definition the summary
- *                      line prints): pullback, chop, trending or not aligned; choppy = the state chop
+ *                      line prints): pullback, chop, trending or no side; choppy = the state chop
  *   codedWord(key)     the briefing's labels restated (never the model's): the Market state's class word (pullback and
- *                      trending -> trend-<way>, chop -> chop, not aligned -> unclear); a range alone is never chop
+ *                      trending -> trend-<way>, chop -> chop, no side from the 4h and 1h -> unclear); a range alone is
+ *                      never chop
  *
  *   facts(briefing), signals(facts, side, thresholds), classOf({ c, t }),
  *   presentKey(briefing, thresholds), evidenceWord(key), codedWord(key), metFields(key, side)

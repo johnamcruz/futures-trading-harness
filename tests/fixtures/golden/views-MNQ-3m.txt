@@ -327,7 +327,7 @@ Summary (MNQ 3m, 19:21 ET):
 - Price 27488. 1R = 4.63 pts (0.5 x 3m ATR(20) 9.27, the 3m reference stop); every distance below is in points and R.
 - Trend rule: LONG allowed (prevailing 4h up); no short against it.
 - Bias: long only (4h up, 1h range; short refused).
-- Market state (3m): pullback (long leg 27411.25 -> 27501.5, depth 15%); 4h up, 1h range (not aligned); class unclear.
+- Market state (3m): pullback (long leg 27411.25 -> 27501.5, depth 15%); 4h up, 1h range (side up); class trend-up.
 - MTF structure 1h > 15m (primary): stage POTENTIAL. 1h structure UP (its break record; the Bias line reads the 1h range: the side is the Bias line's), 1h protected low 27344.25 (the origin of the last 1h break) holds on 1h closes (1h CHoCH down at 27388: a warning, not a reversal). 15m pullback against the 1h: NONE yet (only a 3m CHoCH down 18:51 against the 1h; no 15m break down yet). Monitor only. Entry: none.
 - MTF structure below: 15m > 3m (context): stage ESTABLISHED. 15m structure UP, 15m protected low 27411.25 (the origin of the last 15m break) holds on 15m closes. below 15m > 3m: 3m pullback against the 15m: DOWN (3m CHoCH down 18:51, BOS down 19:12); pullback low 27474.75.
 - Alignment: long aligned, short counter. Regime: transition, normal volatility.

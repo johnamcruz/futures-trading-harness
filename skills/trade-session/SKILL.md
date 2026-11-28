@@ -160,7 +160,7 @@ line of its PLAN; taught: the gate and `compose_check` do not read it):
 Under a trend class, the setup by what the line prints (a pullback
 printed first; else its state word):
 
-- A pullback their way (`pullback (long leg` with `4h+1h up`, `short leg`
+- A pullback their way (`pullback (long leg` with `trend-up`, `short leg`
   with down, or "15m up: a pullback in the 15m trend", down the mirror):
   wait for the 15m turn (a live strong 15m CISD, a 15m BOS, a 15m CHoCH
   back or a 15m reaction at the level); enter on the first 3m BOS or CISD

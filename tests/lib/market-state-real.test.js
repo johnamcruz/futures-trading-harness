@@ -284,10 +284,10 @@ test('real: a healthy pullback with small overlapping candles stays the trend cl
   assert.deepStrictEqual([s.state, cls], ['pullback', 'trend-up'], line);
 });
 
-test('real: the guard never prints chop, aligned or not (2021-05-28 10:12, 4h range: an open long pullback, class unclear)', () => {
+test('real: the guard never prints chop, aligned or not (2021-05-28 10:12, 4h range, 1h up: an open long pullback, class trend-up, the entry rule\'s side: read audit F1)', () => {
   const { s, cls, line } = stateAt('2021-05-28', '10:12');
-  assert.strictEqual(s.align, null, 'not aligned');
-  assert.deepStrictEqual([s.state, cls], ['pullback', 'unclear'], line);
+  assert.deepStrictEqual([s.align, s.side], [null, 'up'], 'not aligned; the 1h sets the side');
+  assert.deepStrictEqual([s.state, cls], ['pullback', 'trend-up'], line);
 });
 
 test('real: a clean range reads range, not chop: edge to edge (2022-09-01 10:27)', () => {

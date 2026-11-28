@@ -101,13 +101,14 @@ test('choppy: the layers\' chop, never the CHoCH pair alone; rotational and the 
   assert.strictEqual(kb({ layers: CHOP_LAYERS, soFar: rot(9), pullback: PB }).choppy, false, 'inside an open Pullback: never chop');
 });
 
-test('codedWord: the Market state\'s class word: choppy -> chop (aligned too); else 4h and 1h agreeing -> trend; else unclear; a range alone never chop', () => {
+test('codedWord: the Market state\'s class word: choppy -> chop (aligned too); else the 4h and 1h side (both one way, or one trending and the other ranging) -> trend; else unclear; a range alone never chop', () => {
   assert.strictEqual(K.codedWord(kb({})), 'trend-up');
   assert.strictEqual(K.codedWord(kb({ layers: CHOP_LAYERS, soFar: rot(1) })), 'chop', 'aligned but choppy: chop');
   assert.strictEqual(K.codedWord(kb({ lastBreak: PAIR, soFar: rot(1) })), 'trend-up', 'the pair alone (no layers): no chop');
   assert.strictEqual(K.codedWord(kb({ soFar: rot(1) })), 'trend-up', 'rotational alone is one fact');
   assert.strictEqual(K.codedWord(kb({ h4: 'down', h1: 'down' })), 'trend-down');
-  assert.strictEqual(K.codedWord(kb({ h4: 'range' })), 'unclear', 'range is geometry, not chop');
+  assert.strictEqual(K.codedWord(kb({ h4: 'range' })), 'trend-up', 'range is geometry, not chop; the 1h up sets the side (the entry rule\'s, read audit F1)');
+  assert.strictEqual(K.codedWord(kb({ h4: 'down' })), 'unclear', 'the 4h against the 1h: no side');
   assert.strictEqual(K.codedWord(kb({ h4: 'range', layers: CHOP_LAYERS, soFar: rot(1) })), 'chop');
   assert.strictEqual(K.codedWord(kb({ h4: 'range', h1: 'range' })), 'unclear', 'agreeing range is no trend');
 });
@@ -237,7 +238,7 @@ test('the coded read is the Market state: codedWord = classWordOf(stateOf) and c
 // pair alone is no chop now, the owner); (b) the 4h and 1h agreeing, the 3m's last break a BOS against them (a 3m leg
 // against), no pullback their way: old trend, new unclear; (c) an open pullback against the 4h + 1h with the 3m's last
 // break a BOS their way: old trend (the 3m BOS decided), new unclear (the pullback's leg is against them).
-test('the old and the new coded read differ only on (a) the old chop (no chop without layers), (b) a 3m BOS against an aligned 4h + 1h, (c) a pullback against them', () => {
+test('the old and the new coded read differ only on (a) the old chop (no chop without layers), (b) a 3m BOS against an aligned 4h + 1h, (c) a pullback against them, (d) one of the 4h and 1h ranging, the other trending (read audit F1)', () => {
   const old = b => {
     const f = K.facts(b);
     const ch = f.bothWays['3m'] === true && !f.pullback && (f.day.word === 'rotational' || (Number.isFinite(f.rthCrosses) && f.rthCrosses >= TH.crossesChop));
@@ -245,7 +246,7 @@ test('the old and the new coded read differ only on (a) the old chop (no chop wi
     return ch ? 'chop' : fr['4h'] === fr['1h'] && (fr['4h'] === 'up' || fr['4h'] === 'down') ? `trend-${fr['4h']}` : 'unclear';
   };
   const diff = GRID.filter(b => old(b) !== K.codedWord(K.presentKey(b, TH)));
-  const n = { a: 0, b: 0, c: 0 };
+  const n = { a: 0, b: 0, c: 0, d: 0 };
   for (const b of diff) {
     const d = b.sections.h1.data;
     const way = d.h4 && d.h4.trend;
@@ -255,10 +256,14 @@ test('the old and the new coded read differ only on (a) the old chop (no chop wi
     const now = K.codedWord(K.presentKey(b, TH));
     assert.notStrictEqual(now, 'chop', 'never chop without layers');
     if (old(b) === 'chop') { n.a += 1; continue; }
+    // (d): the old read unclear (not both one way), the new the side of the one trending, the other ranging.
+    const t = [way, d.h1 && d.h1.trend];
+    const half = t.includes('range') && t.some(x => x === 'up' || x === 'down') && t.every(x => ['up', 'down', 'range'].includes(x));
+    if (half && old(b) === 'unclear' && now === `trend-${t.find(x => x !== 'range')}`) { n.d += 1; continue; }
     assert.strictEqual(now, 'unclear', JSON.stringify(b));
     if (pbWay && pbWay !== way) { n.c += 1; continue; }
     assert.ok(way === d.h1.trend && lb && lb.last.kind === 'BOS' && lb.last.direction !== way && pbWay !== way, JSON.stringify(b));
     n.b += 1;
   }
-  assert.ok(n.a > 0 && n.b > 0 && n.c > 0, JSON.stringify(n));
+  assert.ok(n.a > 0 && n.b > 0 && n.c > 0 && n.d > 0, JSON.stringify(n));
 });

@@ -1842,10 +1842,13 @@ Frozen definitions:
   re-establishes and makes a fresh extreme its way by close; it never
   prints under the pullback guard or the early read (the 15m trending the
   4h + 1h way under a 3m leg against them). The classes: `chop` reads
-  `chop`; `rotation` and `weakening` read `unclear`; the 4h and 1h not both
-  one way read `unclear`; a pullback their way, the early read, `range` and
-  `forming` read `trend-<way>`; `trend`, `leg` and `transition` their way
-  read `trend-<way>`, against them `unclear`. Without `m3.layers` (an older
+  `chop`; `rotation` and `weakening` read `unclear`; with no side from the
+  4h and 1h (one against the other, one unknown, or both ranging) the class
+  reads `unclear`; the side is the entry rule's (read audit F1): both one
+  way, or one trending and the other ranging (printed `(side up)`); a
+  pullback the side's way, the early read (the 4h and 1h both one way),
+  `range` and `forming` read `trend-<way>`; `trend`, `leg` and `transition`
+  the side's way read `trend-<way>`, against it `unclear`. Without `m3.layers` (an older
   record, a quiz item built from printed lines) the printed breaks and
   protected swings alone give `forming`, `pullback`, `leg` or `range`: no
   chop, weakening or rotation there. The day so far rotational and the RTH
