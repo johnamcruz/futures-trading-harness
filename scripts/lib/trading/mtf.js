@@ -51,9 +51,10 @@ const { GLOBEX_OPEN_MIN } = require('./clock'); // the session boundaries' one h
 // never at the last bar (read audit F2): the window moves only when the frame's candle completes, so a read between
 // two closes is the read at the last one. The margin covers the anchor's age: in a session the last 4h close is at
 // most 4 hours old; from the Sunday open to the first close it is Friday's, and the window's start then falls in the
-// weekend three weeks before (504 hours is three weeks), so the kept bars still hold it. Not so after a closed weekday
-// (a holiday): from the reopen to each frame's first close (an evening, no session) the kept bars can miss the
-// window's first candles, so the live read there may hold fewer candles than the per-bar series.
+// weekend three weeks before (504 hours is three weeks), so the kept bars still hold it. A holiday or a feed gap does
+// not change that: the runner keeps a count of closed bars (historyBars, autotrader.js: at least HISTORY_HOURS of
+// bar time, never fewer), not a span of calendar time, so a closed day or a gap only reaches the kept bars further back,
+// and the window is always held.
 const MTF = require('../tunables').analysis().mtf; // config/analysis.json mtf (the ADX, ATR and swing lengths are the indicators')
 const DEFAULTS = { fast: MTF.fast, slow: MTF.slow, adx: require('../tunables').analysis().indicators.adxPeriod, atr: ind.ATR_PERIOD, swingK: require('../tunables').analysis().indicators.swingK, rangeLen: MTF.rangeLen, maxCandles: MTF.maxCandles, historyHours: MTF.historyHours };
 // What the live runner and bars.js keep: the read's window (DEFAULTS.historyHours, its one home) plus a margin, so the

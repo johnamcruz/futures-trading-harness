@@ -103,6 +103,12 @@ item is removed from the list in the PR that fixes it.
 
 - Skills added to `skills/` reach Codex and Qwen only after
   `node scripts/sync-harness.js`; CI fails until then (`npm run sync:check`).
+- The h1 section's 1h word and the trend rule's 1h bias differ between 18:00 and
+  19:00 ET (the first hour after the Globex open) on 19 of 134 evenings checked
+  in the read audit's F2 review; the same on main before the window anchor fix.
+  Nothing trades then (the trading window is the NY open), so it is left
+  alone; a follow-up should find which read's window or candle grid differs
+  there and make the two read one 1h word.
 
 ## Resolved
 

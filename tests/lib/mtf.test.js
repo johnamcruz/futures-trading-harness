@@ -274,29 +274,41 @@ test('read audit F2: the 4h window is anchored at the frame\'s last candle close
   assert.deepStrictEqual([...seen].sort(), ['range', 'up']);
 });
 
-test('read audit F2: a feed gap across a 4h close: the candle completes on the next bar, and its window is still anchored at its close (the series, the rule and the h1 section agree)', () => {
-  const { htfTrendsOf } = require('../../scripts/lib/trading/briefing');
-  const end = Date.parse('2024-06-20T16:00:00Z');
-  // No bars at 09:57, 10:00 and 10:03 ET: the 06:00 ET 4h candle completes when the 10:06 ET bar arrives. The lifted
-  // candle opens at 10:00 ET the window's length before: inside a window anchored at the 10:00 close, outside one
-  // anchored at the 10:06 bar.
-  const gap = [-123, -120, -117].map(m => end - 2 * 3600000 + (m + 120) * 60000);
-  const bars = anchorBars('2024-06-20T16:00:00Z', { liftHoursBefore: 2, drop: gap });
-  assert.strictEqual(bars.filter(b => gap.includes(Date.parse(b.t))).length, 0);
-  const ser = biasSeries(bars, 240);
-  const word = x => (x > 0 ? 'up' : x < 0 ? 'down' : 'range');
-  const after = bars.findIndex(b => Date.parse(b.t) === end - 2 * 3600000 + 6 * 60000);
-  assert.ok(after > 0, 'the 10:06 ET bar');
-  for (let i = after - 3; i < bars.length; i += 1) {
-    const upTo = bars.slice(0, i + 1);
-    assert.strictEqual(mtfRead(upTo).biases[240], ser[i], `${bars[i].t}: the trend rule's 4h bias is the series'`);
-    assert.strictEqual(htfTrendsOf(upTo, 3)['4h'], word(ser[i]), `${bars[i].t}: the h1 section's 4h word is the series'`);
-  }
-  // Not vacuous: at the 10:06 ET bar a window anchored at that bar would drop the lifted candle and read another word.
-  const H = require('../../scripts/lib/trading/mtf').DEFAULTS.historyHours * 3600000;
-  const byBar = candles(bars.slice(0, after + 1), 240).filter(c => c.complete && Date.parse(c.t) >= Date.parse(bars[after].t) - H);
-  assert.deepStrictEqual([word(ser[after]), readTimeframe(byBar).trend], ['range', 'up']);
-});
+// A feed gap beside a 4h close, two ways. The anchor is the candle's close on the 18:00 ET grid, never a bar's time:
+//  end:   no bars at 09:57, 10:00 and 10:03 ET, so the 06:00 ET candle completes when the 10:06 ET bar arrives (an anchor
+//         at that bar is 6 minutes late);
+//  start: no bars at 06:00, 06:03 and 06:06 ET, so that candle's first bar is 06:09 ET (an anchor at its first bar plus 4
+//         hours is 9 minutes late); it completes at the 09:57 ET bar.
+// The lifted candle opens at 10:00 ET the window's length before: inside a window anchored at the 10:00 ET close, outside
+// one anchored late, so a late anchor reads another 4h word on every bar after the close. `late`: that wrong anchor (ms).
+const MIN = 60000;
+const FEED_GAPS = [
+  { name: 'at its end', gap: [-120 - 3, -120, -120 + 3].map(m => m * MIN), done: (-120 + 6) * MIN, late: (bars, i) => Date.parse(bars[i].t) },
+  { name: 'at its start', gap: [-360, -357, -354].map(m => m * MIN), done: (-120 - 3) * MIN, late: (bars, i, cs) => Date.parse(cs[cs.length - 1].t) + 240 * MIN },
+];
+for (const g of FEED_GAPS) {
+  test(`read audit F2: a feed gap ${g.name} of a 4h candle: its window is still anchored at its close (the series, the rule and the h1 section agree; a late anchor reads another word)`, () => {
+    const { htfTrendsOf } = require('../../scripts/lib/trading/briefing');
+    const end = Date.parse('2024-06-20T16:00:00Z');
+    const gap = g.gap.map(d => end + d);
+    const bars = anchorBars('2024-06-20T16:00:00Z', { liftHoursBefore: 2, drop: gap });
+    assert.strictEqual(bars.filter(b => gap.includes(Date.parse(b.t))).length, 0);
+    const ser = biasSeries(bars, 240);
+    const word = x => (x > 0 ? 'up' : x < 0 ? 'down' : 'range');
+    const after = bars.findIndex(b => Date.parse(b.t) === end + g.done);
+    assert.ok(after > 0, 'the bar that completes the candle');
+    for (let i = after - 3; i < bars.length; i += 1) {
+      const upTo = bars.slice(0, i + 1);
+      assert.strictEqual(mtfRead(upTo).biases[240], ser[i], `${bars[i].t}: the trend rule's 4h bias is the series'`);
+      assert.strictEqual(htfTrendsOf(upTo, 3)['4h'], word(ser[i]), `${bars[i].t}: the h1 section's 4h word is the series'`);
+    }
+    // Not vacuous: a window anchored late drops the lifted candle and reads another word.
+    const H = require('../../scripts/lib/trading/mtf').DEFAULTS.historyHours * 3600000;
+    const cs = candles(bars.slice(0, after + 1), 240).filter(c => c.complete);
+    const from = g.late(bars, after, cs) - H;
+    assert.deepStrictEqual([word(ser[after]), readTimeframe(cs.filter(c => Date.parse(c.t) >= from)).trend], ['range', 'up']);
+  });
+}
 
 test('read audit F2: the anchored window moves only when a candle completes, and the runner\'s kept history (HISTORY_HOURS) reads as the full history', () => {
   const { HISTORY_HOURS } = require('../../scripts/lib/trading/mtf');
