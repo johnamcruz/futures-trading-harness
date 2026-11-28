@@ -56,8 +56,9 @@ test('word3: trending needs a fresh extreme (within lossStale) AND the net the l
   assert.strictEqual(w({ rthBars: 2 }), 'early');
 });
 
-test('word15: trending <way> on the 15m candles\' own ATR; else overlapping, rotating, mixed; early under 2 candles', () => {
-  assert.strictEqual(MB.word15({ bars: 4, overlap: 0.3, eff: 0.6, net: -12 }, 10, P), 'trending down');
+test('word15: moving <way> on the 15m candles\' own ATR (never "trending": the 15m trend word is the frame\'s, one per prompt); else overlapping, rotating, mixed; early under 2 candles', () => {
+  assert.strictEqual(MB.word15({ bars: 4, overlap: 0.3, eff: 0.6, net: -12 }, 10, P), 'moving down');
+  assert.strictEqual(MB.word15({ bars: 4, overlap: 0.3, eff: 0.6, net: 12 }, 10, P), 'moving up');
   assert.strictEqual(MB.word15({ bars: 4, overlap: 0.8, eff: 0.2, net: 9 }, 10, P), 'overlapping');
   assert.strictEqual(MB.word15({ bars: 4, overlap: 0.5, eff: 0.2, net: 9 }, 10, P), 'rotating');
   assert.strictEqual(MB.word15({ bars: 1, overlap: null, eff: 1, net: 9 }, 10, P), 'early');

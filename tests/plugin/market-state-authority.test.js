@@ -28,7 +28,7 @@ const ROWS = [
 const LEG = (o = {}) => ({ side: 'up', level: 21380.5, origin: 21361.25, status: 'intact', legOK: true, sinceProgress: 2, internal: 0, resumed: false, lastInternal: null,
   lastWay: { kind: 'BOS', direction: 'up', level: 21412.25, barsAgo: 2, strong: true, failed: false }, flip: null, flipsIn: 0, ...o });
 const LAY = (o = {}) => ({ rthBars: 20, structure: LEG(), lastBreak: null, momentum: { dispAgainst: null, breakAgainst: null, trigger: false, loss: false, odf: false, od: null },
-  behavior: { word: 'trending', word15: 'trending up', overlap: 0.52, eff: 0.41, netAtr: 1.6, disp: 2 },
+  behavior: { word: 'trending', word15: 'moving up', overlap: 0.52, eff: 0.41, netAtr: 1.6, disp: 2 },
   chop: { now: false, inChop: false, S: false, B: false, facts: { ov: false, ef: false, fl: false, nd: false }, count: 0, evidence: { bothWays: false, flip: false, failed: false }, ended: false },
   edges: { top: 21431.25, bot: 21402, atTop: 1, atBot: 1, interior: 0 }, pbPhase: { bars: 24, crosses: 4 }, transition: false, stale: false, reversal: false, pbRotation: false, ...o });
 const CHOPPY = { now: true, inChop: true, S: true, B: true, facts: { ov: true, ef: true, fl: true, nd: false }, count: 3, evidence: { bothWays: true, flip: false, failed: true }, ended: false };
@@ -89,6 +89,10 @@ test('market state authority: the line prints the class code computes (classWord
     assert.match(fields[fields.length - 2], /(?:^|: )?4h\+1h (?:up|down)$|\(not aligned\)$/, line);
     assert.strictEqual(line.split('class ').length, 2, `${line}: one class`);
     assert.doesNotMatch(line, /-> class/, line);
+    // One 15m trend word (read audit F4): the 15m candles' behavior word is `15m moving <way>`, never trending; the only
+    // `15m up|down` is the frame's, the early read's clause.
+    assert.doesNotMatch(line, /15m trending/, line);
+    assert.strictEqual(line.replace(/15m (?:up|down): a pullback in the 15m trend/, '').search(/15m (?:up|down)\b/), -1, line);
     classes.add(cls);
   }
   // Every class word is reached, and each state word prints (forming and unclear lines carry a class too).

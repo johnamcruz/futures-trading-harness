@@ -47,6 +47,8 @@
  *   marketStateLine(s)  "Market state (3m): <state>: <structure>; <momentum>; behavior <word> (...), 15m <word>;
  *                       <alignment>; class <c>", the class last (round 18); the behavior word only under rotation,
  *                       weakening and transition (round 20b; elsewhere "overlap x, efficiency y, 15m <word>"); null for null.
+ *                       The 15m word is the candles' movement, never "trending" (read audit F4): the prompt's one 15m trend
+ *                       word is the frame's.
  *                       A protected level is `holds` only while no close past the tie went through it (protected-status.js
  *                       R2, swing-holds): a level the 3m machine handed back (levelBroken) prints `broken by a close N min
  *                       ago, closed back below, the break's high E`; a broken level with no leg restored prints `broken by
