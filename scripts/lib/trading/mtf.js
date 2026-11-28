@@ -44,10 +44,17 @@ const { GLOBEX_OPEN_MIN } = require('./clock'); // the session boundaries' one h
 
 // maxCandles: a read uses at most the last 300 completed candles (enough for EMA50 to settle),
 // so a per-bar series over a long backtest stays linear.
-// historyHours: every read uses only the candles of the last 504 hours (three weeks: 15 trading days, about
-// 88 4-hour candles, at least 74 in 99% of RTH moments 2021-2025 with the holidays, so the 4h EMA50 votes), so
-// the live read (the runner keeps 514 hours of bars, HISTORY_HOURS) and the backtest's per-bar read see exactly
-// the same candles.
+// historyHours: every read uses only the candles of the 504 hours before the frame's last completed candle's close
+// (three weeks: 15 trading days, about 88 4-hour candles, at least 74 in 99% of RTH moments 2021-2025 with the
+// holidays, so the 4h EMA50 votes), so the live read (the runner keeps 514 hours of bars, HISTORY_HOURS), the h1
+// section's read and the backtest's per-bar read (biasSeries) see exactly the same candles. Anchored at that close,
+// never at the last bar (read audit F2): the window moves only when the frame's candle completes, so a read between
+// two closes is the read at the last one. The margin covers the anchor's age: in a session the last 4h close is at
+// most 4 hours old; from the Sunday open to the first close it is Friday's, and the window's start then falls in the
+// weekend three weeks before (504 hours is three weeks), so the kept bars still hold it. A holiday or a feed gap does
+// not change that: the runner keeps a count of closed bars (historyBars, autotrader.js: at least HISTORY_HOURS of
+// bar time, never fewer), not a span of calendar time, so a closed day or a gap only reaches the kept bars further back,
+// and the window is always held.
 const MTF = require('../tunables').analysis().mtf; // config/analysis.json mtf (the ADX, ATR and swing lengths are the indicators')
 const DEFAULTS = { fast: MTF.fast, slow: MTF.slow, adx: require('../tunables').analysis().indicators.adxPeriod, atr: ind.ATR_PERIOD, swingK: require('../tunables').analysis().indicators.swingK, rangeLen: MTF.rangeLen, maxCandles: MTF.maxCandles, historyHours: MTF.historyHours };
 // What the live runner and bars.js keep: the read's window (DEFAULTS.historyHours, its one home) plus a margin, so the
@@ -289,15 +296,27 @@ function line(m, x) {
  * The full read. `bars`: the trigger bars (oldest first, closed). `daily`:
  * optional daily bars (get_bars day), read as the highest timeframe.
  */
-/** The completed candles that start inside the read's window, ending at `asOfMs`. */
-function inWindow(cs, asOfMs, opts = {}) {
-  const from = asOfMs - ({ ...DEFAULTS, ...opts }.historyHours) * 3600000;
-  return cs.filter(c => Date.parse(c.t) >= from);
+/** An m-minute candle's close: its open on the 18:00 ET grid (htfCandles; a candle whose first bar came late still opens on the grid) plus m minutes. */
+function closeOf(c, minutes) {
+  const ms = Date.parse(c.t);
+  const p = zonedParts(new Date(ms), 'America/New_York');
+  const sinceOpen = (p.hour * 60 + p.minute - GLOBEX_OPEN_MIN + 1440) % 1440;
+  return ms - (ms % 60000) - (sinceOpen % minutes) * 60000 + minutes * 60000;
+}
+
+/** The start of the read's window over `done` (completed m-minute candles, oldest first): historyHours before the last one's close; null with none. */
+function windowFrom(done, minutes, opts = {}) {
+  return done.length ? closeOf(last(done), minutes) - ({ ...DEFAULTS, ...opts }.historyHours) * 3600000 : null;
+}
+
+/** The completed candles that start inside the read's window, anchored at the frame's last completed candle's close (read audit F2). */
+function inWindow(done, minutes, opts = {}) {
+  const from = windowFrom(done, minutes, opts);
+  return from === null ? done : done.filter(c => Date.parse(c.t) >= from);
 }
 
 function mtfRead(bars, { timeframes = [15, 60, 240], daily = null, opts = {} } = {}) {
   const nb = ind.normalizeBars(bars);
-  const asOfMs = nb.length ? Date.parse(nb[nb.length - 1].t) : 0;
   if (nb.length < 3) throw new Error(`need bars to read, got ${nb.length}`);
   const tfs = [...new Set(timeframes)].sort((a, b) => b - a);
   for (const m of tfs) if (!(Number.isInteger(m) && m > 0 && 1440 % m === 0)) throw new Error(`timeframe ${m}: minutes that divide a day (15, 30, 60, 240, ...)`);
@@ -310,7 +329,7 @@ function mtfRead(bars, { timeframes = [15, 60, 240], daily = null, opts = {} } =
   for (const m of tfs) {
     if (daily && m === 1440) continue;
     const cs = candles(nb, m);
-    const done = inWindow(cs.filter(c => c.complete), asOfMs, opts);
+    const done = inWindow(cs.filter(c => c.complete), m, opts);
     const cur = cs.find(c => !c.complete) || null;
     frames.push({
       minutes: m, label: label(m), source: 'built from the trigger bars', read: readTimeframe(done, opts),
@@ -321,7 +340,7 @@ function mtfRead(bars, { timeframes = [15, 60, 240], daily = null, opts = {} } =
   const lastBar = last(nb);
   // The trend rule reads the frames built from the trigger bars (the daily is context only).
   const ruleBiases = Object.fromEntries(RULE_FRAMES.map(m => {
-    const cs = inWindow(candles(nb, m).filter(c => c.complete), asOfMs, opts);
+    const cs = inWindow(candles(nb, m).filter(c => c.complete), m, opts);
     return [m, cs.length >= 3 ? readTimeframe(cs, opts).bias : NaN];
   }));
   const rule = ruleSummary(ruleBiases);
@@ -361,24 +380,24 @@ function biasSeries(bars, minutes, opts = {}) {
   const out = new Array(n).fill(NaN);
   const h = ind.htfCandles(bars, minutes);
   const step = stepOf(bars);
-  const windowMs = ({ ...DEFAULTS, ...opts }.historyHours) * 3600000;
   const done = [];
   let first = 0; // the oldest completed candle still inside the window
   let cur = null;
   let bias = NaN;
-  const finish = asOfMs => {
+  const finish = () => {
     if (cur && !cur.cut) done.push(cur);
     cur = null;
-    // The completed candles of the window, as mtfRead reads them: the rule and the read agree.
-    while (first < done.length && Date.parse(done[first].t) < asOfMs - windowMs) first += 1;
+    // The completed candles of the window, as mtfRead reads them (anchored at the last one's close, windowFrom): the
+    // rule, the read and the h1 section agree on every bar.
+    const from = windowFrom(done, minutes, opts);
+    while (from !== null && first < done.length && Date.parse(done[first].t) < from) first += 1;
     const win = done.slice(first);
     bias = win.length >= 3 ? readTimeframe(win, opts).bias : NaN;
   };
   for (let i = 0; i < n; i += 1) {
     const b = bars[i];
-    const ms = Date.parse(b.t);
     if (!cur || cur.key !== h.key[i]) {
-      if (cur) finish(ms);
+      if (cur) finish();
       cur = { key: h.key[i], t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, cut: i === 0 && !startsOnOpen(b, minutes) };
     } else {
       cur.h = Math.max(cur.h, b.h);
@@ -386,7 +405,7 @@ function biasSeries(bars, minutes, opts = {}) {
       cur.c = b.c;
     }
     // This bar closes its candle: it is complete now, not when the next bar opens.
-    if (closesCandle(b.t, step, minutes)) finish(ms);
+    if (closesCandle(b.t, step, minutes)) finish();
     out[i] = bias;
   }
   return out;

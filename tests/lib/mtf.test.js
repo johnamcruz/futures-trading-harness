@@ -225,3 +225,110 @@ test('the 4h EMA50 votes on the read\'s window: three weeks of Globex hours (wee
   assert.strictEqual(old.votes.fastVsSlow, null);
   assert.match(old.note, /no EMA50 vote, needs 50/);
 });
+
+// Read audit F2 (2026-11-27): the 4h window was anchored at the last bar, so between two 4h closes the oldest candle fell
+// out of the trend rule's read (mtfRead) and the h1 section's read, while the per-bar series (biasSeries, the gate's
+// ruleSeries) kept it until the next close: the rule and the Bias line could print different 4h words on the same bar.
+// The window is anchored at the frame's last completed candle's close in all three. Synthetic Globex-calendar bars (no
+// real prices): a slow rise, and one 4h candle exactly the window's length before the last day lifted far above it, so
+// whether that oldest candle is in the window decides the EMA votes.
+function anchorBars(endIso = '2024-06-20T16:00:00Z', { liftHoursBefore = 6, drop = [] } = {}) {
+  const { zonedParts } = require('../../scripts/lib/trading/clock');
+  const { DEFAULTS } = require('../../scripts/lib/trading/mtf');
+  const open = ms => {
+    const p = zonedParts(new Date(ms), 'America/New_York');
+    const wd = new Date(Date.UTC(p.year, p.month - 1, p.day)).getUTCDay();
+    return !(p.hour === 17 || wd === 6 || (wd === 5 && p.hour >= 17) || (wd === 0 && p.hour < 18));
+  };
+  const end = Date.parse(endIso); // default Thursday 12:00 ET
+  // The lifted 4h candle opens the window's length before the last day's candle that opens liftHoursBefore the end
+  // (default the 06:00 ET one); `drop`: bar times (ms) left out, a feed gap.
+  const lifted = end - DEFAULTS.historyHours * 3600000 - liftHoursBefore * 3600000;
+  const raw = [];
+  for (let ms = end - 28 * 864e5, k = 0; ms < end; ms += 180000) {
+    if (!open(ms) || drop.includes(ms)) continue;
+    const c = Math.round((19000 + 0.004 * k) * 4) / 4 + (ms >= lifted && ms < lifted + 4 * 3600000 ? 5000 : 0);
+    raw.push({ t: new Date(ms).toISOString(), o: c, h: c + 1, l: c - 1, c, v: 10 });
+    k += 1;
+  }
+  return normalizeBars(raw);
+}
+
+test('read audit F2: the 4h window is anchored at the frame\'s last candle close, so the trend rule, the h1 section and the per-bar series read the same 4h word on every bar', () => {
+  const { htfTrendsOf } = require('../../scripts/lib/trading/briefing');
+  const bars = anchorBars();
+  const ser = biasSeries(bars, 240);
+  const word = x => (x > 0 ? 'up' : x < 0 ? 'down' : 'range');
+  const seen = new Set();
+  // The last day's bars from 05:00 ET (before, inside and after the 06:00-10:00 ET 4h candle).
+  for (let i = bars.length - 140; i < bars.length; i += 1) {
+    const upTo = bars.slice(0, i + 1);
+    const r = mtfRead(upTo);
+    const four = r.frames.find(f => f.minutes === 240).read;
+    assert.strictEqual(r.biases[240], ser[i], `${bars[i].t}: the trend rule's 4h bias is the series'`);
+    assert.strictEqual(four.bias, ser[i], `${bars[i].t}: the 4h frame line is the series'`);
+    assert.strictEqual(htfTrendsOf(upTo, 3)['4h'], word(ser[i]), `${bars[i].t}: the h1 section's 4h word is the series'`);
+    seen.add(word(ser[i]));
+  }
+  // Not vacuous: the lifted candle's leaving the window changes the 4h word inside the span checked.
+  assert.deepStrictEqual([...seen].sort(), ['range', 'up']);
+});
+
+// A feed gap beside a 4h close, two ways. The anchor is the candle's close on the 18:00 ET grid, never a bar's time:
+//  end:   no bars at 09:57, 10:00 and 10:03 ET, so the 06:00 ET candle completes when the 10:06 ET bar arrives (an anchor
+//         at that bar is 6 minutes late);
+//  start: no bars at 06:00, 06:03 and 06:06 ET, so that candle's first bar is 06:09 ET (an anchor at its first bar plus 4
+//         hours is 9 minutes late); it completes at the 09:57 ET bar.
+// The lifted candle opens at 10:00 ET the window's length before: inside a window anchored at the 10:00 ET close, outside
+// one anchored late, so a late anchor reads another 4h word on every bar after the close. `late`: that wrong anchor (ms).
+const MIN = 60000;
+const FEED_GAPS = [
+  { name: 'at its end', gap: [-120 - 3, -120, -120 + 3].map(m => m * MIN), done: (-120 + 6) * MIN, late: (bars, i) => Date.parse(bars[i].t) },
+  { name: 'at its start', gap: [-360, -357, -354].map(m => m * MIN), done: (-120 - 3) * MIN, late: (bars, i, cs) => Date.parse(cs[cs.length - 1].t) + 240 * MIN },
+];
+for (const g of FEED_GAPS) {
+  test(`read audit F2: a feed gap ${g.name} of a 4h candle: its window is still anchored at its close (the series, the rule and the h1 section agree; a late anchor reads another word)`, () => {
+    const { htfTrendsOf } = require('../../scripts/lib/trading/briefing');
+    const end = Date.parse('2024-06-20T16:00:00Z');
+    const gap = g.gap.map(d => end + d);
+    const bars = anchorBars('2024-06-20T16:00:00Z', { liftHoursBefore: 2, drop: gap });
+    assert.strictEqual(bars.filter(b => gap.includes(Date.parse(b.t))).length, 0);
+    const ser = biasSeries(bars, 240);
+    const word = x => (x > 0 ? 'up' : x < 0 ? 'down' : 'range');
+    const after = bars.findIndex(b => Date.parse(b.t) === end + g.done);
+    assert.ok(after > 0, 'the bar that completes the candle');
+    for (let i = after - 3; i < bars.length; i += 1) {
+      const upTo = bars.slice(0, i + 1);
+      assert.strictEqual(mtfRead(upTo).biases[240], ser[i], `${bars[i].t}: the trend rule's 4h bias is the series'`);
+      assert.strictEqual(htfTrendsOf(upTo, 3)['4h'], word(ser[i]), `${bars[i].t}: the h1 section's 4h word is the series'`);
+    }
+    // Not vacuous: a window anchored late drops the lifted candle and reads another word.
+    const H = require('../../scripts/lib/trading/mtf').DEFAULTS.historyHours * 3600000;
+    const cs = candles(bars.slice(0, after + 1), 240).filter(c => c.complete);
+    const from = g.late(bars, after, cs) - H;
+    assert.deepStrictEqual([word(ser[after]), readTimeframe(cs.filter(c => Date.parse(c.t) >= from)).trend], ['range', 'up']);
+  });
+}
+
+test('read audit F2: the anchored window moves only when a candle completes, and the runner\'s kept history (HISTORY_HOURS) reads as the full history', () => {
+  const { HISTORY_HOURS } = require('../../scripts/lib/trading/mtf');
+  const bars = anchorBars();
+  const last = bars.length - 1;
+  // From the bar that closes the 02:00 ET 4h candle (05:57 ET) to the last bar before the one that closes it (09:54 ET) the 4h
+  // read is one read: the same candles, the same word (anchored at the last bar, the oldest candle left at 06:03).
+  const reads = [last - 120, last - 119, last - 118, last - 42, last - 41].map(i => mtfRead(bars.slice(0, i + 1)).frames.find(f => f.minutes === 240).read);
+  assert.deepStrictEqual(reads.map(x => [x.candles, x.asOf, x.trend]), Array(5).fill([reads[0].candles, reads[0].asOf, reads[0].trend]));
+  // The anchor is at most one candle old in a session, inside the kept margin: a Thursday and a Monday morning (the first
+  // RTH after a weekend), 05:00 to 12:00 ET. From the Sunday 18:00 ET open to each frame's first close the anchor is
+  // Friday's last close, older than the margin, and the window's start falls in the weekend three weeks before (504
+  // hours is three weeks), so the kept history still holds every candle of it: Sunday 18:00 to 23:00 ET too.
+  for (const [endIso, from] of [['2024-06-20T16:00:00Z', 140], ['2024-06-17T16:00:00Z', 140], ['2024-06-17T03:00:00Z', 100]]) {
+    const all = anchorBars(endIso);
+    for (let i = all.length - from; i < all.length; i += 7) {
+      const upTo = all.slice(0, i + 1);
+      const kept = upTo.filter(b => Date.parse(b.t) >= Date.parse(upTo[upTo.length - 1].t) - HISTORY_HOURS * 3600000);
+      const strip = r => r.frames.map(f => [f.minutes, f.read.candles, f.read.trend, f.read.emaSlow]);
+      assert.deepStrictEqual(strip(mtfRead(kept)), strip(mtfRead(upTo)), `${all[i].t}: the kept history reads as the full one`);
+    }
+  }
+});
