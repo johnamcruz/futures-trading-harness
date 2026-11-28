@@ -182,10 +182,10 @@ displacement). The trend and chop definitions, for reference only:
 `trend-vs-range`.
 
 - A take: `class` on its side (`trend-up` long, `trend-down` short), your
-  4h and 1h too (`up` long, `down` short).
+  4h and 1h per entry rule (`htf-to-ltf`).
 - `compose_check` still runs first (its record is the evidence the pass is
   scored on). Then `chop`, `unclear`, or a trend class your 4h and 1h
-  don't show (`trend-down` with 4h and 1h `range`) → pass, naming that
+  don't allow (`trend-down`, 4h and 1h `range`) → pass, naming that
   read (your step 8, not a decisive against).
 
 - **The priority order** (the `strategy-library` skill, "The priority order"):

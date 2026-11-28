@@ -26,7 +26,7 @@
  *                  with that level unbroken prints "CHoCH then BOS: transition confirmed" instead, round 20c)
  *   leg            an intact, established leg otherwise ("in the up leg": a pullback or a range inside the trend)
  *   range          no established leg (no chop evidence)
- * The early read (the 15m trending the 4h + 1h way, the 3m in an established leg against them; without layers its last
+ * The early read (the 15m trending the class side's way, the 3m in an established leg against them; without layers its last
  * RTH break a BOS against): printed, blocks chop and
  * keeps the trend class, as the pullback does.
  *
@@ -48,7 +48,7 @@
  *                       neutral-15m-declared): the 4h + 1h both one way (s.align), or one of them trending and the other
  *                       ranging; a frame against the other, a frame unknown, or both ranging: no side (never counter;
  *                       the entry rule's both-ranging path, the 15m and the declared trend, is the Bias line's, not the
- *                       class's). The early read stays on s.align
+ *                       class's). The early read takes the same side
  *   marketStateLine(s)  "Market state (3m): <state>: <structure>; <momentum>; behavior <word> (...), 15m <word>;
  *                       <alignment>; class <c>", the class last (round 18); the behavior word only under rotation,
  *                       weakening and transition (round 20b; elsewhere "overlap x, efficiency y, 15m <word>"); null for null.
@@ -62,7 +62,7 @@
  */
 
 const { trendOf } = require('./entry-rule');
-const { RULE } = require('./bias-line');
+const { RULE, framesSide } = require('./bias-line');
 const { isOpen, pullbackWord } = require('./pullback-read');
 const { label } = require('./mtf');
 const { MARKET_TZ, RTH_OPEN_MIN, tradingDayStart, sessionMinuteOf } = require('./clock');
@@ -118,10 +118,9 @@ function readState(b, th = {}) {
   const frames = Object.fromEntries(RULE.biasFrames.map(tf => [tf, trendOf(b, tf)]));
   const ts = Object.values(frames);
   const align = ts.every(t => t === 'up') ? 'up' : ts.every(t => t === 'down') ? 'down' : null;
-  // The class's side (read audit F1): the entry rule's on the bias frames: every frame that trends one way, the rest
-  // ranging (none against, none unknown); both ranging: none.
-  const trending = ts.filter(t => t === 'up' || t === 'down');
-  const side = align || (ts.every(t => t === 'up' || t === 'down' || t === 'range') && trending.length > 0 && trending.every(t => t === trending[0]) ? trending[0] : null);
+  // The class's side (read audit F1): the entry rule's on the bias frames (bias-line.js framesSide, the check the take
+  // rule uses): the one that trends, the rest ranging, none against, none unknown; both ranging: none.
+  const side = framesSide(frames);
   const m3 = data(b, 'm3');
   // The state's pullback: open and no deeper than the Depth row's bound since its extreme (sticky maxDepth), any side.
   let open;
@@ -146,8 +145,8 @@ function readState(b, th = {}) {
   // The early read: the 3m trending against the aligned 15m: from the layers, an established 3m leg against them; without
   // layers, the last RTH break a BOS against, its protected swing holding (a CHoCH against is no early read there).
   const P3 = L && isObj(L.structure) ? L.structure : null;
-  const early = !open && Boolean(align) && m15 === align && (L ? Boolean(P3 && P3.legOK && P3.side !== align)
-    : isObj(last) && last.kind === 'BOS' && !broken && DIRS[last.direction] === true && last.direction !== align);
+  const early = !open && Boolean(side) && m15 === side && (L ? Boolean(P3 && P3.legOK && P3.side !== side)
+    : isObj(last) && last.kind === 'BOS' && !broken && DIRS[last.direction] === true && last.direction !== side);
   const today = isObj(m3.today) ? m3.today : {};
   let w;
   let turn = null;
@@ -342,7 +341,7 @@ function marketStateLine(s) {
   const frames = () => Object.entries(s.frames).map(([tf, t]) => `${tf} ${t || 'unknown'}`).join(', ');
   const align = s.align ? `4h+1h ${s.align}` : s.side ? `${frames()} (side ${s.side})` : `${frames()} (not aligned)`;
   const parts = s.layers ? layeredLine(s) : printedLine(s);
-  if (s.early === true) parts.push(`${RULE.chain.setup} ${s.align}: a pullback in the ${RULE.chain.setup} trend`);
+  if (s.early === true) parts.push(`${RULE.chain.setup} ${s.side || s.align}: a pullback in the ${RULE.chain.setup} trend`);
   const ctx = s.state === 'chop' ? [s.context.rotational ? 'Day so far rotational' : null, s.context.crosses !== null ? `RTH VWAP crosses ${s.context.crosses}` : null].filter(Boolean) : [];
   if (ctx.length) parts.push(ctx.join(', '));
   // The class code computes (round 18, owner): printed at the end, one source (classWordOf), on every line.

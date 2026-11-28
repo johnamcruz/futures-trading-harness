@@ -50,9 +50,9 @@ late, not an entry. In a trade, 15m BOS: hold. A CHoCH or CISD against
 Not in a prop attempt: the trend rule alone (both ranging, the 15m's
 side; no trend anywhere, both sides).
 Then the class is the one the Market state line prints after `class`;
-a take needs your own STATE 4h and 1h the side's way too. The briefing's
-`Bias:`/`Trend rule:` lines are the gate's floor (what it refuses),
-never your side: your own STATE read is stricter.
+a take needs your own STATE 4h and 1h the entry rule's way: one
+trending the side's way, the other that or ranging; else pass.
+`Bias:`/`Trend rule:` are the gate's floor, never your side.
 
 ### 2. Levels flow down
 
