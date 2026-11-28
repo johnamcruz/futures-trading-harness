@@ -9,6 +9,11 @@
  *   RULE                 the shipped rule as the line reads it (the trail target's: composed-reads.js TRAIL_RULE; a test
  *                        pins it to the rulebook's prop_portfolio entry)
  *   biasSides(b)         { long, short }: true when the rule allows that side on this briefing
+ *   framesAllow(side, frames)  whether the rule's bias frames (4h, 1h) alone allow the side: the take rule on the head
+ *                        trader's own frames and the class word's side, the one check (a trending frame sets it, a ranging
+ *                        one is neutral, a frame against, unknown or missing refuses, both ranging gives none: the 15m and
+ *                        the declared trend are the Bias line's)
+ *   framesSide(frames)   'up' | 'down' | null: the one side framesAllow gives
  *   biasLine(b)          "Bias: short only (4h down, 1h down; long refused)", "Bias: neutral → 15m down + declared short
  *                        → short only", "Bias: no side (4h up, 1h down) → no entry", "Bias: no side yet (15m down,
  *                        declared short: no)"; "Bias: no prop entry on this lane" off the chain's entry frame; null when
@@ -27,6 +32,18 @@ function biasSides(b) {
   const out = {};
   for (const side of SIDES) out[side] = entryProblems({ briefing: b, side, reads: [], rule: RULE }).length === 0;
   return out;
+}
+
+/** The entry rule's own check (entryProblems) on a briefing holding only these bias-frame trends. */
+function framesAllow(side, frames) {
+  if (!isObj(frames) || !SIDES.includes(side)) return false;
+  const data = { h1: { trend: frames['1h'] }, h4: { trend: frames['4h'] } };
+  return entryProblems({ briefing: { sections: { h1: { data } } }, side, reads: [], rule: RULE }).length === 0;
+}
+
+function framesSide(frames) {
+  const allowed = SIDES.filter(s => framesAllow(s, frames));
+  return allowed.length === 1 ? (allowed[0] === 'long' ? 'up' : 'down') : null;
 }
 
 function biasLine(b) {
@@ -50,4 +67,4 @@ function biasLine(b) {
   return `Bias: no side yet (${setup} ${t15 || 'unknown'}${side ? `, declared ${side}: ${dec === null ? 'unknown' : 'no'}` : ''})`;
 }
 
-module.exports = { RULE, biasSides, biasLine };
+module.exports = { RULE, biasSides, biasLine, framesAllow, framesSide };

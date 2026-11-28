@@ -6,7 +6,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const path = require('path');
-const { RULE, biasSides, biasLine } = require('../../scripts/lib/trading/bias-line');
+const { RULE, biasSides, biasLine, framesAllow, framesSide } = require('../../scripts/lib/trading/bias-line');
 const { entryRuleOf } = require('../../scripts/lib/trading/entry-rule');
 const { TRAIL_RULE } = require('../../scripts/lib/trading/composed-reads');
 const { loadStrategies } = require('../../scripts/lib/trading/strategies');
@@ -79,4 +79,31 @@ test('parity: on the BG census fixture the Bias line\'s side is the gate\'s verd
   }
   assert.deepStrictEqual(off, []);
   assert.ok(ROWS.length === 200);
+});
+
+// The take rule on a head trader's own frames is the entry rule's, on the bias frames alone (the F1 class word's side too):
+// a trending frame sets the side, a ranging one is neutral, a frame against, unknown or missing refuses, both ranging has none.
+test('framesAllow / framesSide: a half-aligned read is takeable, a frame against, unknown or missing is refused (the entry rule\'s own check)', () => {
+  const W = ['up', 'down', 'range', 'transition', 'unknown', null, undefined];
+  for (const h4 of W) for (const h1 of W) {
+    const f = { '4h': h4, '1h': h1 };
+    const known = [h4, h1].every(t => ['up', 'down', 'range'].includes(t));
+    for (const [side, way, opp] of [['long', 'up', 'down'], ['short', 'down', 'up']]) {
+      const want = known && [h4, h1].includes(way) && ![h4, h1].includes(opp);
+      assert.strictEqual(framesAllow(side, f), want, `${side} ${h4}/${h1}`);
+      if (want) assert.strictEqual(framesSide(f), way, `${h4}/${h1}`);
+    }
+    if (!framesAllow('long', f) && !framesAllow('short', f)) assert.strictEqual(framesSide(f), null, `${h4}/${h1}`);
+  }
+  assert.strictEqual(framesAllow('long', { '4h': 'range', '1h': 'up' }), true);
+  assert.strictEqual(framesAllow('long', { '4h': 'up', '1h': 'range' }), true);
+  assert.strictEqual(framesAllow('long', { '4h': 'range', '1h': 'range' }), false, 'both ranging: the 15m and the declared trend set it, never the class');
+  assert.strictEqual(framesAllow('long', null), false);
+  assert.strictEqual(framesAllow(null, { '4h': 'up', '1h': 'up' }), false);
+  // The same verdict as the gate's on a briefing carrying those two trends (the Bias line's biasSides).
+  const names = { 1: 'up', 0: 'range', '-1': 'down' };
+  for (const [a, b2] of [[1, 0], [0, 1], [1, 1], [1, -1], [-1, 0], [0, -1], [-1, -1]]) {
+    const sides = biasSides(bar(a, b2, a || b2));
+    for (const side of ['long', 'short']) assert.strictEqual(framesAllow(side, { '4h': names[a], '1h': names[b2] }), sides[side], `${side} ${a}/${b2}`);
+  }
 });

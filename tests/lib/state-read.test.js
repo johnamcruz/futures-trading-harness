@@ -515,11 +515,11 @@ test('state line: the decision follows the model\'s own STATE read (taught, no c
     // Round 20 (decision 6): chop ends only on displacement.
     "Chop ends when the line's state word is no longer `chop` (code's rule: a displaced 3m break or a displaced 3m CISD, a displaced close beyond the IB (complete at 10:30), or the protected level broken with displacement). The trend and chop definitions, for reference only: `trend-vs-range`.",
     // A take agrees with the read: the class and the 4h and 1h on the setup's side (the never-counter-HTF rule, in its own words).
-    'A take: `class` on its side (`trend-up` long, `trend-down` short), your 4h and 1h too (`up` long, `down` short).',
+    'A take: `class` on its side (`trend-up` long, `trend-down` short), your 4h and 1h per entry rule (`htf-to-ltf`).',
     // compose_check first (its record is what the pass is scored on), then a pass that names the read: the head trader's
     // own step 8, never called a decisive against (the scorecard's DECISIVE is a 1h CHoCH only).
     '`compose_check` still runs first (its record is the evidence the pass is scored on).',
-    "Then `chop`, `unclear`, or a trend class your 4h and 1h don't show (`trend-down` with 4h and 1h `range`) → pass, naming that read (your step 8, not a decisive against).",
+    "Then `chop`, `unclear`, or a trend class your 4h and 1h don't allow (`trend-down`, 4h and 1h `range`) → pass, naming that read (your step 8, not a decisive against).",
   ]) assert.ok(para.includes(s), s);
   assert.ok(para.indexOf('still runs first') < para.indexOf('→ pass, naming that read'), 'compose first, then the pass');
   assert.doesNotMatch(para.replace('not a decisive against', ''), /decisive/);
@@ -546,8 +546,8 @@ test('state line: the decision follows the model\'s own STATE read (taught, no c
   // Round 18 (q119): the side rule says it decides the side only; the class is the Market state line's (no new rule).
   assert.ok(htf.includes('**The side rule** (side only; the class is the Market state line\'s; in an attempt): each trending 4h or 1h your way, neither against; both ranging: the 15m and `Trend declared?` your way; else no trade.'));
   assert.ok(htf.includes('4h and 1h RANGE, 15m DOWN, declared short: short only.'));
-  assert.ok(htf.includes("Then the class is the one the Market state line prints after `class`; a take needs your own STATE 4h and 1h the side's way too."));
-  assert.ok(htf.includes("The briefing's `Bias:`/`Trend rule:` lines are the gate's floor (what it refuses), never your side: your own STATE read is stricter."));
+  assert.ok(htf.includes("Then the class is the one the Market state line prints after `class`; a take needs your own STATE 4h and 1h the entry rule's way: one trending the side's way, the other that or ranging; else pass."));
+  assert.ok(htf.includes("`Bias:`/`Trend rule:` are the gate's floor, never your side."));
   assert.ok(htf.indexOf('Then the class is the one the Market state line prints') > htf.indexOf('**The side rule**'), 'after the side rule');
   // The documented example (a full long take) satisfies the taught rule: class trend-up, 4h up, 1h up.
   const ex = /9 Manage:[^\n]*\n(STATE: [^\n]+)\n```/.exec(fs.readFileSync(path.join(ROOT, 'skills', 'trader-process', 'SKILL.md'), 'utf8').split('## Examples')[1]);

@@ -811,14 +811,17 @@ test('a composed pass on the head trader\'s own STATE read off the setup\'s side
   const read = (classWord, h4, h1) => ({ status: 'read', classWord, read: { frames: { '4h': h4, '1h': h1, '15m': 'range' } } });
   const chop = 'CYCLE RESULT: no-trade - my STATE read is chop (4h range, 1h range): not a trend to join';
   // Off the side: the class not the side's trend class, or the 4h or 1h not the side's way (trade-session step 3).
-  for (const s of [read('chop', 'range', 'range'), read('unclear', 'up', 'up'), read('trend-up', 'range', 'up'), read('trend-up', 'up', 'range'), read('trend-down', 'down', 'down')]) {
+  for (const s of [read('chop', 'range', 'range'), read('unclear', 'up', 'up'), read('trend-up', 'range', 'range'), read('trend-up', 'down', 'up'), read('trend-up', 'up', 'down'), read('trend-up', 'unknown', 'up'), read('trend-up', 'up', 'transition'), { status: 'read', classWord: 'trend-up', read: { frames: { '4h': 'up' } } }, read('trend-down', 'down', 'down')]) {
     assert.strictEqual(stateOffSide(s, 'long'), true, JSON.stringify(s));
   }
   // On its side, or no read at all (unstated, unparsable, no class): never off, never filled in.
-  for (const s of [read('trend-up', 'up', 'up'), null, undefined, {}, { status: 'none', classWord: null, read: null }, { status: 'unparsable' }, 'chop']) {
+  // The take follows the entry rule (bias_agree neutral-15m-declared): a ranging frame is neutral, one trending the side's way is enough.
+  for (const s of [read('trend-up', 'up', 'up'), read('trend-up', 'range', 'up'), read('trend-up', 'up', 'range'), null, undefined, {}, { status: 'none', classWord: null, read: null }, { status: 'unparsable' }, 'chop']) {
     assert.strictEqual(stateOffSide(s, 'long'), false, JSON.stringify(s));
   }
   assert.strictEqual(stateOffSide(read('trend-down', 'down', 'down'), 'short'), false);
+  assert.strictEqual(stateOffSide(read('trend-down', 'range', 'down'), 'short'), false);
+  assert.strictEqual(stateOffSide(read('trend-down', 'range', 'up'), 'short'), true, 'a frame against');
   assert.strictEqual(stateOffSide(read('chop', 'range', 'range'), null), false, 'no side: nothing to be off');
   // A class without frames: the class alone decides.
   assert.strictEqual(stateOffSide({ status: 'read', classWord: 'trend-up', read: null }, 'long'), false);
@@ -1058,4 +1061,19 @@ test('no compose: a pass on a composable setup (trend side, a key-level reaction
   // Off one composable side but on the other: the pass is not excused.
   const both = { ...offRead, composable: { ...composableSetup(b(409)), sides: ['short', 'long'] }, stateRead: read('trend-up', 'up', 'up') };
   assert.strictEqual(classify(label, both, expectedDecision(both), checkReasons(named, both)).category, 'excessive abstention');
+});
+
+test('enumerated: every own 4h x 1h read the take rule lets through has a frame trending the side\'s way, none against, none missing or unknown', () => {
+  const { stateOffSide } = require('../../scripts/lib/replay/scorecard');
+  const W = ['up', 'down', 'range', 'transition', 'unknown', null, undefined];
+  let takes = 0;
+  for (const h4 of W) for (const h1 of W) for (const [side, way, opp] of [['long', 'up', 'down'], ['short', 'down', 'up']]) {
+    const s = { status: 'read', classWord: `trend-${way}`, read: { frames: { '4h': h4, '1h': h1, '15m': 'range' } } };
+    if (stateOffSide(s, side)) continue;
+    takes++;
+    assert.ok([h4, h1].every(t => t === way || t === 'range'), `${side} ${h4}/${h1}: a frame against, missing or unknown was let through`);
+    assert.ok([h4, h1].includes(way), `${side} ${h4}/${h1}: no frame trends its way`);
+    assert.ok(![h4, h1].includes(opp));
+  }
+  assert.strictEqual(takes, 6, 'three cells per side: up/up, up/range, range/up (mirrored)');
 });

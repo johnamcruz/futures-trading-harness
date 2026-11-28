@@ -198,7 +198,7 @@ const ALLOWED = [
   // The STATE grammar names the four words and points to the line.
   ['skills/trade-session/SKILL.md', /`<c>`, the market now at this candle, is `trend-up`, `trend-down`, `chop` or `unclear`, the one the `Market state` line prints;/],
   // A pass on the head trader's own read: class -> action, never a condition -> class.
-  ['skills/trade-session/SKILL.md', /Then `chop`, `unclear`, or a trend class your 4h and 1h don't show/],
+  ['skills/trade-session/SKILL.md', /Then `chop`, `unclear`, or a trend class your 4h and 1h don't allow/],
   // Examples that quote the printed line and give its class.
   ['skills/pullback-vs-reversal/SKILL.md', /the Market state line prints the pullback -> class trend-up \(the line's\)/],
   // #338 pinned (q91's anchor); "not chop" contrasts a pause with chop, does not assign the class (audit row 29). This

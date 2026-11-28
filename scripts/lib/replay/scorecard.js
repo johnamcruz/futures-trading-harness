@@ -89,6 +89,7 @@ const GIVE_BACK = require('../tunables').replay().scorecard;
 const { readLines, readRun } = require('./store');
 const { labelRun, composedTagsAt, countedEntry, loadBars, inside, realDir, unfinishedWhy, configsOf, outcomeBarsFor, outcomeFor } = require('./labels');
 const { buildBriefing, sessionWindow, newsState, htfTrendsOf } = require('../trading/briefing');
+const { framesAllow } = require('../trading/bias-line');
 const { readBlackouts } = require('../trading/check-order');
 const { loadRoundSteps } = require('../trading/round-numbers');
 const { exitPlan, composedExit } = require('../trading/evaluator');
@@ -144,7 +145,7 @@ const htfAgrees = (htf, side) => {
 
 /**
  * Whether the head trader's own STATE read (the cycle log's stateRead, trading/state-read.js) is off the setup's side,
- * as trade-session step 3 teaches a take: the class the side's trend class, the 4h and the 1h the side's way. A cycle
+ * as trade-session step 3 teaches a take: the class the side's trend class, the 4h and 1h the entry rule's way (bias-line.js framesAllow: one trending the side's way, the other ranging or the same, none against or unknown). A cycle
  * with no read (unstated, unparsable, no class) is never off: nothing is filled in.
  */
 function stateOffSide(stateRead, side) {
@@ -152,7 +153,7 @@ function stateOffSide(stateRead, side) {
   if (!way || !isObj(stateRead) || stateRead.status !== 'read' || typeof stateRead.classWord !== 'string' || !stateRead.classWord) return false;
   if (stateRead.classWord !== `trend-${way}`) return true;
   const frames = isObj(stateRead.read) && isObj(stateRead.read.frames) ? stateRead.read.frames : null;
-  return Boolean(frames && (frames['4h'] !== way || frames['1h'] !== way));
+  return Boolean(frames && !framesAllow(side, frames));
 }
 // A pass that names the read, in any clause it stated: the line's name (STATE, as written), a trend class, or read or class
 // tied to chop or unclear with only a copula or punctuation between ("class unclear", "my read is chop", "read: unclear";

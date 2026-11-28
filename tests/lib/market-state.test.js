@@ -126,9 +126,11 @@ test('read audit F1: the class word\'s side is the entry rule\'s: one of the 4h 
   assert.strictEqual(word({ layers: lay(), h4: 'range', h1: 'range' }), 'unclear');
   assert.strictEqual(word({ layers: lay(), h4: 'none', h1: 'up' }), 'unclear', 'the 4h not in the briefing');
   assert.match(line({ layers: lay(), h4: 'range', h1: 'range' }), /; 4h range, 1h range \(not aligned\); class unclear$/);
-  // The early read stays the 4h + 1h both one way: half-aligned, a 3m leg against under a 15m with the side is no early read.
+  // The early read takes the same side: half-aligned, a 3m leg against under a 15m with the side is the early read (the take rule follows the entry rule).
   const against = { layers: lay({ structure: leg({ side: 'down', level: 21440.25 }) }), h4: 'range', h1: 'up', m15: 'up' };
-  assert.deepStrictEqual([S(against).early, word(against)], [false, 'unclear']);
+  assert.deepStrictEqual([S(against).early, word(against)], [true, 'trend-up']);
+  assert.deepStrictEqual([S({ ...against, h4: 'down' }).early, word({ ...against, h4: 'down' })], [false, 'unclear'], 'a frame against: no side, no early read');
+  assert.deepStrictEqual([S({ ...against, h4: 'range', h1: 'range' }).early, word({ ...against, h4: 'range', h1: 'range' })], [false, 'unclear'], 'both ranging: no side');
 });
 
 test('read audit F1: on every 4h x 1h trend (up, down, range, missing) and every state, a trend class is a side the shipped entry rule allows, and no bias frame trends against it', () => {
@@ -419,4 +421,10 @@ test('round 20c: one 15m word per line: under the early read the behavior\'s 15m
   const cut = M.marketStateLine(M.stateOf(b(early), { ...TH, lineBytes: 50 }));
   assert.doesNotMatch(cut, /overlap|efficiency/, cut);
   assert.match(cut, /: a pullback in the 15m trend; 4h\+1h up; class trend-up$/, cut);
+});
+
+test('the early read on a half-aligned bar prints the class side\'s 15m, never "15m null"', () => {
+  const half = { layers: lay({ structure: leg({ side: 'down', level: 21440.25 }) }), h4: 'range', h1: 'up', m15: 'up' };
+  assert.match(line(half), /15m up: a pullback in the 15m trend/);
+  assert.doesNotMatch(line(half), /null/);
 });
